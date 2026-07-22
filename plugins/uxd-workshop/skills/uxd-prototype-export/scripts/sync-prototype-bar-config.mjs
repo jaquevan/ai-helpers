@@ -14,7 +14,6 @@ function parseArgs(argv) {
   const opts = {
     artifacts: '',
     evalUrl: null,
-    prototypeUrl: null,
     jiraBase: 'https://issues.redhat.com/browse/',
     help: false,
   };
@@ -22,7 +21,6 @@ function parseArgs(argv) {
     const a = argv[i];
     if (a === '--artifacts' && argv[i + 1]) opts.artifacts = path.resolve(argv[++i]);
     else if (a === '--eval-url' && argv[i + 1]) opts.evalUrl = argv[++i];
-    else if (a === '--prototype-url' && argv[i + 1]) opts.prototypeUrl = argv[++i];
     else if (a === '--jira-base' && argv[i + 1]) opts.jiraBase = argv[++i];
     else if (a === '--help' || a === '-h') opts.help = true;
   }
@@ -140,27 +138,6 @@ function sourcesFromOutcome(outcome, jiraBase) {
   return out;
 }
 
-/** Flatten scenarios.json pages → slim bar list { route, id, name, default? } */
-function flattenScenarios(scenariosDoc) {
-  if (!scenariosDoc || !Array.isArray(scenariosDoc.pages)) return [];
-  const out = [];
-  for (const page of scenariosDoc.pages) {
-    if (!page || !page.route) continue;
-    const list = Array.isArray(page.scenarios) ? page.scenarios : [];
-    for (const s of list) {
-      if (!s || !s.id) continue;
-      const entry = {
-        route: page.route,
-        id: s.id,
-        name: s.name || s.id,
-      };
-      if (s.default === true || s.id === 'default') entry.default = true;
-      out.push(entry);
-    }
-  }
-  return out;
-}
-
 function main() {
   const opts = parseArgs(process.argv);
   if (opts.help || !opts.artifacts) {
@@ -172,13 +149,11 @@ function main() {
   const id = path.basename(artifacts);
   const metaPath = path.join(artifacts, 'metadata.json');
   const outcomePath = path.join(artifacts, 'outcome-context.json');
-  const scenariosPath = path.join(artifacts, 'scenarios.json');
   const outPath = path.join(artifacts, 'prototype-bar.json');
   const reportUrlPath = path.join(artifacts, 'report-url.txt');
 
   const meta = readJson(metaPath) || {};
   const outcome = readJson(outcomePath);
-  const scenariosDoc = readJson(scenariosPath);
   const existing = readJson(outPath) || {};
 
   const jiraBase = normalizeJiraBase(
@@ -202,50 +177,24 @@ function main() {
     sourcesFromOutcome(outcome, jiraBase)
   );
 
-  const scenarios = flattenScenarios(scenariosDoc);
-  // Prefer freshly synced scenarios.json; keep existing only if no scenarios file
-  const scenariosOut = scenarios.length
-    ? scenarios
-    : Array.isArray(existing.scenarios)
-      ? existing.scenarios
-      : [];
-
-  const isLocalHostUrl = (url) =>
-    typeof url === 'string' &&
-    /^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?([/?#]|$)/i.test(url);
-
-  let prototypeUrl = opts.prototypeUrl;
-  if (prototypeUrl == null && existing.views && existing.views.prototype != null) {
-    // Drop stale localhost URLs from local create — they break Eval→Prototype on Pages
-    prototypeUrl = isLocalHostUrl(existing.views.prototype)
-      ? null
-      : existing.views.prototype;
-  }
-  if (prototypeUrl == null) {
-    // Prefer published Pages preview URL so Eval → Prototype works cross-origin
-    const publish = meta.publish || meta.submission || {};
-    prototypeUrl =
-      publish.pages_url || meta.prototype_url || meta.preview_url || null;
-  }
-
   const config = {
     id: existing.id || meta.prototype_id || id,
     title: meta.title || existing.title || id,
     jiraBaseUrl: jiraBase,
     sources,
     views: {
-      prototype: prototypeUrl,
+      prototype:
+        (existing.views && existing.views.prototype !== undefined
+          ? existing.views.prototype
+          : null) ?? null,
       eval: evalUrl,
     },
-    scenarios: scenariosOut,
   };
 
   fs.mkdirSync(artifacts, { recursive: true });
   fs.writeFileSync(outPath, JSON.stringify(config, null, 2) + '\n', 'utf8');
   console.log(`Wrote ${outPath}`);
-  console.log(
-    `  sources: ${config.sources.length}, scenarios: ${config.scenarios.length}, eval: ${config.views.eval || '(none)'}`
-  );
+  console.log(`  sources: ${config.sources.length}, eval: ${config.views.eval || '(none)'}`);
 }
 
 main();

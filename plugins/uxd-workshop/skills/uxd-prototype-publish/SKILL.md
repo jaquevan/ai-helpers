@@ -36,7 +36,7 @@ If the user says "share", "publish", "deploy", "submit", or "I'm done" without s
 | `metadata.json` | `.artifacts/{ID}/metadata.json` | Yes |
 | Changeset manifest | `.artifacts/{ID}/changeset.md` | Yes (workspace mode) |
 | Workspace analysis | `.artifacts/{ID}/workspace-analysis.json` | Yes (repo target, workspace mode) |
-| Eval report | `.artifacts/{ID}/eval/evaluation-report.csv` | Recommended |
+| Eval report | `.artifacts/{ID}/evaluation-report.csv` | Recommended |
 | Pages base URL | `--pages-base-url` or product config | Optional (repo target) |
 
 ## Flags
@@ -44,7 +44,6 @@ If the user says "share", "publish", "deploy", "submit", or "I'm done" without s
 | Flag | Values | Default | Description |
 |------|--------|---------|-------------|
 | `--target` | `repo`, `github`, `gitlab`, `vercel`, or a git URL | `github` | Where to publish. A git URL means open an MR/PR **against** that repo (implies `repo`) |
-| `--target-branch` | branch name | from `workspace-analysis.json` | MR/PR base branch (repo target). Overrides analysis `target_branch`, then falls back to workspace `branch` |
 | `--remote` | Git URL | workspace origin | **Push** remote override only (not the MR base). For MR destination, use `--target <url>` |
 | `--repo` | `owner/repo` or GitHub URL | — | GitHub repo for github target |
 | `--pages-base-url` | URL | — | GitLab Pages base for MR preview polling (repo) |
@@ -73,7 +72,7 @@ If validation fails: "Prototype `{ID}` is incomplete. Missing: [list]. Fix befor
 
 ## Step 2: Check Eval Results
 
-Read `.artifacts/{ID}/eval/evaluation-report.csv` from `uxd-prototype-evaluate` if it exists.
+Read `.artifacts/{ID}/evaluation-report.csv` from `uxd-prototype-evaluate` if it exists.
 
 - **Pass** — zero `FAIL` verdicts in Section 1 (AC rows) → label: `rubric-pass` (or `eval-pass`)
 - **Needs attention** — one or more `FAIL` → label: `needs-attention`
@@ -84,40 +83,28 @@ Unless `--force` is set, **block submission when any AC verdict is FAIL**.
 
 Legacy fallback: if only `.artifacts/{ID}/reviews/summary.md` exists, use its verdict but prefer a fresh Playwright eval.
 
-## Step 2a: Static Eval path for Prototype Bar (all Pages-capable targets)
+## Step 2a: Static Eval path for Prototype Bar (Pages targets)
 
-**Required before publish** for `repo`, `github`, `gitlab`, and `vercel` when an eval report exists. Copy the report into the workspace `public/` tree and refresh the Prototype Bar so **Eval** works on the hosted preview (no `export-helper`):
+When publishing to **GitHub**, **GitLab**, or any static host, copy the evaluation report next to the prototype so the Prototype Bar **Eval** control works without a backend:
 
 ```bash
 EXPORT_SKILL="${CLAUDE_SKILL_DIR}/../uxd-prototype-export"
-WORKSPACE=".artifacts/{ID}/code"   # or workspace path from workspace-analysis.json
-
-# Preferred: sync config + install bar assets + copy eval in one shot
-bash "${EXPORT_SKILL}/scripts/install-and-sync-prototype-bar.sh" \
-  --artifacts ".artifacts/{ID}" \
-  --source "$WORKSPACE" \
-  --mode workspace
-
-# Or copy only:
 bash "${EXPORT_SKILL}/scripts/copy-eval-for-pages.sh" \
   --artifacts ".artifacts/{ID}" \
-  --pages-root "$WORKSPACE/public"
+  --pages-root "<staging-or-public-dir>"
 ```
 
 Convention (same-origin, no server):
 
 ```
 public/
-  …                          ← prototype static assets (keep this tree when sanitizing)
-  evals/{ID}/index.html      ← copy of .artifacts/{ID}/eval/evaluation-report.html
-  uxd-prototype-bar/         ← bar runtime (Export + Eval chrome)
+  …                          ← prototype files
+  evals/{ID}/index.html      ← copy of evaluation-report.html
 ```
 
-Keep `.artifacts/{ID}/` as the create/publish working store; eval reports live under `.artifacts/{ID}/eval/`. Ensure `.artifacts/{ID}/prototype-bar.json` has `views.eval: "/evals/{ID}/"` (sync script sets this). The bar resolves that path under the document `<base href>` (e.g. `/mr-218/evals/{ID}/` on GitLab MR Pages).
+Keep `.artifacts/{ID}/` as the working store. Ensure `.artifacts/{ID}/prototype-bar.json` has `views.eval: "/evals/{ID}/"` (sync script sets this). Re-install or refresh the bar config in the published tree if Sources/Eval were injected at create time.
 
-**Repo target:** `submit_to_repo.py` auto-stages `public/evals/{ID}/` and `public/uxd-prototype-bar/` even when they are missing from `changeset.md`. Still run Step 2a first so those files exist on disk.
-
-**Do not delete `public/` during sanitize** — only strip internal metadata files (`fork-descriptions.json`, `forks.json`). See [references/sensitive-files.md](references/sensitive-files.md).
+CI tip: add a Pages job step that copies `.artifacts/{ID}/evaluation-report.html` → `public/evals/{ID}/index.html` after evaluate; do not rely on a dynamic helper in production.
 
 ## Step 2b: Audit CI/CD Configs for Secrets
 
@@ -155,7 +142,6 @@ If `--target` is a git URL (`https://`, `http://`, `git@`, `ssh://`, or ends wit
 python3 "${CLAUDE_SKILL_DIR}/../uxd-prototype-create/scripts/submit_to_repo.py" \
   --rfe-key {ID} --title "{title}" \
   [--upstream "{TARGET_REPO_URL}"] \
-  [--target-branch "{TARGET_BRANCH}"] \
   [--pages-base-url {url}] [--pages-timeout 600] \
   [--jira-comment-id {id}] \
   [--no-ssl-verify] [--dry-run]
@@ -288,7 +274,7 @@ If Jira integration is available and `--skip-jira` is not set:
 
 1. Add a comment with the published location (MR and/or Pages preview), AC summary (`PASS`/`FAIL`/`FLAGGED` counts from `evaluation-report.csv`), and refinement count. Prefer wiki-markup hyperlinks: `[Preview|https://…]`, `[Merge request|https://…]`.
 2. If `submit_to_repo.py` returned `pages_url` after polling, include it (or update an existing comment via `--jira-comment-id`).
-3. Add labels: `uxd-prototype-created` plus `rubric-pass` / `needs-attention` from Step 2.
+3. Add labels: `prototype-created` plus `rubric-pass` / `needs-attention` from Step 2.
 
 Uses the Atlassian MCP if available, otherwise skips silently.
 
