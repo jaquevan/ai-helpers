@@ -1,35 +1,21 @@
 #!/usr/bin/env node
 /**
- * Optional localhost writer + eval report server for Prototype Bar.
- * Usage:
- *   node export-helper.mjs --out .artifacts/PROJ-298/exports [--port 9417]
- *   node export-helper.mjs --out .artifacts/PROJ-298/exports --artifacts .artifacts
- *
- * GET  /health              → { ok, out, artifacts }
- * POST /export              → write capture under --out
- * GET  /evals/:id[/…]       → serve .artifacts/:id/eval/evaluation-report.html (+ siblings)
+ * Optional localhost writer for Prototype Bar exports.
+ * Usage: node export-helper.mjs --out .artifacts/PROJ-298/exports [--port 9417]
  */
 import http from 'node:http';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { injectPrototypeBar } from './inject-prototype-bar-into-html.mjs';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 function parseArgs(argv) {
-  const opts = {
-    out: path.resolve(process.cwd(), '.artifacts/exports'),
-    artifacts: '',
-    port: 9417,
-    help: false,
-  };
+  const opts = { out: path.resolve(process.cwd(), '.artifacts/exports'), port: 9417 };
   for (let i = 2; i < argv.length; i++) {
     const a = argv[i];
     if (a === '--out' && argv[i + 1]) {
       opts.out = path.resolve(argv[++i]);
-    } else if (a === '--artifacts' && argv[i + 1]) {
-      opts.artifacts = path.resolve(argv[++i]);
     } else if (a === '--port' && argv[i + 1]) {
       opts.port = Number(argv[++i]);
     } else if (a === '--help' || a === '-h') {
@@ -37,22 +23,6 @@ function parseArgs(argv) {
     }
   }
   return opts;
-}
-
-function resolveArtifactsRoot(out, explicit) {
-  if (explicit) return path.resolve(explicit);
-  const resolved = path.resolve(out);
-  // Typical: .artifacts/{ID}/exports → .artifacts
-  if (path.basename(resolved) === 'exports') {
-    return path.resolve(resolved, '..', '..');
-  }
-  // .artifacts/{ID} → .artifacts
-  if (fs.existsSync(path.join(resolved, '..')) && path.basename(path.dirname(resolved)) === '.artifacts') {
-    return path.dirname(resolved);
-  }
-  const cwdArtifacts = path.resolve(process.cwd(), '.artifacts');
-  if (fs.existsSync(cwdArtifacts)) return cwdArtifacts;
-  return path.resolve(resolved, '..');
 }
 
 function sendJson(res, status, obj) {
@@ -67,15 +37,6 @@ function sendJson(res, status, obj) {
   res.end(body);
 }
 
-function corsHeaders(extra = {}) {
-  return {
-    'Access-Control-Allow-Origin': '*',
-    'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
-    'Access-Control-Allow-Headers': 'Content-Type',
-    ...extra,
-  };
-}
-
 function safeJoin(root, rel) {
   const cleaned = String(rel || '')
     .replace(/\\/g, '/')
@@ -88,27 +49,6 @@ function safeJoin(root, rel) {
   return full;
 }
 
-function contentTypeFor(filePath) {
-  const ext = path.extname(filePath).toLowerCase();
-  const map = {
-    '.html': 'text/html; charset=utf-8',
-    '.htm': 'text/html; charset=utf-8',
-    '.json': 'application/json; charset=utf-8',
-    '.js': 'text/javascript; charset=utf-8',
-    '.css': 'text/css; charset=utf-8',
-    '.csv': 'text/csv; charset=utf-8',
-    '.md': 'text/markdown; charset=utf-8',
-    '.txt': 'text/plain; charset=utf-8',
-    '.png': 'image/png',
-    '.jpg': 'image/jpeg',
-    '.jpeg': 'image/jpeg',
-    '.gif': 'image/gif',
-    '.webp': 'image/webp',
-    '.svg': 'image/svg+xml',
-  };
-  return map[ext] || 'application/octet-stream';
-}
-
 function readBody(req) {
   return new Promise((resolve, reject) => {
     const chunks = [];
@@ -118,33 +58,12 @@ function readBody(req) {
   });
 }
 
-function injectEvalBar(html, id) {
-  // Always embed the standalone Prototype Bar so Eval pages match Prototype chrome.
-  const keyDir = path.join(opts.artifactsRoot, id);
-  try {
-    return injectPrototypeBar(html, {
-      artifacts: keyDir,
-      id,
-      view: 'eval',
-    });
-  } catch (err) {
-    console.warn(`injectPrototypeBar failed for ${id}:`, err.message || err);
-    return html;
-  }
-}
-
 const opts = parseArgs(process.argv);
-opts.artifactsRoot = resolveArtifactsRoot(opts.out, opts.artifacts);
-
 if (opts.help) {
-  console.log(`Usage: node export-helper.mjs --out <dir> [--artifacts <dir>] [--port 9417]
+  console.log(`Usage: node export-helper.mjs --out <dir> [--port 9417]
 
-Listens on 127.0.0.1 only.
-
-  POST /export   Prototype Bar writes captures:
-                 { "filename": "current/page.html", "body": "...", "format": "html" }
-  GET  /evals/:id[/path]  Serve evaluation-report.html (and siblings) from
-                 <artifacts>/:id/eval/
+Listens on 127.0.0.1 only. Prototype Bar POSTs JSON:
+  { "filename": "current/page.html", "body": "...", "format": "html" }
 `);
   process.exit(0);
 }
@@ -155,13 +74,17 @@ const server = http.createServer(async (req, res) => {
   const url = new URL(req.url || '/', `http://127.0.0.1:${opts.port}`);
 
   if (req.method === 'OPTIONS') {
-    res.writeHead(204, corsHeaders());
+    res.writeHead(204, {
+      'Access-Control-Allow-Origin': '*',
+      'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
+      'Access-Control-Allow-Headers': 'Content-Type',
+    });
     res.end();
     return;
   }
 
   if (req.method === 'GET' && url.pathname === '/health') {
-    sendJson(res, 200, { ok: true, out: opts.out, artifacts: opts.artifactsRoot });
+    sendJson(res, 200, { ok: true, out: opts.out });
     return;
   }
 
@@ -184,66 +107,11 @@ const server = http.createServer(async (req, res) => {
     return;
   }
 
-  // GET /evals/:id or /evals/:id/...
-  const evalMatch = url.pathname.match(/^\/evals\/([^/]+)(?:\/(.*))?$/);
-  if (req.method === 'GET' && evalMatch) {
-    const id = decodeURIComponent(evalMatch[1]);
-    const rest = (evalMatch[2] || '').replace(/\/+$/, '');
-    const keyDir = safeJoin(opts.artifactsRoot, id);
-    const evalDir = path.join(keyDir, 'eval');
-    const artifactDir =
-      fs.existsSync(evalDir) && fs.statSync(evalDir).isDirectory() ? evalDir : keyDir;
-
-    if (!fs.existsSync(keyDir) || !fs.statSync(keyDir).isDirectory()) {
-      sendJson(res, 404, { error: `No artifacts for ${id}`, lookedIn: keyDir });
-      return;
-    }
-
-    let filePath;
-    if (!rest || rest === '' || rest === 'index.html') {
-      const report = path.join(artifactDir, 'evaluation-report.html');
-      if (!fs.existsSync(report)) {
-        sendJson(res, 404, {
-          error: 'evaluation-report.html not found',
-          lookedIn: artifactDir,
-          hint: 'Run uxd-prototype-evaluate first (writes .artifacts/<KEY>/eval/)',
-        });
-        return;
-      }
-      filePath = report;
-    } else {
-      try {
-        filePath = safeJoin(artifactDir, rest);
-      } catch (err) {
-        sendJson(res, 400, { error: err.message || String(err) });
-        return;
-      }
-      if (!fs.existsSync(filePath) || !fs.statSync(filePath).isFile()) {
-        sendJson(res, 404, { error: 'file not found', path: rest });
-        return;
-      }
-    }
-
-    try {
-      let body = fs.readFileSync(filePath);
-      const ct = contentTypeFor(filePath);
-      if (ct.startsWith('text/html') && (!rest || rest === '' || rest === 'index.html')) {
-        body = Buffer.from(injectEvalBar(body.toString('utf8'), id), 'utf8');
-      }
-      res.writeHead(200, corsHeaders({ 'Content-Type': ct, 'Content-Length': body.length }));
-      res.end(body);
-    } catch (err) {
-      sendJson(res, 500, { error: err.message || String(err) });
-    }
-    return;
-  }
-
   sendJson(res, 404, { error: 'not found' });
 });
 
 server.listen(opts.port, '127.0.0.1', () => {
   console.log(`uxd export helper listening on http://127.0.0.1:${opts.port}`);
   console.log(`Writing exports to ${opts.out}`);
-  console.log(`Serving evals from ${opts.artifactsRoot}/<id>/`);
   console.log(`Skill dir hint: ${path.resolve(__dirname, '..')}`);
 });

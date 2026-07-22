@@ -14,48 +14,43 @@ The skill accepts any combination of these — it asks clarifying questions to f
 | Existing codebase | Local path or git URL to build on top of (workspace mode) |
 | Research context | Personas, JTBD, user stories in `.context/research-context/` |
 | Prior decisions | Existing `.artifacts/{ID}/decisions/` from an earlier run |
-| Eval feedback | `.artifacts/{ID}/eval/evaluation-report.csv` + `refinement-suggestions.json` for refine |
+| Eval feedback | `evaluation-report.csv` + `refinement-suggestions.json` for refine |
 
 ## Outputs
 
 | Output | Format | Location |
 |--------|--------|----------|
-| Prototype | HTML (standalone) or framework code (workspace mode) | `.artifacts/{ID}/prototype/` or `.artifacts/{ID}/code/` (cloned target) |
-| Design decisions | PatternFly HTML comparison pages (cross-linked + `index.html`) + JSON record | `.artifacts/{ID}/decisions/` |
+| Prototype | HTML (standalone) or framework code (workspace mode) | `.artifacts/{ID}/prototype/` or target workspace |
+| Design decisions | HTML comparison pages + JSON record | `.artifacts/{ID}/decisions/` |
 | RFE snapshot | Markdown with YAML frontmatter | `.artifacts/{ID}/rfe-snapshot.md` |
 | Changeset manifest | Markdown listing all created/modified files | `.artifacts/{ID}/changeset.md` |
 | Workspace analysis | JSON with tech stack, conventions, verification commands | `.artifacts/{ID}/workspace-analysis.json` |
-| Metadata | JSON with `decision_mode`, source, assumptions | `.artifacts/{ID}/metadata.json` |
-| Prototype Bar config | Sources + Prototype\|Eval + scenarios | `.artifacts/{ID}/prototype-bar.json` |
-| Journeys | Structured steps / interaction states for build + export | `.artifacts/{ID}/journeys.json` |
-| Scenarios | Data/condition variants per page (empty, error, match, recovery, …) — brainstorm via `references/scenario-brainstorm.md` | `.artifacts/{ID}/scenarios.json` |
-| Exports (optional) | Static HTML / trees / PF specs per step × scenario when `--export` | `.artifacts/{ID}/exports/` |
+| Metadata | JSON with mode, source, assumptions | `.artifacts/{ID}/metadata.json` |
+| Journeys | Structured steps/screens/states for build + export | `.artifacts/{ID}/journeys.json` |
+| Exports (optional) | Static HTML / component trees when `--export` | `.artifacts/{ID}/exports/` |
 
-Prototype Bar (default on): sticky Sources, Prototype\|Eval, Scenario switcher, and Export on the running prototype. Disable with `--no-prototype-bar`.
+Prototype Bar (default on): sticky Export menu on the running prototype. Disable with `--no-prototype-bar`.
 
-## Decision levels (`--decisions`)
+## Decision Modes
 
-| Value | Behavior |
-|-------|----------|
-| **skip** (default) | Make design calls while building. No decision kit, pages, or strategy brief. |
-| **auto** | Generate PatternFly HTML comparison pages, AI-pick recommendations, present a batch summary to override. |
-| **human** | Same decision pages, walked one at a time so you pick each direction. |
+| Mode | Behavior |
+|------|----------|
+| **auto** | AI makes all design decisions based on best practices. Fast, no pauses. |
+| **decide** | Generates HTML decision pages with visual previews and tradeoffs. User picks each direction. |
 
-Decision depth (`--depth`): `under` (2–3), `normal` (4–7), `over` (8–12). Only applies when `--decisions` is `auto` or `human`. Values map 1:1 to `decision_mode` in `prototype-summary.yaml`.
+Decision depth (`--depth`): `under` (2–3), `normal` (4–7), `over` (8–12).
 
 ## Pipeline mode
 
 Pass `--pipeline` / `--speedrun` or ask for a full run. Sequence: create → serve → `uxd-prototype-evaluate` → optional refine → `uxd-prototype-publish`. See `references/pipeline-mode.md`.
 
-`--target` accepts `repo` / `github` / `gitlab` / `vercel` / `none`, **or a git URL** (MR/PR against that repo). Pair with `--workspace` (often a fork). Use `--workspace-branch` / `--target-branch` when clone ref and MR base differ:
+`--target` accepts `repo` / `github` / `gitlab` / `vercel` / `none`, **or a git URL** (MR/PR against that repo). Pair with `--workspace` (often a fork):
 
 ```
 /uxd-prototype-create --speedrun PROJ-298 \
   --workspace https://gitlab.example.com/user/fork.git \
-  --workspace-branch main \
   --target https://gitlab.example.com/org/canonical.git \
-  --target-branch release-2.22 \
-  --decisions skip --headless
+  --mode auto --headless
 ```
 
 ## Quick Start
@@ -68,6 +63,6 @@ Pass `--pipeline` / `--speedrun` or ask for a full run. Sequence: create → ser
 
 ## Related
 
-- **uxd-prototype-export** — Static HTML / component-tree / PF implementation-spec export; Prototype Bar install
+- **uxd-prototype-export** — Static HTML / component-tree export; Prototype Bar install
 - **uxd-prototype-evaluate** — Playwright AC validation + persona usability + HTML report
 - **uxd-prototype-publish** — MR, GitHub/GitLab Pages, or Vercel
