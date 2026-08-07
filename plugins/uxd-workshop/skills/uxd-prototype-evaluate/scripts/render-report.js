@@ -1038,9 +1038,6 @@ function parseTaskIndex(taskId) {
 }
 
 function screenshotSrc(filename) {
-  const filePath = path.join(absArtifacts, 'screenshots', filename);
-  const dataUri = getScreenshotDataUri(filePath);
-  if (dataUri) return dataUri;
   return `screenshots/${filename.replace(/\+/g, '%2B')}`;
 }
 

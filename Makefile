@@ -1,4 +1,4 @@
-.PHONY: validate lint scaffold help docs mlflow-poc7 mlflow-smoke mlflow-smoke-all
+.PHONY: validate lint scaffold help docs mlflow-poc7 mlflow-smoke mlflow-smoke-all test-subskills test-subskills-mlflow
 
 help: ## Show this help
 	@grep -E '^[a-zA-Z0-9_-]+:.*?## .*$$' $(MAKEFILE_LIST) | sort | \
