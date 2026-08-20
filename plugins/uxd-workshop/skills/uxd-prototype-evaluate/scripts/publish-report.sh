@@ -5,8 +5,8 @@ set -euo pipefail
 # Overwrites the report at the same URL if re-run for the same prototype.
 #
 # Usage:
-#   bash ${CLAUDE_SKILL_DIR}/scripts/publish-report.sh .artifacts/PROJ-298/
-#   bash ${CLAUDE_SKILL_DIR}/scripts/publish-report.sh .artifacts/PROJ-298/ --mode=branch
+#   bash ${CLAUDE_SKILL_DIR}/scripts/publish-report.sh .artifacts/PROJ-298/eval/
+#   bash ${CLAUDE_SKILL_DIR}/scripts/publish-report.sh .artifacts/PROJ-298/eval/ --mode=branch
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
@@ -28,7 +28,7 @@ done
 
 if [[ -z "$ARTIFACTS_DIR" ]]; then
   echo "Usage: publish-report.sh <artifacts-dir> [--mode=pages|branch]" >&2
-  echo "  e.g. publish-report.sh .artifacts/PROJ-298/" >&2
+  echo "  e.g. publish-report.sh .artifacts/PROJ-298/eval/" >&2
   exit 1
 fi
 
@@ -39,6 +39,27 @@ if [[ ! -f "$REPORT_FILE" ]]; then
   echo "Error: No evaluation-report.html found in $ARTIFACTS_DIR" >&2
   exit 1
 fi
+
+# Key root holds prototype-bar.json; eval outputs live under …/<KEY>/eval/
+KEY_DIR="$ARTIFACTS_DIR"
+PROTO_KEY="$(basename "$ARTIFACTS_DIR")"
+if [[ "$PROTO_KEY" == "eval" ]]; then
+  KEY_DIR="$(dirname "$ARTIFACTS_DIR")"
+  PROTO_KEY="$(basename "$KEY_DIR")"
+fi
+
+# Embed Prototype Bar into a published eval HTML (best-effort)
+inject_prototype_bar() {
+  local html_path="$1"
+  local inject="$SCRIPT_DIR/../../uxd-prototype-export/scripts/inject-prototype-bar-into-html.mjs"
+  [[ -f "$html_path" && -f "$inject" ]] || return 0
+  command -v node >/dev/null 2>&1 || return 0
+  node "$inject" --html "$html_path" --artifacts "$KEY_DIR" --view eval 2>/dev/null || true
+}
+
+# Cross-key leaderboard lives under consumer .artifacts/eval/
+# Derive from KEY_DIR (…/.artifacts/<KEY>) so we never resolve from the skill install cwd.
+EVAL_GLOBAL_DIR="$(cd "$(dirname "$KEY_DIR")" && mkdir -p eval && cd eval && pwd)"
 
 # ── Read config ──────────────────────────────────────────────────────────────
 
@@ -59,9 +80,6 @@ GIT_USER_NAME="${GIT_USER_NAME:-$(read_yaml_value git_user_name)}"
 GIT_USER_EMAIL="${GIT_USER_EMAIL:-$(read_yaml_value git_user_email)}"
 
 MODE="${MODE:-$DEFAULT_MODE}"
-
-# Extract prototype key from directory name (e.g., PROJ-298)
-PROTO_KEY="$(basename "$ARTIFACTS_DIR")"
 
 # ── Temp workspace ───────────────────────────────────────────────────────────
 
@@ -89,10 +107,16 @@ publish_pages() {
 
   # Copy report as index.html (clean URLs)
   cp "$REPORT_FILE" "$REPORTS_PATH/$PROTO_KEY/index.html"
+  inject_prototype_bar "$REPORTS_PATH/$PROTO_KEY/index.html"
 
   # Copy data files for dashboard index generation
   [[ -f "$ARTIFACTS_DIR/evaluation-report.csv" ]] && cp "$ARTIFACTS_DIR/evaluation-report.csv" "$REPORTS_PATH/$PROTO_KEY/"
   [[ -f "$ARTIFACTS_DIR/journey-log.json" ]] && cp "$ARTIFACTS_DIR/journey-log.json" "$REPORTS_PATH/$PROTO_KEY/"
+
+  # Copy screenshots directory (fallback for any relative paths not inlined as base64)
+  if [[ -d "$ARTIFACTS_DIR/screenshots" ]]; then
+    cp -r "$ARTIFACTS_DIR/screenshots" "$REPORTS_PATH/$PROTO_KEY/screenshots"
+  fi
 
   # Write metadata.json with MR/repo info if available from extract state
   local EXTRACT_STATE="$ARTIFACTS_DIR/extract-state.json"
@@ -120,24 +144,7 @@ publish_pages() {
     " 2>/dev/null || true
   fi
 
-  # Copy iteration snapshot reports as subdirectories
-  local ARTIFACTS_DIR
-  ARTIFACTS_DIR="$(dirname "$REPORT_FILE")"
-  for iter_html in "$ARTIFACTS_DIR"/evaluation-report-iter-*.html; do
-    [ -f "$iter_html" ] || continue
-    local iter_num
-    iter_num="$(echo "$iter_html" | grep -o 'iter-[0-9]*' | grep -o '[0-9]*')"
-    if [ -n "$iter_num" ]; then
-      mkdir -p "$REPORTS_PATH/$PROTO_KEY/iter-$iter_num"
-      cp "$iter_html" "$REPORTS_PATH/$PROTO_KEY/iter-$iter_num/index.html"
-    fi
-  done
-
-  # Copy original report (first iteration, full version)
-  if [ -f "$ARTIFACTS_DIR/evaluation-report-original.html" ]; then
-    mkdir -p "$REPORTS_PATH/$PROTO_KEY/original"
-    cp "$ARTIFACTS_DIR/evaluation-report-original.html" "$REPORTS_PATH/$PROTO_KEY/original/index.html"
-  fi
+  # ponytail: only final report published — no iter snapshots or originals
 
   # Regenerate the data.json for the React dashboard
   # Always use local generate-dashboard.js — remote generate-data.cjs has a
@@ -145,8 +152,8 @@ publish_pages() {
   node "$(dirname "$0")/generate-dashboard.js" "$REPORTS_PATH"
 
   # Copy leaderboard if it exists (sibling to index.html for navigation)
-  local LEADERBOARD="$ARTIFACTS_DIR/../pain-leaderboard.html"
-  [[ -f "$LEADERBOARD" ]] && cp "$LEADERBOARD" "$REPORTS_PATH/pain-leaderboard.html"
+  local LEADERBOARD="${EVAL_GLOBAL_DIR:+$EVAL_GLOBAL_DIR/pain-leaderboard.html}"
+  [[ -n "$LEADERBOARD" && -f "$LEADERBOARD" ]] && cp "$LEADERBOARD" "$REPORTS_PATH/pain-leaderboard.html"
 
   # Commit and push
   cd "$WORK_DIR/pages-repo"
@@ -202,6 +209,7 @@ publish_branch() {
   cd "$BRANCH_DIR"
   mkdir -p "evals/$PROTO_KEY"
   cp "$REPORT_FILE" "evals/$PROTO_KEY/index.html"
+  inject_prototype_bar "evals/$PROTO_KEY/index.html"
 
   # Regenerate index
   node "$(dirname "$0")/generate-dashboard.js" "$BRANCH_DIR/evals"
@@ -356,9 +364,12 @@ sync_prototype_bar_config() {
     eval_url="/evals/${PROTO_KEY}/"
   fi
 
-  local jira_base="${JIRA_BASE_URL:-https://issues.redhat.com/browse/}"
+  local overlay_jira
+  overlay_jira="$(node "$SCRIPT_DIR/overlay-get.js" publish.jira_base_url 2>/dev/null || true)"
+  local jira_base="${JIRA_BASE_URL:-${overlay_jira:-https://issues.example.com/browse/}}"
+  # prototype-bar.json lives at the key root, not under eval/
   node "$export_sync" \
-    --artifacts "$ARTIFACTS_DIR" \
+    --artifacts "$KEY_DIR" \
     --eval-url "$eval_url" \
     --jira-base "$jira_base" || true
 }
