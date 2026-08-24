@@ -1,7 +1,11 @@
 #!/usr/bin/env bash
 # Install Prototype Bar assets into a standalone HTML prototype or React workspace.
+# With --artifacts: also sync prototype-bar.json and copy the eval report for Pages.
+#
 # Usage:
-#   bash install-prototype-bar.sh --source <path> [--mode standalone|workspace] [--config <prototype-bar.json>]
+#   bash install-prototype-bar.sh --source <path> \
+#     [--artifacts <dir>] [--mode standalone|workspace] [--config <prototype-bar.json>] \
+#     [--prototype-url URL] [--jira-base URL] [--no-eval-copy]
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -9,14 +13,22 @@ TEMPLATE_DIR="$(cd "$SCRIPT_DIR/../templates" && pwd)"
 SOURCE=""
 MODE=""
 CONFIG=""
+ARTIFACTS=""
+PROTOTYPE_URL=""
+JIRA_BASE=""
+NO_EVAL_COPY=false
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --source) SOURCE="${2:-}"; shift 2 ;;
     --mode) MODE="${2:-}"; shift 2 ;;
     --config) CONFIG="${2:-}"; shift 2 ;;
+    --artifacts) ARTIFACTS="${2:-}"; shift 2 ;;
+    --prototype-url) PROTOTYPE_URL="${2:-}"; shift 2 ;;
+    --jira-base) JIRA_BASE="${2:-}"; shift 2 ;;
+    --no-eval-copy) NO_EVAL_COPY=true; shift ;;
     -h|--help)
-      echo "Usage: bash install-prototype-bar.sh --source <path> [--mode standalone|workspace] [--config <prototype-bar.json>]"
+      echo "Usage: bash install-prototype-bar.sh --source <path> [--artifacts <dir>] [--mode standalone|workspace] [--config <prototype-bar.json>] [--prototype-url URL] [--jira-base URL] [--no-eval-copy]"
       exit 0
       ;;
     *)
@@ -32,6 +44,24 @@ if [[ -z "$SOURCE" ]]; then
 fi
 
 SOURCE="$(cd "$SOURCE" && pwd)"
+
+# With --artifacts: generate/refresh prototype-bar.json before installing.
+if [[ -n "$ARTIFACTS" ]]; then
+  echo "── Syncing prototype-bar.json from metadata..."
+  SYNC_ARGS=("--artifacts" "$ARTIFACTS")
+  if [[ -n "$PROTOTYPE_URL" ]]; then
+    SYNC_ARGS+=("--prototype-url" "$PROTOTYPE_URL")
+  fi
+  if [[ -n "$JIRA_BASE" ]]; then
+    SYNC_ARGS+=("--jira-base" "$JIRA_BASE")
+  fi
+  node "$SCRIPT_DIR/sync-prototype-bar-config.mjs" "${SYNC_ARGS[@]}"
+  CONFIG="$ARTIFACTS/prototype-bar.json"
+  if [[ ! -f "$CONFIG" ]]; then
+    echo "Error: sync did not produce $CONFIG" >&2
+    exit 1
+  fi
+fi
 
 detect_mode() {
   if [[ -f "$SOURCE/package.json" ]] && rg -q '"react"' "$SOURCE/package.json" 2>/dev/null; then
@@ -308,3 +338,37 @@ case "$MODE" in
 esac
 
 echo "Prototype Bar install complete."
+
+# With --artifacts: copy eval report into public/evals/{ID}/ for static Pages.
+if [[ -n "$ARTIFACTS" ]]; then
+  if [[ "$NO_EVAL_COPY" == "true" ]]; then
+    echo "── Eval copy skipped (--no-eval-copy)."
+  else
+    PAGES_ROOT=""
+    if [[ -d "$SOURCE/public" ]]; then
+      PAGES_ROOT="$SOURCE/public"
+    elif [[ -d "$SOURCE/dist" ]]; then
+      PAGES_ROOT="$SOURCE/dist"
+    fi
+
+    EVAL_REPORT=""
+    if [[ -f "$ARTIFACTS/eval/evaluation-report.html" ]]; then
+      EVAL_REPORT="$ARTIFACTS/eval/evaluation-report.html"
+    elif [[ -f "$ARTIFACTS/evaluation-report.html" ]]; then
+      EVAL_REPORT="$ARTIFACTS/evaluation-report.html"
+    fi
+
+    if [[ -n "$EVAL_REPORT" && -n "$PAGES_ROOT" ]]; then
+      echo "── Copying eval report for Pages..."
+      bash "$SCRIPT_DIR/copy-eval-for-pages.sh" \
+        --artifacts "$ARTIFACTS" \
+        --pages-root "$PAGES_ROOT" \
+        --evals-dir evals
+    elif [[ -n "$EVAL_REPORT" && -z "$PAGES_ROOT" ]]; then
+      echo "── Eval report found but no public/ or dist/ in source — skipping Pages copy."
+      echo "   Run copy-eval-for-pages.sh manually after build if needed."
+    else
+      echo "── No eval report found yet — skipping. Re-run after evaluate to deploy."
+    fi
+  fi
+fi

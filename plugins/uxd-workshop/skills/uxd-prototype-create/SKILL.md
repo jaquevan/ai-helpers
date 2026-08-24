@@ -1,5 +1,6 @@
 ---
 name: uxd-prototype-create
+version: 0.1.0
 description: >-
   Create or refine a UX prototype from a Jira ticket, Figma design, feature
   description, or rough idea. Enumerates user journeys and page scenarios
@@ -9,27 +10,69 @@ description: >-
   evaluation feedback.
 ---
 
-# Prototype Creator
+# Create Prototype
 
-Creates a prototype based on various input sources and delivers output in multiple formats. Accepts Jira tickets, Figma design links, feature descriptions, existing codebases, or just a rough idea — the skill asks clarifying questions to fill in whatever context is missing.
+Builds a prototype from a Jira ticket, Figma file, feature description, or rough idea. Asks clarifying questions for anything missing, then writes a runnable prototype plus structured artifacts that `uxd-prototype-evaluate`, `uxd-prototype-export`, and `uxd-prototype-publish` consume.
 
-Supports two workspace modes (integrate into an existing codebase or generate standalone HTML) and three decision levels: **skip** (just build), **auto** (decision kit + AI picks + batch override), or **human** (walk through decision pages one at a time).
+Family: **create → evaluate → publish** (optional export along the way). Pipeline mode: [references/pipeline-mode.md](references/pipeline-mode.md).
 
-Also handles iterative refinement: after `uxd-prototype-evaluate` (Playwright AC validation + usability), re-invoke this skill to apply targeted improvements from failed criteria and refinement suggestions.
+**Workspace vs target:** `--workspace` is the codebase you build in (clone, generate, verify). `--target` is only where the MR/PR lands. Never clone or generate against the target repo.
 
-Supports **pipeline mode** (create → evaluate → optional refine → publish). See [references/pipeline-mode.md](references/pipeline-mode.md).
+## Inputs
 
-### Workspace vs. Target (important)
+| Input | Required | Source |
+|-------|----------|--------|
+| What to prototype (Jira URL/key, Figma link, description, or idea) | **Yes** | User; skill asks if omitted |
+| Workspace (`--workspace`) | No | Local path, git URL, or `standalone` (default) |
+| Push destination (`--target`) | No | `none` unless publishing |
+| Prior eval feedback | No | `.artifacts/{ID}/eval/` when refining |
 
-The **workspace** (`--workspace`) is always the codebase the prototype is built on top of. All cloning, analysis, code generation, verification, and commits happen in the workspace clone. The prototype must compile and run within the workspace's tech stack.
+If the user has not said what to prototype, **stop and ask** before writing files.
 
-The **target** (`--target`) is only the push destination — where the branch and merge request land. When `--target` is a git URL different from `--workspace`, the workspace clone gets an `upstream` remote pointed at the target for the push. Do **not** clone, analyze, or generate code against the target repo's codebase. The target repo receives the workspace's code via the MR branch.
+## Outputs
+
+Written under `.artifacts/{ID}/` in the consumer project (never `${CLAUDE_SKILL_DIR}`):
+
+| Output | Location |
+|--------|----------|
+| Prototype | `prototype/` (standalone HTML) or `code/` (workspace clone) |
+| RFE snapshot, metadata, changeset, summary | `rfe-snapshot.md`, `metadata.json`, `changeset.md`, `prototype-summary.yaml` |
+| Journeys + scenarios | `journeys.json`, `scenarios.json` |
+| Prototype Bar config | `prototype-bar.json` |
+| Design decisions | `decisions/` (only when `--decisions` is `auto` or `human`) |
+| Optional exports | `exports/` when `--export` |
+
+Schemas: [references/output-formats.md](references/output-formats.md).
+
+## Flags
+
+$ARGUMENTS
+
+Parse as: `<source> [--workspace <path-or-url-or-standalone>] [--target <dest>] [--decisions skip|auto|human] …`
+
+| Flag | Values | Default | Description |
+|------|--------|---------|-------------|
+| `--workspace` | path, git URL, or `standalone` | `standalone` | Codebase to build in |
+| `--workspace-branch` | branch name | from URL / default branch | Clone branch |
+| `--target` | `repo`, `github`, `gitlab`, `vercel`, `none`, or a git URL | `none` (pipeline) | Publish destination only. A git URL means open an MR/PR against that repo (implies `repo`) |
+| `--target-branch` | branch name | `--workspace-branch` | MR/PR base on `--target` |
+| `--decisions` | `skip`, `auto`, `human` | `skip` | Decision kit: none / AI picks / walk through with the user |
+| `--depth` | `under`, `normal`, `over` | `normal` | Decision count when not `skip`: 2–3 / 4–7 / 8–12 |
+| `--branch` | branch name | — | **Deprecated** alias for `--workspace-branch` |
+| `--dry-run` | flag | off | Skip git and external writes; local artifacts still written |
+| `--pipeline` / `--speedrun` | flag | off | Create → evaluate → refine → publish |
+| `--prototype-bar` / `--no-prototype-bar` | flag | on | Sticky Prototype Bar after generate |
+| `--export` | flag | off | Batch-export journey steps via `uxd-prototype-export` |
+| `--url` | URL | asked if `--export` | Live base URL for export (and pipeline evaluate) |
+| `--export-formats` | `html`, `tree`, `pf-spec` | `html,pf-spec` | Formats for `--export` |
+
+A `--target` value that looks like a git URL (`https://`, `git@`, `ssh://`, or `.git`) is the MR/PR base. Pass it to `resolve_workspace.py --upstream`. `--workspace-branch` and `--target-branch` are independent (clone a fork at `main`, open the MR against upstream `release-2.22`).
 
 ---
 
 ## Conversational Onboarding
 
-Before doing any work, walk through these questions with the user. Ask them one at a time, wait for a response, and confirm the full picture before proceeding.
+Before doing any work, ask these one at a time, wait for a response, and confirm the full picture.
 
 ### Question 1: What are we prototyping?
 
@@ -45,9 +88,7 @@ Before doing any work, walk through these questions with the user. Ask them one 
 > - **Existing codebase** — give me a local path or git URL. I'll clone it and build the prototype inside that codebase, matching its conventions.
 > - **Standalone** — I'll generate self-contained HTML using PatternFly CDN. No build tools needed.
 
-Default to standalone if the user isn't sure.
-
-If the user provides a separate push target (e.g., "push to repo X"), that only affects where the MR lands — the workspace URL above is still the codebase the prototype is built in.
+Default to standalone if the user isn't sure. A separate push target only affects where the MR lands.
 
 ### Question 3: How should design decisions be handled?
 
@@ -60,7 +101,7 @@ Default to **skip**.
 
 ### Question 4: How deep should decision exploration go?
 
-*Only ask this if the user chose **auto** or **human**.*
+*Only ask if the user chose **auto** or **human**.*
 
 > How many design decisions should I surface?
 > - **Under** (2–3) — Quick exploration, simple features
@@ -85,50 +126,20 @@ Prototype Plan:
 
 ---
 
-## Flags Reference
-
-| Flag | Values | Default | Description |
-|------|--------|---------|-------------|
-| `--workspace` | local path, git URL, or `standalone` | `standalone` | The codebase to build the prototype in — all code generation, analysis, and verification happen here (often a fork) |
-| `--workspace-branch` | branch name | auto-detected from URL / default branch | Branch to clone from `--workspace` |
-| `--target` | `repo`, `github`, `gitlab`, `vercel`, `none`, or a git URL | `none` (pipeline) | Push destination only — where to publish the MR/PR; a git URL opens an MR **against** that repo (implies `repo`). Never used as the build codebase. |
-| `--target-branch` | branch name | `--workspace-branch` (legacy fallback) | MR/PR base branch on `--target` |
-| `--decisions` | `skip`, `auto`, `human` | `skip` | Whether / how to run the decision kit |
-| `--depth` | `under`, `normal`, `over` | `normal` | Decision count when `--decisions` is `auto` or `human`: under 2–3, normal 4–7, over 8–12 |
-| `--branch` | branch name | — | **Deprecated** alias for `--workspace-branch` |
-| `--dry-run` | flag | off | Skip external writes |
-| `--pipeline` / `--speedrun` | flag | off | Run create → evaluate → refine → publish (see pipeline-mode.md) |
-| `--prototype-bar` / `--no-prototype-bar` | flag | on | Install sticky Prototype Bar (Sources, Prototype\|Eval, Export) after generate |
-| `--export` | flag | off | After artifacts, batch-export journey steps with `export: true` via `uxd-prototype-export` |
-| `--url` | URL | asked if `--export` | Live base URL for Playwright export (and pipeline evaluate) |
-| `--export-formats` | `html`, `tree`, `pf-spec` (comma-separated) | `html,pf-spec` | Formats for `--export` |
-
-**`--target` URL detection:** If the value looks like a git URL (`https://`, `http://`, `git@`, `ssh://`, or ends with `.git`), treat it as the MR/PR base repo. That implies publish type `repo`. Pass the URL to `resolve_workspace.py --upstream` so the clone gets an `upstream` remote; persist as `target_repo_url` / `upstream_url` in pipeline config and workspace analysis. A branch embedded in the target URL (GitLab `/-/tree/<branch>`, GitHub `/tree/<branch>`, or `#branch`) becomes `target_branch` unless `--target-branch` is set.
-
-**Branch pairing:** `--workspace-branch` selects what to clone; `--target-branch` selects the MR/PR merge base. They are independent — e.g. clone a fork at `main` but open the MR against upstream `release-2.22`.
-
-**Dry run:** Fetches RFEs and creates all local artifacts under `.artifacts/` but skips git operations and any external writes. Local `--export` files are still written when a URL is available.
-
----
-
 ## Step 1: Fetch RFE Source
 
-Check for available sources:
+1. **Local artifacts** — `.artifacts/*/rfe-snapshot.md` with valid frontmatter (may have been edited).
+2. **Jira MCP** (preferred): `getJiraIssue` with the issue key. Resolve `cloudId` from a full Jira URL hostname, or via `getAccessibleAtlassianResources` when only a key is given. Prefer `responseContentFormat: "markdown"`.
+3. **Fetch script** (fallback): `python3 "${CLAUDE_SKILL_DIR}/scripts/fetch_jira.py" PROJ-298 --json` (needs `JIRA_SERVER`, `JIRA_USER`, `JIRA_TOKEN`).
+4. **User-provided description** — ask for title, user stories, acceptance criteria, and product context.
 
-1. **Local artifacts** — `.artifacts/*/rfe-snapshot.md` with valid frontmatter (may have been edited after a prior run).
-2. **Jira MCP** (preferred for live tickets): `getJiraIssue` with the issue key. Resolve `cloudId` from a full Jira URL hostname, or via `getAccessibleAtlassianResources` when only a key is given. Prefer `responseContentFormat: "markdown"`.
-3. **Fetch script** (fallback): `python3 "${CLAUDE_SKILL_DIR}/scripts/fetch_jira.py" PROJ-298 --json` (requires `JIRA_SERVER`, `JIRA_USER`, `JIRA_TOKEN` env vars).
-4. **User-provided description** (final fallback): Ask for title, user stories, acceptance criteria, and product context.
-
-**If both local artifacts and Jira are available:** Ask which to use. Local may be edited; Jira is canonical.
+If both local artifacts and Jira exist, ask which to use. Local may be edited; Jira is canonical.
 
 ## Step 2: Select RFEs
 
-If RFE IDs were provided explicitly in the prompt, process all of them — do not re-ask. Otherwise, if multiple related issues exist, present them and let the user select.
+If RFE IDs were given in the prompt, process all of them. Otherwise, if multiple related issues exist, present them and let the user select.
 
 ## Step 3: Save RFE Snapshots
-
-Save each RFE with YAML frontmatter using the frontmatter utility:
 
 ```bash
 python3 "${CLAUDE_SKILL_DIR}/scripts/frontmatter.py" set ".artifacts/{ID}/rfe-snapshot.md" \
@@ -137,49 +148,26 @@ python3 "${CLAUDE_SKILL_DIR}/scripts/frontmatter.py" set ".artifacts/{ID}/rfe-sn
   created_at="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
 ```
 
-Where `{DECISIONS}` is `skip`, `auto`, or `human` (frontmatter field name remains `mode` for schema compatibility).
-
-Where `{ID}` is derived from the Jira key (e.g., `PROJ-298`) or a generated slug.
+`{DECISIONS}` is `skip`, `auto`, or `human` (field name stays `mode`). `{ID}` comes from the Jira key or a generated slug.
 
 ## Step 4: Extract User Stories and Journeys
 
-Parse from the RFE:
+Parse from the RFE: user stories, acceptance criteria, personas/roles, key entities, flows, and page scenarios.
 
-1. **User stories** — actor, action, goal (normalize bullet requirements if needed)
-2. **Acceptance criteria** — Given/When/Then, checkboxes, or AC sections
-3. **Personas / roles** — prefer IDs from `${CLAUDE_PLUGIN_ROOT}/knowledge/personas/catalog.yaml` when mapping roles via `aliases`; apply overlays from `${CLAUDE_PLUGIN_ROOT}/knowledge/personas/overlays/` for experience, accessibility, regulation, or team size. Internal study URLs are not on the public cards. If internal-ai-helpers is available (`UXD_INTERNAL_HELPERS` or a sibling `uxd/internal-ai-helpers` clone), read `plugins/uxd-eval-config/knowledge/personas/<id>.md` for Sources; skip if missing.
-4. **Key entities** — nouns the UI manipulates (cluster, pipeline, key, …)
-5. **Flows / user journeys** — ordered steps the user takes (screens **and** interaction UI states such as “modal open”). Prefer an explicit “User journey” section when present; otherwise infer from stories and ACs.
-6. **Page scenarios** — data/condition variants per page. Run the brainstorm checklist in [references/scenario-brainstorm.md](references/scenario-brainstorm.md) before writing `scenarios.json`: walk condition axes (presence, association, match quality, availability, post-action outcomes, recovery, errors), not only literal AC bullets. Prefer 3–7 distinct on-load end-states per page; skip duplicates that look identical after load.
+- Personas: prefer IDs from `${CLAUDE_PLUGIN_ROOT}/knowledge/personas/catalog.yaml`; apply overlays from `${CLAUDE_PLUGIN_ROOT}/knowledge/personas/overlays/`. If internal-ai-helpers is available, read `plugins/uxd-eval-config/knowledge/personas/<id>.md` for Sources; skip if missing.
+- **Page scenarios:** run [references/scenario-brainstorm.md](references/scenario-brainstorm.md) before writing `scenarios.json`. Prefer 3–7 distinct on-load end-states per page.
+- Write `.artifacts/{ID}/user-stories.json`, `journeys.json`, and `scenarios.json`. If the RFE is thin, record assumptions in `metadata.json`.
 
-If the RFE is thin, document assumptions in `metadata.json`. Store structured stories in `.artifacts/{ID}/user-stories.json`.
+Journey and scenario rules (canonical schemas in `uxd-prototype-export`):
 
-**Also write** `.artifacts/{ID}/journeys.json` (schema in [references/output-formats.md](references/output-formats.md) and `uxd-prototype-export/references/journeys-schema.md`):
-
-- One journey per primary flow; `steps` with `id`, `name`, `route`, and `"export": true` for key screens/states
-- For interaction states that are not distinct URLs (e.g. modal open), keep the same `route` and add `actions` (`click`, `wait_for`, `fill`, …)
-- Use stable selectors (`data-ouia-component-id`, roles, labels)
-- Align loosely with evaluate `journey_definitions` field names (`id`, `title`, `persona`, `source`, `ac_ids`)
-
-**Also write** `.artifacts/{ID}/scenarios.json` (schema in [references/output-formats.md](references/output-formats.md) and `uxd-prototype-export/references/scenarios-schema.md`):
-
-- One `pages[]` entry per distinct journey `route`, with at least a `default` scenario
-- Populate from the Step 4 brainstorm checklist ([references/scenario-brainstorm.md](references/scenario-brainstorm.md)) — not only happy path + one error
-- Each scenario `description` must name the **on-load end-state** (what the page shows immediately when `?scenario=<id>` is set)
-- Scenario `id`s must be filename-safe (`[a-z0-9-]+`); keep modal/drawer open in journey `actions`, not scenarios
-- Mock wiring convention: [references/scenario-mocks.md](references/scenario-mocks.md)
-
-Use journeys + scenarios for implementation in Step 8 and for `--export` later (export = each exportable step × each scenario for that step’s route).
-
----
+- One journey per primary flow; mark key screens `"export": true`. Interaction states that are not distinct URLs keep the same `route` and add `actions`. Schema: [journeys-schema.md](../uxd-prototype-export/references/journeys-schema.md).
+- One `pages[]` entry per distinct journey `route`, with at least a `default` scenario. Each `description` names the **on-load end-state**. Scenario ids are filename-safe (`[a-z0-9-]+`). Schema: [scenarios-schema.md](../uxd-prototype-export/references/scenarios-schema.md). Mock wiring: [references/scenario-mocks.md](references/scenario-mocks.md).
 
 ## Step 5: Resolve Workspace
 
-All create/publish artifacts share the **consumer project** tree at `.artifacts/{ID}/` (repo root where the skill was invoked — never `${CLAUDE_SKILL_DIR}`). Eval outputs live under `.artifacts/{ID}/eval/`.
+**Standalone:** create `.artifacts/{ID}/prototype/` and skip to Step 6.
 
-**Standalone mode:** Create `.artifacts/{ID}/prototype/`. Skip to Step 6.
-
-**Workspace mode:** Clone the **workspace** codebase into `.artifacts/{ID}/code/` (keeps source separate from decision pages, reports, and other artifacts). This is the codebase the prototype is built on top of — all analysis, code generation, and verification happen here. If a separate `--target` was provided, it only affects where the branch is pushed later; do not clone or use the target's codebase. Use the resolve script (needs elevated permissions for git clone — `required_permissions: ["all"]` in Cursor):
+**Workspace:** clone into `.artifacts/{ID}/code/`. A separate `--target` only affects later push — do not clone the target. Needs elevated git permissions (`required_permissions: ["all"]` in Cursor):
 
 ```bash
 python3 "${CLAUDE_SKILL_DIR}/scripts/resolve_workspace.py" "<path-or-url>" \
@@ -189,148 +177,81 @@ python3 "${CLAUDE_SKILL_DIR}/scripts/resolve_workspace.py" "<path-or-url>" \
   [--target-branch "{TARGET_BRANCH}"]
 ```
 
-Handles local paths, GitHub/GitLab URLs (extracts branch from URL patterns), SSL auto-retry, HTTPS↔SSH fallback on auth/access failures, and shallow clones. When `--upstream` is set (from a `--target` git URL), adds/sets an `upstream` remote on the clone for fork-style MR submission. `--workspace-branch` (or deprecated `--branch`) overrides the clone branch; `--target-branch` (or a branch in the `--upstream` URL) sets the MR/PR base. Output JSON includes `type`, `clone_url`, `branch`, `clone_path` (`.artifacts/{ID}/code`), `upstream_url` / `target_branch` (if set), `status`.
-
-**Preserve `branch`, `target_branch`, `clone_url`, and `upstream_url`** from this output in workspace analysis (Step 6) — `submit_to_repo.py` uses `target_branch` (falling back to `branch`) for the MR base, plus `clone_url` / `upstream_url` for push remote and fork detection. Set `workspace_path` to the absolute or repo-relative `clone_path` (`.artifacts/{ID}/code`).
+Preserve `branch`, `target_branch`, `clone_url`, and `upstream_url` from the JSON output for Step 6 and publish. Set `workspace_path` to the clone path.
 
 ## Step 6: Analyze Target Codebase
 
-*Workspace mode only. Run inline — do not background; Steps 7–10 depend on results.*
+*Workspace mode only. Run inline — Steps 7–10 depend on it.*
 
-Detect and record:
-
-1. Tech stack (framework, bundler, UI library, TypeScript)
-2. Conventions (file naming, component patterns, routing, tests)
-3. Navigation structure and design system usage
-4. Agent instructions (`.cursor/rules/`, `AGENTS.md`) — extract **verification commands** (lint, build, typecheck) for Step 10
-
-Save to `.artifacts/{ID}/workspace-analysis.json` including `clone_url`, `branch` (workspace clone branch), `workspace_path` (pointing at `.artifacts/{ID}/code`), and when publishing to a repo: `upstream_url` / `target_branch` from `--target` / `--target-branch`.
+Detect tech stack, conventions, navigation, design system, and verification commands (`AGENTS.md`, package scripts). Save to `.artifacts/{ID}/workspace-analysis.json` with `clone_url`, `branch`, `workspace_path`, and when publishing: `upstream_url` / `target_branch`.
 
 ## Step 7: Design Decisions
 
-**If `--decisions=skip`:** Make design calls inline while building. Do not generate decision pages, `decisions.json`, or a strategy brief. Set `decision_mode: skip` in `prototype-summary.yaml` / `metadata.json` and omit `decision_depth` / `decisions_count`. Skip the rest of this step.
+**If `--decisions=skip`:** make design calls while building. Do not generate decision pages. Set `decision_mode: skip` in `prototype-summary.yaml` / `metadata.json`. Skip the rest of this step.
 
-Design decisions are planned dynamically based on the RFE and codebase context. See `${CLAUDE_SKILL_DIR}/references/decision-points.yaml` for reference categories.
+Otherwise, plan `--depth` decisions with real tradeoffs ([references/decision-points.yaml](references/decision-points.yaml)):
 
-**Plan decisions:** Analyze user stories and codebase to identify decisions with real tradeoffs. Count is determined by `--depth` (under: 2–3, normal: 4–7, over: 8–12).
+- **`auto`:** generate HTML pages, pick recommendations, show a batch summary to override.
+- **`human`:** generate all pages, then walk through one at a time.
 
-**Decision workflow depends on `--decisions`:**
-
-- **`--decisions=auto`:** Generate HTML decision pages, auto-pick recommendations, present a batch summary table for the user to override any choices.
-- **`--decisions=human`:** Generate all decision pages upfront, then walk through one at a time asking the user to choose.
-
-**Quality bar:** Decision pages use PatternFly CDN chrome (copy [references/decision-page-template.html](references/decision-page-template.html)). Option previews are real rendered UI — no ASCII or empty wireframes. Previews match the build target (standalone → PF components; workspace → target-app components when possible). Every page cross-links to the others plus `index.html`. After generation, print absolute `file://` URLs and open the index in the browser.
-
-Read [references/decision-workflow.md](references/decision-workflow.md) for the full procedure. See [references/decision-page-example.md](references/decision-page-example.md) for preview recipes by decision type.
-
-Store all decision artifacts in `.artifacts/{ID}/decisions/` (decision pages, `index.html`, `decisions.json`, `strategy-brief.md`). Persist the same vocabulary in artifacts: `decision_mode: skip | auto | human`.
-
----
+Decision pages use [references/decision-page-template.html](references/decision-page-template.html) — real rendered UI, not ASCII. Full procedure: [references/decision-workflow.md](references/decision-workflow.md). Store artifacts in `.artifacts/{ID}/decisions/`.
 
 ## Step 8: Generate the Prototype
 
-### Workspace Mode
+**Workspace:** generate in `.artifacts/{ID}/code/` following project conventions. Wire mocks from `scenarios.json` via `window.UxdScenario.get()` / `useUxdScenario` so `?scenario=<id>` lands on the intended UI with no extra clicks. See [references/scenario-mocks.md](references/scenario-mocks.md).
 
-Generate all code in the workspace clone (`.artifacts/{ID}/code/`). Even when `--target` points to a different repo, the workspace clone is the only codebase used for generation. The target repo's code is never cloned or referenced.
-
-1. Plan file changes based on codebase analysis and design decisions
-2. Generate components following the **workspace** project's conventions (imports, TypeScript, CSS approach)
-3. Register routes and update navigation
-4. Implement each design decision from Step 7
-5. Wire mock data **and on-load end-state** per scenario in `.artifacts/{ID}/scenarios.json` — pages read `window.UxdScenario.get()` or `useUxdScenario` and seed the intended UI immediately (see [references/scenario-mocks.md](references/scenario-mocks.md)); active scenario is `?scenario=<id>`. Selecting a scenario must not require further clicks to reveal its state.
-
-### Standalone Mode
-
-Generate HTML files in `.artifacts/{ID}/prototype/` using PatternFly CDN:
+**Standalone:** generate HTML in `.artifacts/{ID}/prototype/` with PatternFly 6 CDN:
 
 ```html
 <link rel="stylesheet" href="https://unpkg.com/@patternfly/patternfly@6/patternfly.min.css" />
 <link rel="stylesheet" href="https://unpkg.com/@patternfly/patternfly@6/patternfly-addons.min.css" />
 ```
 
-If the PatternFly docs MCP is available, use it for component reference.
+Use PatternFly docs MCP if available. Same scenario wiring as above.
 
-Branch each page’s mock data and seed on-load end-state from `UxdScenario.get()` (installed with the Prototype Bar). See [references/scenario-mocks.md](references/scenario-mocks.md).
+**Reachability self-check** (a minute or two, then move on):
 
-### Reachability self-check
-
-After implementing, do a quick pass to confirm every new screen or flow is actually reachable. Fix any gaps before continuing:
-
-- **Routes** — each new page/view is registered in the app's router (or linked as a real HTML file in standalone)
-- **Nav / entry points** — left nav, tabs, or menus include the new destinations where users would expect them
-- **Inbound links** — CTAs, table row actions, breadcrumbs, and other hyperlinks that should lead to the new UI are wired to the correct paths
-- **Dead ends** — no orphan screens that can only be opened by typing a URL
-- **Journey coverage** — every `route` in `.artifacts/{ID}/journeys.json` is reachable; steps with `actions` have matching interactive elements (stable selectors) so those states can be opened
-- **Scenario coverage** — every non-default scenario in `.artifacts/{ID}/scenarios.json` is selectable via `?scenario=<id>` (or the bar Scenario menu) and lands on its intended end-state **with no further clicks**; each scenario is visually distinct from `default` and from the other scenarios on that page (two identical post-load UIs are a fail)
-
-This is a cursory wiring check, not a full UX review. Spend a minute or two; fix obvious misses, then move on.
-
-### Prototype Bar (default on)
-
-The Prototype Bar (Sources, Prototype|Eval toggle, Scenario switcher, Export) is installed in its own step (Step 10) after artifacts are written. If `--no-prototype-bar` was set, Step 10 is skipped.
-
----
+- Every new route is registered and linked from nav/CTAs — no orphan screens
+- Every `journeys.json` route is reachable; steps with `actions` have matching stable selectors
+- Every non-default scenario is selectable via `?scenario=<id>` and visually distinct from `default`
 
 ## Step 9: Write Prototype Artifacts
 
-Write these artifacts after generation:
-
-- `.artifacts/{ID}/changeset.md` — lists all files created/modified with one-line descriptions
-- `.artifacts/{ID}/metadata.json` — prototype ID, title, `decision_mode`, status, iteration, screens list, `journeys_path`, `scenarios_path`, `prototype_bar`, `source` / `source_rfes` / `sources`, timestamps
-- `.artifacts/{ID}/prototype-summary.yaml` — structured machine-readable summary for downstream skills and pipeline consumption
-- `.artifacts/{ID}/prototype-bar.json` — Prototype Bar config (Sources + Eval + slim `scenarios` list)
-- Ensure `.artifacts/{ID}/journeys.json` is present (from Step 4; update routes/selectors if implementation diverged)
-- Ensure `.artifacts/{ID}/scenarios.json` is present (from Step 4; update routes/scenario ids if implementation diverged)
-
-The `prototype-summary.yaml` captures what was built (build mode), what it was built from (source), how decisions were made, and what was produced. Downstream skills like `uxd-prototype-evaluate`, `uxd-prototype-export`, and `uxd-prototype-publish` can consume this directly without parsing human-readable output.
-
-Read [references/output-formats.md](references/output-formats.md) for full schema definitions and examples of each artifact file.
+- `changeset.md` — files created/modified
+- `metadata.json` — id, title, `decision_mode`, screens, paths, timestamps
+- `prototype-summary.yaml` — machine-readable summary for downstream skills
+- Keep `journeys.json` / `scenarios.json` in sync with what was actually built
 
 ## Step 10: Install Prototype Bar
 
-*Skip if `--no-prototype-bar` was set. Otherwise this step is mandatory.*
-
-Run the unified install-and-sync script. This generates `prototype-bar.json` from metadata/scenarios and installs the bar assets into the prototype source:
+*Skip if `--no-prototype-bar`. Otherwise mandatory.*
 
 ```bash
 EXPORT_SKILL="${CLAUDE_SKILL_DIR}/../uxd-prototype-export"
-bash "${EXPORT_SKILL}/scripts/install-and-sync-prototype-bar.sh" \
+bash "${EXPORT_SKILL}/scripts/install-prototype-bar.sh" \
   --artifacts ".artifacts/{ID}" \
   --source "<prototype-dir-or-workspace>" \
   --mode standalone|workspace
 ```
 
-- **Standalone:** `--source` = `.artifacts/{ID}/prototype/`
-- **Workspace:** `--source` = workspace root from `workspace-analysis.json`
+`--source` is `.artifacts/{ID}/prototype/` (standalone) or the workspace root from `workspace-analysis.json`. If auto-mount fails for React, import `<PrototypeBar />` in the app shell.
 
-If auto-mount fails for a React workspace (script reports "could not find App.*"), manually import and render `<PrototypeBar />` in the app shell.
-
-After install, the bar provides: Sources dropdown (Jira/Figma links), Prototype|Eval view toggle, Scenario switcher (from `scenarios.json`), and Export menu.
-
-**Re-run after evaluate:** The script also copies the eval report into `public/evals/{ID}/` (Step 3 of the script) when the report exists. Re-run this command after `uxd-prototype-evaluate` completes so the Eval tab becomes active on Pages. Pass `--no-eval-copy` to skip if the report isn't needed in the deployment.
+Re-run after evaluate so the Eval tab gets the report (`public/evals/{ID}/`). Pass `--no-eval-copy` if the report is not needed.
 
 ## Step 11: Post-Change Verification
 
-*Workspace mode only. Mandatory — do not skip.*
+*Workspace mode only. Mandatory.*
 
-1. Read verification commands from `AGENTS.md` / package scripts discovered in Step 6
-2. Install dependencies if needed
-3. Lint changed files; fix errors introduced by the prototype
-4. Run build / type-check; fix failures
-5. If verification changes more files, update `changeset.md`
-6. Record pass/fail in `.artifacts/{ID}/verification.json`
+Install deps if needed, lint/build/type-check changed files, fix failures introduced by the prototype, update `changeset.md`, record pass/fail in `.artifacts/{ID}/verification.json`.
 
 ## Step 12: Journey export (when `--export`)
 
-*Skip unless `--export` was set.*
+*Skip unless `--export`.*
 
-Export captures each exportable journey step × each scenario for that step’s route (`?scenario=<id>`), writing `{journeyId}/{stepId}--{scenarioId}.html`, PF implementation specs (`.pf-spec.json` / `.pf-spec.txt`), rolled-up `implementation-spec.json`, plus `exports/index.html`.
-
-1. Confirm `.artifacts/{ID}/journeys.json` has at least one step (prefer steps with `"export": true`; if none are marked, pass `--export-all-if-unset`)
-2. Confirm `.artifacts/{ID}/scenarios.json` exists (fallback: export uses `default` only per route)
-3. Resolve `--url` — ask if missing. For standalone HTML, serve `.artifacts/{ID}/prototype/` (e.g. `npx serve`) and use that origin
-4. Ensure export skill deps: `cd "${CLAUDE_SKILL_DIR}/../uxd-prototype-export" && npm install`
-5. Run:
+1. Confirm `journeys.json` (prefer `"export": true`; else `--export-all-if-unset`) and `scenarios.json`
+2. Resolve `--url` — ask if missing. For standalone, serve `prototype/` and use that origin
+3. `cd "${CLAUDE_SKILL_DIR}/../uxd-prototype-export" && npm install`
+4. Run:
 
 ```bash
 EXPORT_SKILL="${CLAUDE_SKILL_DIR}/../uxd-prototype-export"
@@ -343,9 +264,9 @@ node "${EXPORT_SKILL}/scripts/export-journey.mjs" \
   --export-all-if-unset
 ```
 
-6. Record `exports.path`, `exports.count`, `exports.manifest`, `exports.index`, and `exports.implementation_spec` (when present) in `metadata.json` and `prototype-summary.yaml`
+5. Record export paths in `metadata.json` and `prototype-summary.yaml`
 
-Optional but recommended while viewing locally: keep the export helper running so the Prototype Bar can (a) write Export captures into `.artifacts/{ID}/exports` and (b) open Eval at `http://127.0.0.1:9417/evals/{ID}/` (SPA servers cannot serve `.artifacts/` reports via relative `/evals/…`):
+Optional local helper so the bar can write captures and open Eval at `http://127.0.0.1:9417/evals/{ID}/`:
 
 ```bash
 node "${EXPORT_SKILL}/scripts/export-helper.mjs" \
@@ -355,49 +276,47 @@ node "${EXPORT_SKILL}/scripts/export-helper.mjs" \
 
 ## Step 13: Summary and Next Steps
 
-Print a summary showing ID, title, decisions (`skip` / `auto` / `human`), screens, journeys, prototype bar, exports (if any), workspace, status, and artifact paths.
+Print ID, title, decisions, screens, journeys, bar, exports, workspace, status, and artifact paths. Suggest:
 
-Suggest next steps:
-
-1. Serve the prototype — use the Prototype Bar **Export** menu for ad-hoc static HTML / component tree / PF implementation spec, or run `uxd-prototype-export`
-2. Run `uxd-prototype-evaluate {ID} <URL> [--workspace=…]` (Playwright AC + usability)
+1. Serve the prototype — Prototype Bar **Export**, or `uxd-prototype-export`
+2. `uxd-prototype-evaluate {ID} <URL> [--workspace=…]`
 3. Re-invoke this skill to refine from FAIL / refinement-suggestions
-4. Publish via `uxd-prototype-publish` (or `${CLAUDE_SKILL_DIR}/scripts/submit_to_repo.py` for repo MR)
+4. `uxd-prototype-publish`
 
-If `--pipeline` / `--speedrun` was set, continue with [references/pipeline-mode.md](references/pipeline-mode.md).
+If `--pipeline` / `--speedrun`, continue with [references/pipeline-mode.md](references/pipeline-mode.md).
 
 ---
 
 ## Refinement
 
-After Playwright evaluation, apply targeted improvements from failed ACs and suggestions.
+After evaluate, apply targeted fixes from failed ACs — do not rewrite the prototype. Full procedure: [references/refinement-procedure.md](references/refinement-procedure.md).
 
-Read [references/refinement-procedure.md](references/refinement-procedure.md) when the user asks to refine or when running the automated refine→eval loop.
-
-**Quick summary:** Reads `.artifacts/{ID}/eval/evaluation-report.csv` + `refinement-suggestions.json`, plans fixes for FAIL criteria, applies without full rewrite, increments iteration. Pass = zero FAIL. Default max: 3 cycles.
-
-**Invocation:**
+Reads `.artifacts/{ID}/eval/evaluation-report.csv` + `refinement-suggestions.json`. Pass = zero FAIL. Default max: 3 cycles.
 
 ```
 /uxd-prototype-create refine {ID} [--decisions skip|auto|human] [--headless] [--max-cycles 3]
 ```
 
-**Headless auto-loop:** With `--headless`, runs refine → `uxd-prototype-evaluate` → check FAIL count → refine again until zero FAIL, max cycles, or plateau.
+`--headless` loops refine → evaluate until zero FAIL, max cycles, or plateau.
 
----
+## Guardrails
 
-## Pipeline Mode
+- **Do not build before confirmation.** Finish onboarding and print the Prototype Plan first.
+- **Do not clone the target.** Build only in `--workspace`.
+- **Do not invent journeys or scenarios** that the source does not support — record assumptions instead.
+- **Scenarios must be visually distinct** on load; interaction states belong in journey `actions`, not scenarios.
+- **Workspace verification is mandatory** — lint/build failures introduced by the prototype must be fixed.
 
-When the user wants the full create → evaluate → publish flow, read [references/pipeline-mode.md](references/pipeline-mode.md) and orchestrate those skills.
+## Reference Docs
 
----
-
-## Edge Cases
-
-Read [references/edge-cases.md](references/edge-cases.md) when encountering:
-- Thin/vague RFEs with insufficient detail
-- API-only tickets with no UI surface
-- Multiple RFEs composing a single feature
-- Workspace clone failures (auth, SSL, not found)
-- Upstream decisions conflicting with AI recommendations
-- Jira unavailability (graceful degradation)
+| Doc | When to load |
+|-----|-------------|
+| [output-formats.md](references/output-formats.md) | Writing create artifact files |
+| [journeys-schema.md](../uxd-prototype-export/references/journeys-schema.md) | `journeys.json` shape (owned by export) |
+| [scenarios-schema.md](../uxd-prototype-export/references/scenarios-schema.md) | `scenarios.json` shape (owned by export) |
+| [scenario-brainstorm.md](references/scenario-brainstorm.md) | Planning page scenarios |
+| [scenario-mocks.md](references/scenario-mocks.md) | Wiring `?scenario=` mocks |
+| [decision-workflow.md](references/decision-workflow.md) | `--decisions=auto` or `human` |
+| [refinement-procedure.md](references/refinement-procedure.md) | Applying eval feedback |
+| [pipeline-mode.md](references/pipeline-mode.md) | `--pipeline` / `--speedrun` |
+| [edge-cases.md](references/edge-cases.md) | Thin RFEs, clone failures, Jira down, API-only tickets |

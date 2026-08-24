@@ -4,16 +4,14 @@ Full procedure for submitting workspace-mode prototypes as GitLab merge requests
 
 ## submit_to_repo.py
 
-The script lives at the create skill (shared):
+The script lives in this skill:
 
-`${CLAUDE_SKILL_DIR}/../uxd-prototype-create/scripts/submit_to_repo.py`
-
-(Or resolve via the create skill path when `CLAUDE_SKILL_DIR` is the publish skill.)
+`${CLAUDE_SKILL_DIR}/scripts/submit_to_repo.py`
 
 ### Invocation
 
 ```bash
-python3 ../uxd-prototype-create/scripts/submit_to_repo.py \
+python3 "${CLAUDE_SKILL_DIR}/scripts/submit_to_repo.py" \
   --rfe-key {ID} \
   --title "{title from metadata}" \
   [--upstream https://gitlab.example.com/org/canonical.git] \

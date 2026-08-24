@@ -23,8 +23,8 @@ Prefer Playwright eval outputs from `uxd-prototype-evaluate`:
 |----------|-----|
 | `.artifacts/{ID}/eval/evaluation-report.csv` | AC verdicts (PASS / FAIL / FLAGGED) and usability scores |
 | `.artifacts/{ID}/eval/refinement-suggestions.json` | Actionable fix suggestions from Phase A / consistency |
-| `.artifacts/{ID}/iteration-log.json` | Prior fix-loop history |
-| `.artifacts/{ID}/usability-thinkaloud-*.md` | Phase B persona findings (optional) |
+| `.artifacts/{ID}/eval/iteration-log.json` | Prior fix-loop history |
+| `.artifacts/{ID}/eval/usability-thinkaloud-*.md` | Phase B persona findings (optional) |
 
 **Pass condition for stopping refinement:** zero `FAIL` verdicts in Section 1 of `evaluation-report.csv`. `FLAGGED` items need human review but do not block the loop by themselves.
 

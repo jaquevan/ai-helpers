@@ -89,7 +89,7 @@ def collect_eval_and_bar_files(workspace_path, rfe_key):
     """Files needed so Prototype Bar Eval works on GitLab/GitHub Pages.
 
     Changeset.md usually lists feature source only. Eval reports live under
-    public/evals/{ID}/ (copied by copy-eval-for-pages / install-and-sync) and
+    public/evals/{ID}/ (copied by copy-eval-for-pages / install-prototype-bar.sh --artifacts) and
     must be committed so CI CopyPlugin / static hosting can serve them under
     the Pages path_prefix (e.g. /mr-218/evals/{ID}/).
     """
