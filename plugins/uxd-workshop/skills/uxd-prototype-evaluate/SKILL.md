@@ -99,6 +99,8 @@ In phase docs, `.artifacts/<KEY>/eval/…` means `${UXD_PROJECT_ROOT}/.artifacts
 
 ## Prerequisites
 
+Marketplace install copies files only — it does not run `npm install` or `package.json` `postinstall`. Before proceeding, install Node deps and Chromium from the skill directory:
+
 ```bash
 export UXD_PROJECT_ROOT="$(node -e "console.log(require('${CLAUDE_SKILL_DIR}/scripts/resolve-root').resolveProjectRoot())" 2>/dev/null || git rev-parse --show-toplevel 2>/dev/null || pwd)"
 cd "${CLAUDE_SKILL_DIR}"
@@ -106,6 +108,8 @@ npm install
 npx playwright install chromium
 cd "${UXD_PROJECT_ROOT}"
 ```
+
+Stop if Chromium install fails; do not start Playwright without it.
 
 Context repos (`.context/consistency-checker/`, `.context/usability-testing/`) bootstrap on first run when `CONSISTENCY_CHECKER_REPO` / `USABILITY_TESTING_REPO` (or overlay `context_repos`) are set; otherwise those phases degrade. Product overlay: [references/skill-overlays.md](references/skill-overlays.md).
 
@@ -171,7 +175,7 @@ After each run, offer: fix a specific issue, explain a finding, re-run, or accep
 
 ## Guardrails
 
-- **Do not start Playwright** until the Jira key and a URL or `--workspace` are known.
+- **Do not start Playwright** until Chromium is installed (`npx playwright install chromium`), and the Jira key and a URL or `--workspace` are known.
 - **Never write eval artifacts to `${CLAUDE_SKILL_DIR}`.**
 - **`--fresh` deletes `.artifacts/<KEY>/eval/` only** — key root and `.artifacts/eval/` stay intact.
 - **Phase B is not optional** and is not inference from Phase A screenshots.

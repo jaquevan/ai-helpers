@@ -11,7 +11,7 @@ Evaluate a running prototype against a Jira ticket's acceptance criteria, option
 | Node.js >= 18 | `brew install node` or `nvm install 18` | Yes |
 | Python 3 | `brew install python3` | Yes |
 | Atlassian MCP | Configure in your IDE | Yes (for live Jira) |
-| Playwright | Auto-installs on first run | Auto |
+| Playwright Chromium | `npm install` then `npx playwright install chromium` in the skill dir (marketplace install does not run `postinstall`) | Yes |
 
 ```bash
 bash scripts/preflight-check.sh
