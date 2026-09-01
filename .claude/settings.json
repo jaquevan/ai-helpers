@@ -1,0 +1,7 @@
+{
+  "env": {
+    "MLFLOW_CLAUDE_TRACING_ENABLED": "true",
+    "MLFLOW_TRACKING_URI": "https://mlflow-ux-eval.apps.rosa.uxdpoc7.9hji.p3.openshiftapps.com",
+    "MLFLOW_EXPERIMENT_NAME": "prototype-creator-eval"
+  }
+}
