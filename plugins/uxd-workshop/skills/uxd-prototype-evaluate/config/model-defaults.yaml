@@ -1,0 +1,50 @@
+# Per-phase defaults for uxd-prototype-evaluate.
+# OpenAI direct API is the default. These are intentionally easy to override
+# while we benchmark quality and cost against the existing Anthropic workflow.
+# Do not put secrets here.
+
+default_platform: api
+
+platforms:
+  # Codex and direct API currently share the same OpenAI model tiers. Keeping
+  # separate maps lets us tune them independently without changing skills.
+  api:
+    provider: openai
+    phases:
+      eval-extract: gpt-5.6-luna
+      eval-classify: gpt-5.6-luna
+      eval-journey: gpt-5.6-terra
+      eval-fix: gpt-5.6-sol
+      eval-usability: gpt-5.6-terra
+      eval-consistency: gpt-5.6-terra
+      eval-report: gpt-5.6-luna
+  codex:
+    provider: openai
+    phases:
+      eval-extract: gpt-5.6-luna
+      eval-classify: gpt-5.6-luna
+      eval-journey: gpt-5.6-terra
+      eval-fix: gpt-5.6-sol
+      eval-usability: gpt-5.6-terra
+      eval-consistency: gpt-5.6-terra
+      eval-report: gpt-5.6-luna
+  cursor:
+    provider: openai
+    phases:
+      eval-extract: gpt-5.6-luna
+      eval-classify: gpt-5.6-luna
+      eval-journey: gpt-5.6-terra
+      eval-fix: gpt-5.6-sol
+      eval-usability: gpt-5.6-terra
+      eval-consistency: gpt-5.6-terra
+      eval-report: gpt-5.6-luna
+  anthropic:
+    provider: anthropic
+    phases:
+      eval-extract: claude-haiku-4-5
+      eval-classify: claude-haiku-4-5
+      eval-journey: claude-sonnet-4-6
+      eval-fix: claude-opus-4-6
+      eval-usability: claude-sonnet-4-6
+      eval-consistency: claude-sonnet-4-6
+      eval-report: claude-sonnet-4-6

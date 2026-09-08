@@ -33,23 +33,15 @@ SKILL_DIR = SCRIPT_DIR.parent
 TESTS_DIR = SKILL_DIR / "tests"
 SKILL_MAP_PATH = SKILL_DIR / "config" / "mlflow-skill-map.json"
 
-
-SKILL_MODEL_DEFAULTS = {
-    "eval-extract": "claude-sonnet-5",
-    "eval-classify": "claude-sonnet-5",
-    "eval-journey": "claude-opus-4-6",
-    "eval-fix": "claude-opus-4-6",
-    "eval-usability": "claude-opus-4-6",
-    "eval-consistency": "claude-opus-4-6",
-    "eval-report": "claude-sonnet-5",
-}
+sys.path.insert(0, str(SCRIPT_DIR))
+from model_defaults import model_for  # noqa: E402
 
 
 def parse_args():
     parser = argparse.ArgumentParser(description="Run eval scorers with MLflow tracing")
     parser.add_argument("artifacts_dir", help="Path to artifacts directory")
     parser.add_argument("--model", default="recommended-mix",
-                        help="Model override for ALL subskills, or 'recommended-mix' to use per-subskill defaults from orchestration.md")
+                        help="Model override for ALL subskills, or 'recommended-mix' to use per-subskill defaults from config/model-defaults.yaml")
     parser.add_argument("--prototype-key", default=None, help="Jira key (auto-detected from dir name if omitted)")
     parser.add_argument("--experiment", default="uxd-prototype-evaluate", help="MLflow umbrella experiment name")
     parser.add_argument("--scorers", nargs="+", default=["pipeline-output", "report-rendering", "script-tests"],
@@ -68,7 +60,7 @@ def resolve_model(skill_name: str, model_override: str) -> str:
     """Return the model for a given subskill. Uses per-subskill defaults unless overridden."""
     if model_override != "recommended-mix":
         return model_override
-    return SKILL_MODEL_DEFAULTS.get(skill_name, "claude-opus-4-6")
+    return model_for(skill_name)
 
 
 def detect_prototype_key(artifacts_dir: str) -> str:
@@ -1267,7 +1259,7 @@ def main():
     print(f"✓ eval_run_id: {eval_run_id}")
     print(f"  prototype_key: {prototype_key}")
     if args.model == "recommended-mix":
-        print(f"  model: recommended-mix (per-subskill defaults from orchestration.md)")
+        print(f"  model: recommended-mix (per-subskill defaults from config/model-defaults.yaml)")
         for s in sorted(results.keys()):
             print(f"    {s}: {resolve_model(s, args.model)}")
     else:

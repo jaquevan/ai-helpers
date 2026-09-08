@@ -2179,7 +2179,7 @@ function buildSmartComplianceTab(reason) {
   html += `<div class="card card-flat" style="margin:0 0 1.5rem">`;
   html += `<p style="font-weight:700;margin:0 0 0.25rem;color:var(--status-warning)">Automated Compliance Check Not Available</p>`;
   html += `<p class="small" style="margin:0">${escapeHtml(reason || 'consistency-checker not bootstrapped')}</p>`;
-  html += `<p class="small muted" style="margin:0.5rem 0 0">Set <code>context_repos.consistency_checker</code> in the product overlay (or <code>CONSISTENCY_CHECKER_REPO</code>), then re-run <code>bootstrap-consistency-checker.sh</code>.</p>`;
+  html += `<p class="small muted" style="margin:0.5rem 0 0">Guidelines should ship in the skill at <code>consistency-checker/guidelines/</code>. Optional fork pin: set <code>CONSISTENCY_CHECKER_REPO</code> to clone into <code>.context/consistency-checker/</code>.</p>`;
   html += `</div>`;
 
   const componentMap = readJsonOr(path.join(absArtifacts, 'component-map.json'), null);
@@ -4232,6 +4232,7 @@ function renderTemplate(tokens) {
 }
 
 function main() {
+  const renderStartMs = Date.now();
   if (!fs.existsSync(templatePath)) {
     console.error(`Template not found: ${templatePath}`);
     process.exit(1);
@@ -4252,9 +4253,22 @@ function main() {
   const template = renderTemplate(tokens);
 
   const outPath = path.join(absArtifacts, 'evaluation-report.html');
+  const outputBytes = Buffer.byteLength(template, 'utf8');
   fs.writeFileSync(outPath, template, 'utf8');
   console.log(`✓ Report written to ${outPath}`);
-  console.log(`  Size: ${(Buffer.byteLength(template) / 1024).toFixed(0)} KB`);
+  console.log(`  Size: ${(outputBytes / 1024).toFixed(0)} KB`);
+
+  const renderMetrics = {
+    phase: 'render-report.js',
+    duration_ms: Date.now() - renderStartMs,
+    output_bytes: outputBytes,
+    llm_cost_usd: 0,
+  };
+  fs.writeFileSync(
+    path.join(absArtifacts, 'render-metrics.json'),
+    JSON.stringify(renderMetrics, null, 2),
+    'utf8'
+  );
 
   // Write agent-readable summary JSON
   const summary = buildSummaryJson();

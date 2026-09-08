@@ -1,0 +1,2 @@
+# Source mode: no dependencies (stdlib only)
+# Visual mode: install requirements-visual.txt

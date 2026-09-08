@@ -111,7 +111,7 @@ cd "${UXD_PROJECT_ROOT}"
 
 Stop if Chromium install fails; do not start Playwright without it.
 
-Context repos (`.context/consistency-checker/`, `.context/usability-testing/`) bootstrap on first run when `CONSISTENCY_CHECKER_REPO` / `USABILITY_TESTING_REPO` (or overlay `context_repos`) are set; otherwise those phases degrade. Product overlay: [references/skill-overlays.md](references/skill-overlays.md).
+Design guidelines ship in `${CLAUDE_SKILL_DIR}/consistency-checker/` (no git bootstrap). Optional `CONSISTENCY_CHECKER_REPO` still clones a fork into `.context/consistency-checker/`. Usability-testing still bootstraps into `.context/usability-testing/` when `USABILITY_TESTING_REPO` (or overlay `context_repos`) is set; otherwise that phase degrades. Product overlay: [references/skill-overlays.md](references/skill-overlays.md).
 
 **Personas:** `${CLAUDE_PLUGIN_ROOT}/knowledge/personas/catalog.yaml` + overlays. Deep YAML from `.context/usability-testing/`. Internal study URLs: `node ${CLAUDE_SKILL_DIR}/scripts/overlay-get.js --knowledge-persona <id>` when internal-ai-helpers is present.
 
@@ -158,7 +158,7 @@ Do not improvise the loop from this overview — follow [references/orchestratio
 | Prototype URL unreachable | Fall back to workspace `dist/` via `resolve-prototype-url.sh`; fail clearly if neither exists |
 | eval-fix produces no changes | Stop Phase A; proceed to Phase B |
 | Dev server crashes after fix | Stop Phase A; note suspect files; proceed to Phase B |
-| Missing `.context/` | Phase A degrades (token-check fallback); Phase B uses bundled personas |
+| Missing usability-testing `.context/` | Phase B uses bundled personas |
 
 ## What's Next
 

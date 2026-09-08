@@ -68,6 +68,10 @@ from agent_eval.agent.stream_capture import (
 )
 from agent_eval.mlflow.trace_builder import build_trace, log_trace
 
+# Langfuse dual-write (local skill module)
+sys.path.insert(0, str(SCRIPT_DIR))
+import langfuse_trace  # noqa: E402
+
 
 def parse_args():
     parser = argparse.ArgumentParser(
@@ -86,7 +90,27 @@ def parse_args():
                         help="MLflow experiment name for the orchestrator trace")
     parser.add_argument("--no-validation", action="store_true",
                         help="Skip running mlflow-trace-eval.py after pipeline")
+    parser.add_argument("--experiment-label", default=None,
+                        help="Ledger experiment name (e.g. golden-a-opus)")
+    parser.add_argument("--no-langfuse", action="store_true",
+                        help="Skip Langfuse + cost ledger dual-write")
     return parser.parse_args()
+
+
+def resolve_workspace(project_dir: str, key: str, override: str | None) -> str:
+    if override:
+        return override
+    state_path = Path(project_dir) / ".artifacts" / key / "eval" / "eval-state.yaml"
+    if state_path.is_file():
+        for line in state_path.read_text().splitlines():
+            if line.startswith("workspace:"):
+                ws = line.split(":", 1)[1].strip()
+                if ws:
+                    return ws
+    legacy = Path(project_dir) / ".artifacts" / key / "workspace"
+    if legacy.is_dir():
+        return str(legacy)
+    return str(Path(project_dir) / "workspace" / "rhoai-https")
 
 
 def build_eval_iterate_prompt(key: str, url: str, workspace: str,
@@ -99,8 +123,62 @@ def build_eval_iterate_prompt(key: str, url: str, workspace: str,
     return " ".join(parts)
 
 
+def _build_phases_from_usage(per_model_usage: dict, artifacts_dir: Path,
+                              run_result: dict | None = None,
+                              stdout_lines: list | None = None) -> list:
+    if run_result is not None:
+        phases = langfuse_trace.build_pipeline_phases(
+            artifacts_dir, run_result, stdout_lines=stdout_lines,
+        )
+        if phases:
+            return phases
+    phases = []
+    for model_name, usage in (per_model_usage or {}).items():
+        phases.append({
+            "phase": f"generation/{model_name}",
+            "model": model_name,
+            "input_tokens": usage.get("inputTokens", 0),
+            "output_tokens": usage.get("outputTokens", 0),
+            "llm_cost_usd": usage.get("costUSD", 0),
+        })
+    metrics_path = artifacts_dir / "render-metrics.json"
+    if metrics_path.is_file():
+        try:
+            metrics = json.loads(metrics_path.read_text())
+            phases.append({
+                "phase": "render-report.js",
+                "model": None,
+                "llm_cost_usd": 0,
+                "duration_ms": metrics.get("duration_ms", 0),
+                "output_bytes": metrics.get("output_bytes", 0),
+            })
+        except (json.JSONDecodeError, OSError):
+            pass
+    return phases
+
+
+def _write_cost_ledger(project_dir: str, key: str, payload: dict) -> None:
+    artifacts_dir = Path(project_dir) / ".artifacts" / key / "eval"
+    ledger_script = SCRIPT_DIR / "log-cost-ledger.js"
+    node = "node"
+    proc = subprocess.run(
+        [node, str(ledger_script), f"--artifacts-dir={artifacts_dir}"],
+        input=json.dumps(payload),
+        capture_output=True,
+        text=True,
+        cwd=project_dir,
+    )
+    if proc.returncode != 0:
+        print(f"  Cost ledger write failed: {proc.stderr[:300]}", file=sys.stderr)
+    else:
+        print(f"  Cost ledger: {proc.stdout.strip()}", file=sys.stderr)
+
+
 def run_pipeline_traced(prompt: str, model: str, experiment: str,
-                        trace_dir: Path, project_dir: str) -> dict:
+                        trace_dir: Path, project_dir: str, *,
+                        prototype_key: str = "", iterate_flags: str = "",
+                        experiment_label: str | None = None,
+                        skip_langfuse: bool = False) -> dict:
     cmd = [
         "claude", "--print", "--model", model,
         "--output-format", "stream-json", "--verbose",
@@ -248,16 +326,74 @@ def run_pipeline_traced(prompt: str, model: str, experiment: str,
                 mlflow.log_metric(f"model/{safe}/cost_usd",
                                   usage.get("costUSD", 0))
 
+    artifacts_dir = Path(project_dir) / ".artifacts" / prototype_key / "eval"
+    eval_run_id = langfuse_trace.make_eval_run_id(prototype_key)
+    dims = langfuse_trace.parse_iterate_flags(iterate_flags)
+    input_tok = ((token_usage or {}).get("input_tokens", 0) or (token_usage or {}).get("input", 0))
+    output_tok = ((token_usage or {}).get("output_tokens", 0) or (token_usage or {}).get("output", 0))
+
+    if not skip_langfuse:
+        lf_payload = {
+            "prototype_key": prototype_key,
+            "eval_run_id": eval_run_id,
+            "iterate_flags": iterate_flags,
+            "invocation": "cli",
+            "model": resolved_model or model,
+            "experiment": experiment_label or experiment,
+            "prompt": prompt,
+            "run_result": run_result,
+            "phases": _build_phases_from_usage(
+                per_model_usage, artifacts_dir, run_result=run_result,
+                stdout_lines=stdout_lines,
+            ),
+        }
+        lf_summary = langfuse_trace.log_pipeline_run(lf_payload)
+        run_result["eval_run_id"] = eval_run_id
+        run_result["langfuse_trace_url"] = lf_summary.get("langfuse_trace_url", "")
+
+        obs_cost = float(os.environ.get("LANGFUSE_OBS_COST_PER_RUN", "0.05"))
+        ledger_payload = {
+            "eval_run_id": eval_run_id,
+            "prototype_key": prototype_key,
+            "experiment": experiment_label or experiment,
+            "iterate_flags": iterate_flags,
+            "run_mode": dims["run_mode"],
+            "fix_mode": dims["fix_mode"],
+            "invocation": "cli",
+            "model": resolved_model or model,
+            "phases": lf_payload["phases"],
+            "totals": {
+                "llm_cost_usd": cost_usd or 0,
+                "observability_cost_usd": obs_cost if langfuse_trace.is_enabled() else 0,
+                "total_tokens": input_tok + output_tok,
+            },
+            "langfuse_trace_url": lf_summary.get("langfuse_trace_url", ""),
+        }
+        _write_cost_ledger(project_dir, prototype_key, ledger_payload)
+
+        eval_state_path = artifacts_dir / "eval-state.yaml"
+        if eval_state_path.parent.exists():
+            subprocess.run(
+                ["python3", str(SCRIPT_DIR / "eval_state.py"), "set",
+                 str(eval_state_path),
+                 f"eval_run_id={eval_run_id}",
+                 f"llm_cost_usd={cost_usd or 0}",
+                 f"langfuse_trace_url={lf_summary.get('langfuse_trace_url', '')}"],
+                capture_output=True, text=True,
+            )
+
     return run_result
 
 
 def run_validation(key: str, model: str, project_dir: str):
     script = str(SCRIPT_DIR / "mlflow-trace-eval.py")
-    artifacts_dir = os.path.join(project_dir, ".artifacts", key)
+    artifacts_dir = os.path.join(project_dir, ".artifacts", key, "eval")
+    venv_python = PROJECT_ROOT / ".venv" / "bin" / "python"
+    python_cmd = str(venv_python) if venv_python.is_file() else sys.executable
 
     print(f"\n  Running validation scorers against {artifacts_dir}...", file=sys.stderr)
     result = subprocess.run(
-        ["uv", "run", "python3", script, artifacts_dir,
+        [python_cmd, script, artifacts_dir,
          "--model", model, "--prototype-key", key, "--scorers", "all"],
         capture_output=True, text=True, cwd=project_dir,
     )
@@ -272,8 +408,7 @@ def main():
     args = parse_args()
 
     project_dir = str(PROJECT_ROOT)
-    workspace = args.workspace or os.path.join(
-        project_dir, ".artifacts", args.key, "workspace")
+    workspace = resolve_workspace(project_dir, args.key, args.workspace)
 
     prompt = build_eval_iterate_prompt(
         args.key, args.url, workspace, args.model, args.iterate_flags)
@@ -291,6 +426,10 @@ def main():
         experiment=args.experiment,
         trace_dir=trace_dir,
         project_dir=project_dir,
+        prototype_key=args.key,
+        iterate_flags=args.iterate_flags,
+        experiment_label=args.experiment_label,
+        skip_langfuse=args.no_langfuse,
     )
 
     if not args.no_validation:

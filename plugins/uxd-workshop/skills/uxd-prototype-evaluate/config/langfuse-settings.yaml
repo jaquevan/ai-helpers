@@ -1,0 +1,59 @@
+# Langfuse settings for uxd-prototype-evaluate
+# Secrets (LANGFUSE_PUBLIC_KEY, LANGFUSE_SECRET_KEY) are env-only — never commit.
+
+host: "https://langfuse-ux-eval.apps.rosa.uxdpoc7.9hji.p3.openshiftapps.com"
+
+privacy:
+  mode: metadata_only
+  max_text_chars: 500
+  hash_designer_ids: true
+  upload_screenshots: false
+  upload_jira_text: false
+  upload_report_html: false
+
+retention:
+  days: 30
+
+observability_cost:
+  # Monthly cluster allocation divided by estimated runs/month (update after Phase 0)
+  usd_per_run_estimate: 0.05
+
+# Map repo model slugs → Langfuse pricing rows (update after smoke run captures provider names)
+model_pricing:
+  gpt-5.6-sol:
+    input_per_mtok: 4.0
+    output_per_mtok: 20.0
+  gpt-5.6-terra:
+    input_per_mtok: 2.0
+    output_per_mtok: 12.0
+  gpt-5.6-luna:
+    input_per_mtok: 0.2
+    output_per_mtok: 1.2
+  claude-opus-4-6:
+    input_per_mtok: 15.0
+    output_per_mtok: 75.0
+  claude-sonnet-5:
+    input_per_mtok: 3.0
+    output_per_mtok: 15.0
+  claude-sonnet-4-6:
+    input_per_mtok: 3.0
+    output_per_mtok: 15.0
+  claude-haiku-4-5:
+    input_per_mtok: 0.8
+    output_per_mtok: 4.0
+
+# Cursor Grok models — quality tracking only; billing via Cursor subscription
+cursor_models:
+  - cursor-grok-4.5-high
+  - cursor-grok-4.6-xhigh
+
+enabled_phases:
+  - eval-extract
+  - eval-classify
+  - eval-consistency-source
+  - eval-journey
+  - eval-fix
+  - eval-consistency-visual
+  - eval-usability
+  - eval-report
+  - render-report.js

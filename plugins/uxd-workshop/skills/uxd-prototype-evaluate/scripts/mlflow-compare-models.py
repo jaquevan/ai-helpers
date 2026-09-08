@@ -65,6 +65,9 @@ from agent_eval.agent.stream_capture import (
 )
 from agent_eval.mlflow.trace_builder import build_trace, log_trace
 
+sys.path.insert(0, str(SCRIPT_DIR))
+import langfuse_trace  # noqa: E402
+
 PHASES_DIR = SKILL_DIR / "references" / "phases"
 
 SKILL_PROMPTS = {
@@ -73,22 +76,22 @@ SKILL_PROMPTS = {
         "  Key: {key}\n"
         "  --phase=core\n"
         "  --workspace={workspace}\n"
-        "Produce: extract-state.json, mr-delta.json in .artifacts/{key}/"
+        "Produce: extract-state.json, mr-delta.json in .artifacts/{key}/eval/"
     ),
     "eval-classify": (
         f"Read {PHASES_DIR / 'eval-classify.md'} and execute it.\n"
         "  Key: {key}\n"
-        "  Artifacts dir: .artifacts/{key}/\n"
-        "  Input: .artifacts/{key}/extract-state.json\n"
-        "Produce: evaluation-report.csv with tier assignments in .artifacts/{key}/"
+        "  Artifacts dir: .artifacts/{key}/eval/\n"
+        "  Input: .artifacts/{key}/eval/extract-state.json\n"
+        "Produce: evaluation-report.csv with tier assignments in .artifacts/{key}/eval/"
     ),
     "eval-consistency": (
         f"Read {PHASES_DIR / 'eval-consistency.md'} and execute it with:\n"
         "  --mode=source\n"
         "  Key: {key}\n"
         "  Workspace: {workspace}\n"
-        "  Artifacts dir: .artifacts/{key}/\n"
-        "Produce: consistency-report.json in .artifacts/{key}/"
+        "  Artifacts dir: .artifacts/{key}/eval/\n"
+        "Produce: consistency-report.json in .artifacts/{key}/eval/"
     ),
     "eval-journey": (
         f"Read {PHASES_DIR / 'eval-journey.md'} and execute it with:\n"
@@ -96,15 +99,15 @@ SKILL_PROMPTS = {
         "  Key: {key}\n"
         "  URL: {url}\n"
         "  Workspace: {workspace}\n"
-        "  Artifacts dir: .artifacts/{key}/\n"
+        "  Artifacts dir: .artifacts/{key}/eval/\n"
         "Verify acceptance criteria against the live prototype."
     ),
     "eval-fix": (
         f"Read {PHASES_DIR / 'eval-fix.md'} and execute it.\n"
         "  Key: {key}\n"
         "  Workspace: {workspace}\n"
-        "  Artifacts dir: .artifacts/{key}/\n"
-        "  Input: .artifacts/{key}/refinement-suggestions.json\n"
+        "  Artifacts dir: .artifacts/{key}/eval/\n"
+        "  Input: .artifacts/{key}/eval/refinement-suggestions.json\n"
         "Apply fixes from refinement-suggestions.json to the workspace."
     ),
     "eval-usability": (
@@ -112,13 +115,13 @@ SKILL_PROMPTS = {
         "  Key: {key}\n"
         "  URL: {url}\n"
         "  Workspace: {workspace}\n"
-        "  Artifacts dir: .artifacts/{key}/\n"
+        "  Artifacts dir: .artifacts/{key}/eval/\n"
         "Run per-persona Playwright walkthroughs and score 7 usability dimensions."
     ),
     "eval-report": (
         f"Read {PHASES_DIR / 'eval-report.md'} and execute it with:\n"
         "  Key: {key}\n"
-        "  Artifacts dir: .artifacts/{key}/\n"
+        "  Artifacts dir: .artifacts/{key}/eval/\n"
         '  --note="Phase A: all_pass (1 iteration). Phase B: 17/21"\n'
         "Render the evaluation report HTML from existing artifacts."
     ),
@@ -127,7 +130,12 @@ SKILL_PROMPTS = {
 SERVER_REQUIRED = {"eval-journey", "eval-usability"}
 
 ALL_SKILLS = list(SKILL_PROMPTS.keys())
-DEFAULT_MODELS = ["claude-sonnet-4-6", "claude-sonnet-5", "claude-opus-4-6"]
+DEFAULT_MODELS = [
+    "claude-sonnet-4-6",
+    "claude-sonnet-5",
+    "claude-opus-4-6",
+    "claude-haiku-4-5",
+]
 
 TESTS_DIR = SKILL_DIR / "tests"
 
@@ -276,6 +284,22 @@ INLINE_VALIDATORS = {
 }
 
 
+def resolve_workspace(project_dir: str, key: str, override: str | None) -> str:
+    if override:
+        return override
+    state_path = Path(project_dir) / ".artifacts" / key / "eval" / "eval-state.yaml"
+    if state_path.is_file():
+        for line in state_path.read_text().splitlines():
+            if line.startswith("workspace:"):
+                ws = line.split(":", 1)[1].strip()
+                if ws:
+                    return ws
+    legacy = Path(project_dir) / ".artifacts" / key / "workspace"
+    if legacy.is_dir():
+        return str(legacy)
+    return str(Path(project_dir) / "workspace" / "rhoai-https")
+
+
 def parse_args():
     parser = argparse.ArgumentParser(
         description="Compare models across eval sub-skills with MLflow tracing")
@@ -295,6 +319,8 @@ def parse_args():
                         help="Print prompts without executing")
     parser.add_argument("--sequential", action="store_true",
                         help="Run skills sequentially (default: parallel per model)")
+    parser.add_argument("--langfuse", action="store_true",
+                        help="Mirror each subskill run to Langfuse + cost ledger")
     return parser.parse_args()
 
 
@@ -504,8 +530,7 @@ def main():
     args = parse_args()
 
     project_dir = str(PROJECT_ROOT)
-    workspace = args.workspace or os.path.join(
-        project_dir, ".artifacts", args.key, "workspace")
+    workspace = resolve_workspace(project_dir, args.key, args.workspace)
 
     skills = args.skills
     if "all" in skills:
@@ -559,7 +584,7 @@ def main():
         prompt = resolve_prompt(skill, args.key, args.url, workspace)
         results[skill] = {}
 
-        artifacts_dir = os.path.join(project_dir, ".artifacts", args.key)
+        artifacts_dir = os.path.join(project_dir, ".artifacts", args.key, "eval")
         for model in args.models:
             model_safe = model.replace("/", "-")
             trace_dir = trace_base / f"{skill}_{model_safe}"
@@ -572,6 +597,51 @@ def main():
             )
             validation = validate_skill_output(skill, artifacts_dir)
             log_comparison_run(skill, model, result, validation)
+            if args.langfuse:
+                eval_run_id = langfuse_trace.make_eval_run_id(args.key)
+                token_usage = result.get("token_usage") or {}
+                input_tok = token_usage.get("input_tokens", 0) or token_usage.get("input", 0)
+                output_tok = token_usage.get("output_tokens", 0) or token_usage.get("output", 0)
+                lf_payload = {
+                    "prototype_key": args.key,
+                    "eval_run_id": eval_run_id,
+                    "experiment": f"compare-{skill}-{model}",
+                    "invocation": "cli",
+                    "model": model,
+                    "iterate_flags": "--fresh --no-fix",
+                    "run_result": result,
+                    "phases": [{
+                        "phase": skill,
+                        "model": model,
+                        "input_tokens": input_tok,
+                        "output_tokens": output_tok,
+                        "llm_cost_usd": result.get("cost_usd") or 0,
+                    }],
+                }
+                lf_summary = langfuse_trace.log_pipeline_run(lf_payload)
+                ledger_payload = {
+                    "eval_run_id": eval_run_id,
+                    "prototype_key": args.key,
+                    "experiment": f"compare-{skill}-{model}",
+                    "iterate_flags": "--fresh --no-fix",
+                    "invocation": "cli",
+                    "model": model,
+                    "phases": lf_payload["phases"],
+                    "totals": {
+                        "llm_cost_usd": result.get("cost_usd") or 0,
+                        "observability_cost_usd": 0.05 if langfuse_trace.is_enabled() else 0,
+                        "total_tokens": input_tok + output_tok,
+                    },
+                    "langfuse_trace_url": lf_summary.get("langfuse_trace_url", ""),
+                }
+                ledger_script = SCRIPT_DIR / "log-cost-ledger.js"
+                artifacts_eval = Path(project_dir) / ".artifacts" / args.key / "eval"
+                subprocess.run(
+                    ["node", str(ledger_script), f"--artifacts-dir={artifacts_eval}"],
+                    input=json.dumps(ledger_payload),
+                    capture_output=True, text=True,
+                    cwd=project_dir,
+                )
             result["validation"] = validation
             results[skill][model] = result
 

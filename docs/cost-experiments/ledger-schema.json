@@ -1,0 +1,74 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://ai-helpers.local/schemas/cost-ledger-row.json",
+  "title": "CostLedgerRow",
+  "type": "object",
+  "required": [
+    "date",
+    "eval_run_id",
+    "prototype_key",
+    "run_mode",
+    "fix_mode",
+    "model_tier",
+    "invocation",
+    "totals",
+    "privacy_mode"
+  ],
+  "properties": {
+    "date": { "type": "string", "format": "date" },
+    "eval_run_id": { "type": "string", "pattern": "^eval-" },
+    "prototype_key": { "type": "string" },
+    "experiment": { "type": "string" },
+    "hypothesis": { "type": "string" },
+    "depth_tier": { "enum": ["quick", "standard", "deep"] },
+    "run_mode": { "enum": ["fresh", "incremental"] },
+    "fix_mode": { "enum": ["no_fix", "iterate"] },
+    "model_tier": { "enum": ["premium", "standard", "budget", "cursor_grok"] },
+    "model_overrides": { "type": "object", "additionalProperties": { "type": "string" } },
+    "invocation": { "enum": ["cli", "cursor"] },
+    "iterate_flags": { "type": "string" },
+    "phases": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["phase"],
+        "properties": {
+          "phase": { "type": "string" },
+          "model": { "type": ["string", "null"] },
+          "input_tokens": { "type": "integer", "minimum": 0 },
+          "output_tokens": { "type": "integer", "minimum": 0 },
+          "cache_read_tokens": { "type": "integer", "minimum": 0 },
+          "llm_cost_usd": { "type": "number", "minimum": 0 },
+          "duration_s": { "type": "number", "minimum": 0 },
+          "duration_ms": { "type": "number", "minimum": 0 },
+          "output_bytes": { "type": "integer", "minimum": 0 }
+        }
+      }
+    },
+    "totals": {
+      "type": "object",
+      "required": ["llm_cost_usd", "observability_cost_usd", "total_tokens"],
+      "properties": {
+        "llm_cost_usd": { "type": "number", "minimum": 0 },
+        "observability_cost_usd": { "type": "number", "minimum": 0 },
+        "total_tokens": { "type": "integer", "minimum": 0 }
+      }
+    },
+    "quality": {
+      "type": "object",
+      "properties": {
+        "ac_pass": { "type": "integer" },
+        "ac_fail": { "type": "integer" },
+        "ac_flagged": { "type": "integer" },
+        "usability": { "type": ["number", "null"] },
+        "golden_verdict": { "type": "string" }
+      }
+    },
+    "langfuse_trace_url": { "type": "string" },
+    "mlflow_run_id": { "type": "string" },
+    "privacy_mode": { "const": "metadata_only" },
+    "retention_days": { "type": "integer", "const": 30 },
+    "designer_id_hash": { "type": "string" },
+    "notes": { "type": "string" }
+  }
+}

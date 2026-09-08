@@ -166,19 +166,24 @@ echo "SOURCE_AVAILABLE=${SOURCE_AVAILABLE}"
 echo "SOURCE_DIR=${SOURCE_DIR}"
 
 # ── Context repos (consistency-checker + usability-testing) ───────────
+# Bundled checker is enough; bootstrap clones only when an override URL is set.
 CONSISTENCY_AVAILABLE="false"
-if [ -d "${PROJECT_ROOT}/.context/consistency-checker/guidelines" ] && \
-   [ -n "$(ls "${PROJECT_ROOT}/.context/consistency-checker/guidelines/"*.md 2>/dev/null)" ]; then
-  CONSISTENCY_AVAILABLE="true"
-else
-  bash "${EVAL_ROOT}/scripts/bootstrap-consistency-checker.sh" && \
-    CONSISTENCY_AVAILABLE="true" || \
-    echo "WARNING: consistency-checker bootstrap failed"
+CONSISTENCY_DIR=""
+while IFS= read -r line; do
+  echo "$line"
+  case "$line" in
+    CONSISTENCY_DIR=*) CONSISTENCY_DIR="${line#CONSISTENCY_DIR=}" ;;
+    CONSISTENCY_AVAILABLE=*) CONSISTENCY_AVAILABLE="${line#CONSISTENCY_AVAILABLE=}" ;;
+  esac
+done < <(bash "${EVAL_ROOT}/scripts/bootstrap-consistency-checker.sh" || true)
+if [ "${CONSISTENCY_AVAILABLE}" != "true" ]; then
+  echo "WARNING: consistency-checker guidelines missing (bundled + .context/)"
 fi
 
 python3 "${EVAL_ROOT}/scripts/eval_state.py" set "${ARTIFACTS}/eval-state.yaml" \
-  consistency_available="${CONSISTENCY_AVAILABLE}"
+  consistency_available="${CONSISTENCY_AVAILABLE}" consistency_dir="${CONSISTENCY_DIR}"
 echo "CONSISTENCY_AVAILABLE=${CONSISTENCY_AVAILABLE}"
+echo "CONSISTENCY_DIR=${CONSISTENCY_DIR}"
 
 if [ ! -d "${PROJECT_ROOT}/.context/usability-testing/.git" ]; then
   bash "${EVAL_ROOT}/scripts/bootstrap-usability-testing.sh"

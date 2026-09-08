@@ -108,18 +108,18 @@ Unmapped checks default to `eval-journey`.
 ## Per-Subskill Model Defaults
 
 When `--model recommended-mix` is used (the default for standalone runs),
-each subskill gets tagged with its defined production model from
-`orchestration.md`:
+each subskill gets tagged with its production model from
+`config/model-defaults.yaml`:
 
 | Subskill | Default model | Rationale |
 |----------|--------------|-----------|
-| eval-extract | `claude-sonnet-5` | Mechanical Jira parsing |
-| eval-classify | `claude-sonnet-5` | Mechanical tier assignment |
-| eval-journey | `claude-opus-4-6` | Playwright + verdict reasoning |
-| eval-fix | `claude-opus-4-6` | Code changes need careful reasoning |
-| eval-usability | `claude-opus-4-6` | Persona simulation needs nuance |
-| eval-consistency | `claude-opus-4-6` | Precision matters for design audits |
-| eval-report | `claude-sonnet-5` | Template rendering, no judgment |
+| eval-extract | `claude-haiku-4-5` | Mechanical Jira parse |
+| eval-classify | `claude-haiku-4-5` | Mechanical tier assignment |
+| eval-journey | `claude-sonnet-4-6` | Playwright + verdicts |
+| eval-fix | `claude-opus-4-6` | Only Opus phase — code changes |
+| eval-usability | `claude-sonnet-4-6` | Persona walkthroughs |
+| eval-consistency | `claude-sonnet-4-6` | Design audit |
+| eval-report | `claude-sonnet-4-6` | Template rendering |
 
 When `--model <slug>` is set to a specific model, ALL subskills use that
 model (useful for comparison runs on the same model).
