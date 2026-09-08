@@ -22,6 +22,8 @@ permissions:
     - "mcp__*"
 
 mlflow:
+  enabled: false
+  # Legacy research configuration retained while the Langfuse path is validated.
   experiment: uxd-prototype-evaluate
   tags:
     team: uxd

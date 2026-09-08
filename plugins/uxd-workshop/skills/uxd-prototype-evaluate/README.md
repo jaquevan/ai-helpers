@@ -23,14 +23,39 @@ npm install
 npx playwright install chromium
 ```
 
-Context repos (`.context/consistency-checker/` and `.context/usability-testing/`) bootstrap on first pipeline run when a git URL is set:
+Consistency guidelines ship in `consistency-checker/` inside this skill (no git URL required). Optional `CONSISTENCY_CHECKER_REPO` still clones a fork into `.context/consistency-checker/`. Usability-testing bootstraps on first pipeline run when a git URL is set:
 
 ```bash
 export USABILITY_TESTING_REPO="git@example.com:org/usability-testing.git"
-export CONSISTENCY_CHECKER_REPO="git@example.com:org/consistency-checker.git"
+# optional fork pin only:
+# export CONSISTENCY_CHECKER_REPO="git@example.com:org/consistency-checker.git"
 ```
 
-Product-specific remotes, MLflow, and Pages URLs come from the `uxd-eval-config` plugin (internal marketplace). Personas: `plugins/uxd-workshop/knowledge/personas/`. Overlay details: `references/skill-overlays.md`.
+Product-specific remotes, Langfuse, and Pages URLs come from the `uxd-eval-config` plugin (internal marketplace). Personas: `plugins/uxd-workshop/knowledge/personas/`. Overlay details: `references/skill-overlays.md`.
+
+## Model and telemetry configuration
+
+The active experimental runner uses the direct OpenAI Responses API and
+metadata-only Langfuse traces. Set `OPENAI_API_KEY`, then run:
+
+```bash
+make langfuse-pipeline KEY=PROJ-298 URL=http://localhost:3000
+```
+
+`OPENAI_BASE_URL` may be either an API base URL (for example,
+`https://api.openai.com/v1`) or the full Responses endpoint. Verify Langfuse
+credentials and connectivity before a real run with:
+
+```bash
+eval "$(make langfuse-local-env)" # or: eval "$(make langfuse-env)"
+make langfuse-verify
+```
+
+Platform/model selection uses `AI_HELPERS_PLATFORM=codex|cursor|anthropic`.
+OpenAI is the default; set `EVAL_PROVIDER=anthropic` to preserve the Claude
+workflow. If the host cannot be detected, ask the designer which platform they
+are using before selecting a phase model. MLflow files remain in the repository
+for research comparison only and are not used by active targets.
 
 ## Quick start
 

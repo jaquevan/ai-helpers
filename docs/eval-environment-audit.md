@@ -10,7 +10,7 @@
 |---------|-----|--------|
 | OCP Console | https://console-openshift-console.apps.rosa.uxdpoc7.9hji.p3.openshiftapps.com/dashboards | Not browser-tested |
 | RHOAI | https://rh-ai.apps.rosa.uxdpoc7.9hji.p3.openshiftapps.com | Not browser-tested |
-| MLflow UI | https://mlflow-ux-eval.apps.rosa.uxdpoc7.9hji.p3.openshiftapps.com | **503** (health endpoint; may need in-cluster access or route fix) |
+| MLflow UI | https://mlflow-ux-eval.apps.rosa.uxdpoc7.9hji.p3.openshiftapps.com | **OK** (restored 2026-09-02) |
 | OCP API | `https://api.uxdpoc7.9hji.p3.openshiftapps.com:443` | **OK** — `oc login` successful |
 
 ```bash
@@ -56,7 +56,11 @@ export PATH="/Users/ejaquez/Desktop/ai-helpers/.local/node/bin:$PATH"
 | `.claude/settings.json` | **Configured** |
 | `.claude/skills/eval/scripts/` | **Symlinked** to plugin MLflow scripts |
 | `make test-subskills` | **3/3 passed** |
-| MLflow cluster reachable | **Blocked** — HTTP 503; `oc get pods -n ux-eval` shows no healthy MLflow pods (`Endpoints: <none>` on route). Platform fix required before tracing. |
+| MLflow cluster reachable | **OK** — restored via `scripts/fix-mlflow-ux-eval.sh` |
+| Langfuse deploy | **Scripts ready** — `bash scripts/deploy-langfuse-ux-eval.sh` |
+| `make langfuse-env` / `langfuse-smoke` | **Added** |
+| Cost ledger | **Per-run** `.artifacts/<KEY>/eval/cost-ledger.jsonl` |
+| Cost experiments docs | **`docs/cost-experiments/`** |
 
 ## rhoai workspace (MR 170)
 
@@ -81,17 +85,23 @@ npm run start:dev   # port 9000
 | `standard` | `--max-iterations=1` | Designer default |
 | `deep` | (none) | Full pipeline |
 
-## Remaining blockers for full baseline eval
+## Baseline eval run (2026-09-01)
 
-1. **MLflow 503** — cluster login works but tracking URI returns 503; check `oc get pods -A | grep mlflow` and route TLS
-2. **CONSISTENCY_CHECKER_REPO** — optional but recommended for non-degraded consistency
-3. **Full `/eval-iterate`** — run in Cursor against running prototype:
+**Mode:** `/eval-iterate RHAISTRAT-1492 http://localhost:9000 --no-fix --max-iterations=1`
+**MLflow:** Skipped (cluster down)
+**Report:** `.artifacts/RHAISTRAT-1492/eval/evaluation-report.html` (2.5 MB)
 
-```
-/eval-iterate RHAISTRAT-1492 http://localhost:9000 --workspace=/Users/ejaquez/Desktop/ai-helpers/workspace/rhoai-https
-```
+| Phase | Result |
+|-------|--------|
+| Phase A ACs | 1 PASS / 0 FAIL / 3 FLAGGED (`no_fix` exit) |
+| Phase B usability | 18/21 (`data-scientist+junior`, `data-scientist+senior`) |
 
-## Next commands
+**FLAGGED (human review):** AC-1, AC-2, AC-4 require pipeline-log/backend verification outside UI prototype scope. AC-3 PASS (eval metric dropdown).
+
+**Degraded:** consistency checker not bootstrapped; Pages publish skipped (`GITLAB_PAGES_REPO` unset).
+
+**Phase 1 next:** `make mlflow-compare KEY=RHAISTRAT-1492 URL=http://localhost:9000` once MLflow pods are healthy.
+
 
 ```bash
 export PATH="/Users/ejaquez/Desktop/ai-helpers/.local/node/bin:$PATH"

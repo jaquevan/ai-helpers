@@ -63,16 +63,31 @@ else
   fi
 fi
 
-# ── Consistency checker repo (optional) ───────────────────────────────
+# ── Consistency checker (bundled first; clone optional) ───────────────
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-OVERLAY_CONSISTENCY="$(node "${SCRIPT_DIR}/overlay-get.js" context_repos.consistency_checker 2>/dev/null || true)"
-CONSISTENCY_URL="${CONSISTENCY_CHECKER_REPO:-${OVERLAY_CONSISTENCY:-}}"
-if [ -z "${CONSISTENCY_URL}" ]; then
-  check_warn "Consistency checker repo not configured (set CONSISTENCY_CHECKER_REPO or overlay context_repos.consistency_checker)"
-elif timeout 10 git ls-remote --exit-code "${CONSISTENCY_URL}" HEAD > /dev/null 2>&1; then
-  check_pass "Consistency checker repo reachable"
+SKILL_DIR="$(cd "${SCRIPT_DIR}/.." && pwd)"
+PREFLIGHT_ROOT="$(git rev-parse --show-toplevel 2>/dev/null || pwd)"
+guideline_count() {
+  find "$1/guidelines" -name '*.md' 2>/dev/null | wc -l | tr -d ' '
+}
+BUNDLED_COUNT="$(guideline_count "${SKILL_DIR}/consistency-checker")"
+CONTEXT_COUNT="$(guideline_count "${PREFLIGHT_ROOT}/.context/consistency-checker")"
+if [ "${BUNDLED_COUNT}" -gt 0 ]; then
+  check_pass "Bundled consistency-checker guidelines (${BUNDLED_COUNT} files)"
+elif [ "${CONTEXT_COUNT}" -gt 0 ]; then
+  check_pass "Cloned consistency-checker guidelines (${CONTEXT_COUNT} files)"
 else
-  check_warn "Consistency checker repo unreachable (${CONSISTENCY_URL})"
+  OVERLAY_CONSISTENCY="$(node "${SCRIPT_DIR}/overlay-get.js" context_repos.consistency_checker 2>/dev/null || true)"
+  CONSISTENCY_URL="${CONSISTENCY_CHECKER_REPO:-${OVERLAY_CONSISTENCY:-}}"
+  if [ -n "${CONSISTENCY_URL}" ]; then
+    if timeout 10 git ls-remote --exit-code "${CONSISTENCY_URL}" HEAD > /dev/null 2>&1; then
+      check_warn "Consistency guidelines not on disk yet; override repo reachable (${CONSISTENCY_URL})"
+    else
+      check_warn "No bundled consistency-checker and override repo unreachable (${CONSISTENCY_URL})"
+    fi
+  else
+    check_warn "No bundled consistency-checker/guidelines and no CONSISTENCY_CHECKER_REPO override"
+  fi
 fi
 
 # ── Playwright ────────────────────────────────────────────────────────

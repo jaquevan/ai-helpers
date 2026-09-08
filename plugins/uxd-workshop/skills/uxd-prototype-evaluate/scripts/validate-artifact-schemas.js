@@ -240,7 +240,7 @@ if (consistencyReport) {
   } else {
     check('consistency was skipped', false,
       `Consistency checks were skipped: ${consistencyReport.reason || 'unknown reason'}. ` +
-      'Verify .context/consistency-checker/ is bootstrapped.');
+      'Verify skill-bundled consistency-checker/guidelines/ (or a .context/ override) exists.');
   }
 }
 

@@ -1,0 +1,30 @@
+{
+  "eval_run_id": "eval-RHAISTRAT-1492-smoke-test-000001",
+  "prototype_key": "RHAISTRAT-1492",
+  "experiment": "ledger-smoke",
+  "hypothesis": "Verify per-run cost ledger append",
+  "iterate_flags": "--fresh --no-fix --max-iterations=1",
+  "invocation": "cli",
+  "model": "claude-opus-4-6",
+  "phases": [
+    {
+      "phase": "eval-journey",
+      "model": "claude-opus-4-6",
+      "input_tokens": 12000,
+      "output_tokens": 3000,
+      "llm_cost_usd": 0.42
+    },
+    {
+      "phase": "render-report.js",
+      "model": null,
+      "llm_cost_usd": 0,
+      "duration_ms": 1100,
+      "output_bytes": 2621440
+    }
+  ],
+  "totals": {
+    "llm_cost_usd": 0.42,
+    "observability_cost_usd": 0.05,
+    "total_tokens": 15000
+  }
+}

@@ -1,26 +1,40 @@
 # eval-consistency
 
-Runs PatternFly design consistency checks against the prototype using vendored guidelines from `.context/consistency-checker/` (cloned automatically by `bootstrap-consistency-checker.sh`).
+Runs PatternFly design consistency checks against the prototype using bundled guidelines from `${CLAUDE_SKILL_DIR}/consistency-checker/` (shipped with the skill). An optional `CONSISTENCY_CHECKER_REPO` clone into `.context/consistency-checker/` overrides the bundle (fork pin).
 
-**Before skipping — verify the checker is truly unavailable:**
+**Resolve `CONSISTENCY_DIR` before any skip or check:**
 
-1. Resolve the project root: `PROJECT_ROOT="${UXD_PROJECT_ROOT:-$(node -e "console.log(require('${CLAUDE_SKILL_DIR}/scripts/resolve-root').resolveProjectRoot())" 2>/dev/null || git rev-parse --show-toplevel 2>/dev/null || pwd)}"`
-2. Check: `ls ${PROJECT_ROOT}/.context/consistency-checker/guidelines/*.md 2>/dev/null | wc -l`
-3. If count > 0: the checker IS bootstrapped. Proceed to Step 1. Do NOT write a skip report.
-4. If count == 0: run `bash "${CLAUDE_SKILL_DIR}/scripts/bootstrap-consistency-checker.sh"`, then re-check.
-5. Only write `{"skipped": true, "reason": "consistency-checker not bootstrapped"}` if the re-check STILL finds zero guideline `.md` files.
+```bash
+BUNDLED="${CLAUDE_SKILL_DIR}/consistency-checker"
+CONTEXT="${UXD_PROJECT_ROOT}/.context/consistency-checker"
+guideline_count() { find "$1/guidelines" -name '*.md' 2>/dev/null | wc -l | tr -d ' '; }
+if [ "$(guideline_count "$CONTEXT")" -gt 0 ]; then
+  CONSISTENCY_DIR="$CONTEXT"
+elif [ "$(guideline_count "$BUNDLED")" -gt 0 ]; then
+  CONSISTENCY_DIR="$BUNDLED"
+else
+  bash "${CLAUDE_SKILL_DIR}/scripts/bootstrap-consistency-checker.sh"
+  if [ "$(guideline_count "$CONTEXT")" -gt 0 ]; then
+    CONSISTENCY_DIR="$CONTEXT"
+  elif [ "$(guideline_count "$BUNDLED")" -gt 0 ]; then
+    CONSISTENCY_DIR="$BUNDLED"
+  fi
+fi
+echo "CONSISTENCY_DIR=${CONSISTENCY_DIR:-}"
+echo "Guideline files: $(guideline_count "${CONSISTENCY_DIR:-/nonexistent}")"
+```
 
-"Network unreachable" is NOT a valid skip reason when guideline files already exist on disk from a prior clone.
+Only write `{"skipped": true, "reason": "consistency-checker not bundled"}` if `CONSISTENCY_DIR` is still empty after bootstrap. "Network unreachable" is NOT a valid skip reason when bundled guideline files exist on disk.
 
 ### Degraded Mode (no consistency-checker, workspace available)
 
-If `.context/consistency-checker/` is missing after the bootstrap retry BUT `--workspace` is provided, run a lightweight fallback before writing the skipped report:
+If `CONSISTENCY_DIR` is still empty after the bootstrap retry BUT `--workspace` is provided, run a lightweight fallback before writing the skipped report:
 
 1. Check if the `pf-css-token-check` skill is available (skill invocation does not return "unknown skill"). If unavailable, skip to step 5. **Note:** `pf-css-token-check` is part of the `pf-design-audit` plugin (`plugins/patternfly/pf-design-audit/`), which must be installed separately.
 2. Invoke `pf-css-token-check` against the workspace MR delta files (new + modified CSS/SCSS/TSX files only).
 3. Capture its output as `consistency-report.json` with `"source": "pf-css-token-check-fallback"` and `"degraded": true`.
 4. This provides basic PatternFly token compliance (hardcoded colors, spacing, typography) without the full guideline set. Do NOT run visual mode in degraded mode — only source-level token checks.
-5. If `pf-css-token-check` is not available, write `{"skipped": true, "reason": "consistency-checker not bootstrapped, pf-css-token-check plugin unavailable"}` to `consistency-report.json` and exit.
+5. If `pf-css-token-check` is not available, write `{"skipped": true, "reason": "consistency-checker not bundled, pf-css-token-check plugin unavailable"}` to `consistency-report.json` and exit.
 
 This ensures that eval-fix still receives actionable suggestions for the most common violations (hardcoded hex values, missing design tokens) even when the full checker is unavailable.
 
@@ -38,7 +52,7 @@ When called without `--mode`, defaults to `both` (legacy behavior).
 
 | Input | Description | Required |
 |-------|-------------|----------|
-| `.context/consistency-checker/guidelines/` | Vendored PatternFly guideline markdown files | Yes |
+| `${CONSISTENCY_DIR}/guidelines/` | Bundled (or override) PatternFly guideline markdown files | Yes |
 | `.artifacts/<KEY>/eval/mr-delta.json` | Changed files list (scopes source-mode checks) | For source mode |
 | `.artifacts/<KEY>/eval/journey-log.json` | Screenshots for visual-mode checks | For visual mode |
 | `.artifacts/<KEY>/eval/screenshots/` | Journey screenshots | For visual mode |
@@ -111,7 +125,7 @@ For each guideline loaded in 1a, check if it has an `## Automated Checks` sectio
 ```bash
 # Option A: Use analyze.py directly (preferred if available)
 # Run in check-only mode scoped to MR delta files. Capture violation data, skip report.
-cd .context/consistency-checker/
+cd "${CONSISTENCY_DIR}"
 python3 scripts/analyze.py --src=<workspace> --changed --json-output 2>/dev/null
 
 # Option B: If analyze.py is not available or fails, extract bash commands manually:
@@ -153,10 +167,10 @@ passes = total_guidelines_checked - violations - warnings
 
 Cross-reference captured screenshots against PatternFly guidelines for visual violations (icon style, layout patterns, empty states, CTA placement) that source-mode cannot detect.
 
-**Structured extraction (preferred):** If `.context/consistency-checker/scripts/visual_analyze.py` exists, use it to extract DOM structure with bounding boxes from key pages. This gives the LLM structured visual input instead of raw PNGs:
+**Structured extraction (preferred):** If `${CONSISTENCY_DIR}/scripts/visual_analyze.py` exists, use it to extract DOM structure with bounding boxes from key pages. This gives the LLM structured visual input instead of raw PNGs:
 
 ```bash
-cd .context/consistency-checker/
+cd "${CONSISTENCY_DIR}"
 python3 scripts/visual_analyze.py --url=<prototype-url> --pages=<key-routes-from-journey-log>
 ```
 
@@ -180,7 +194,7 @@ The script captures screenshot + DOM with bounding boxes. Feed this structured d
 {
   "source": "consistency-checker",
   "checked_at": "<ISO timestamp>",
-  "guidelines_version": "<git short hash from .context/consistency-checker/>",
+  "guidelines_version": "<contents of ${CONSISTENCY_DIR}/VERSION, or git short hash if .git exists>",
   "source_mode": {
     "ran": true,
     "violations": []
