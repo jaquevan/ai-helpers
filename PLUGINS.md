@@ -80,6 +80,7 @@ Accessibility auditing, reporting, and documentation
 <tr><th>Skill</th><th>Description</th><th>Eval</th></tr>
 <tr><td nowrap><code>pf-a11y-audit</code></td><td>Audit PatternFly components and pages against WCAG and ARIA best practices.</td><td>stable</td></tr>
 <tr><td nowrap><code>pf-a11y-keyboard</code></td><td>Test keyboard accessibility of PatternFly UIs via live browser interaction.</td><td>stable</td></tr>
+<tr><td nowrap><code>pf-a11y-test-gen</code></td><td>Generate accessibility test files for any frontend framework covering ARIA attributes, keyboard interaction, and focus management.</td><td>stable</td></tr>
 </table>
 
 
@@ -218,5 +219,5 @@ PatternFly team tools and skill incubation — issue triage, release management,
 
 **Eval coverage**
 
-- Consumer: 25/25 (100%)
+- Consumer: 26/26 (100%)
 - Workshop: 6/26 (23%)
