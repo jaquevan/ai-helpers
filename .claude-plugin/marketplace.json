@@ -25,6 +25,11 @@
       "description": "UXD team tools — prototyping, research, design review"
     },
     {
+      "name": "uxd-prototype",
+      "source": "./plugins/uxd-prototype",
+      "description": "Create UX prototypes from Jira tickets, Figma designs, or feature descriptions"
+    },
+    {
       "name": "pf-react",
       "source": "./plugins/patternfly/pf-react",
       "description": "React component development — coding standards, testing, and structure"

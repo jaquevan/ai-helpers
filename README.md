@@ -105,7 +105,10 @@ See [PLUGINS.md](PLUGINS.md) for the full list of skills, agents, and usage deta
 ├── .claude-plugin/         # Claude Code marketplace config
 ├── .cursor-plugin/         # Cursor marketplace config
 ├── plugins/
-│   ├── uxd-workshop/       # UXD team tools (skills + uxd-assist agent)
+│   ├── uxd-prototype/      # Create UX prototypes from Jira, Figma, or feature descriptions
+│   │   └── skills/
+│   │       └── uxd-prototype-create/  # Create or refine a prototype from a ticket, design, or idea
+│   ├── uxd-workshop/       # UXD incubator — research, design review, remaining prototype skills + uxd-assist
 │   └── patternfly/         # PatternFly meta-plugin + sub-plugins
 │       ├── agents/            # pf-assist routing agent
 │       ├── pf-code-review/    # Code review and quality — security patterns

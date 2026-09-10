@@ -138,7 +138,7 @@ All skills use a domain prefix — `pf-` for PatternFly, `uxd-` for UXD — rega
 | Skill | PF — generates PF component tests | `react` | `pf-test-gen` |
 | Skill | PF — PF design token auditing | `design-audit` | `pf-figma-token-check` |
 | Skill | PF — summarizes PR reviews | `pf-workshop` | `pf-summarize-pr-reviews` |
-| Skill | UXD — creates prototypes | `uxd-workshop` | `uxd-prototype-create` |
+| Skill | UXD — creates prototypes | `uxd-prototype` | `uxd-prototype-create` |
 | Skill | UXD — retrieves research insights | `uxd-workshop` | `uxd-research-insights` |
 | Agent | PF — PF React coding standards | `react` | `pf-coding-standards` |
 | Agent | UXD — workflow routing | `uxd-workshop` | `uxd-assist` |
