@@ -1,0 +1,46 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>RHOAI consistency checker ground truth</title>
+    <link rel="stylesheet" href="https://unpkg.com/@patternfly/patternfly@6/patternfly.min.css" />
+    <link rel="stylesheet" href="./custom.css" />
+    <style>
+      .ground-truth-banner { border: 1px solid #c9190b; }
+    </style>
+  </head>
+  <body class="pf-v6-c-page">
+    <header class="pf-v6-c-masthead">
+      <div class="pf-v6-c-masthead__main">
+        <span class="pf-v6-c-masthead__brand">Red Hat OpenShift AI</span>
+      </div>
+    </header>
+    <nav class="pf-v6-c-nav" aria-label="RHOAI primary navigation">
+      <ul class="pf-v6-c-nav__list" role="list">
+        <li class="pf-v6-c-nav__item"><a class="pf-v6-c-nav__link" href="#models">Models</a></li>
+        <li class="pf-v6-c-nav__item"><a class="pf-v6-c-nav__link pf-m-current" href="#registry" aria-current="page">Model registry</a></li>
+      </ul>
+    </nav>
+    <main class="pf-v6-l-page__main">
+      <section class="pf-v6-c-card" style="margin-top: 24px" aria-labelledby="registry-title">
+        <div class="pf-v6-c-card__title"><h1 id="registry-title">Model registry</h1></div>
+        <div class="pf-v6-c-card__body">
+          <p>Manage model versions and their metadata in a selected RHOAI registry.</p>
+          <button class="pf-v6-c-button pf-m-primary" type="button">Create model</button>
+        </div>
+      </section>
+      <section class="pf-v6-c-card" aria-labelledby="conventions-title">
+        <div class="pf-v6-c-card__title"><h2 id="conventions-title">RHOAI conventions under test</h2></div>
+        <div class="pf-v6-c-card__body">
+          <ul>
+            <li>The current navigation item uses the PatternFly current-state class.</li>
+            <li>The page-level Create action is text-only, with no leading plus icon.</li>
+            <li>Page chrome, layout, card, navigation, and button use PatternFly classes.</li>
+          </ul>
+          <p>The separate stylesheet, embedded rule, and inline margin are intentional custom-CSS violations.</p>
+        </div>
+      </section>
+    </main>
+  </body>
+</html>

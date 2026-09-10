@@ -3,6 +3,7 @@ id: table-pagination
 title: Table Pagination
 category: tables
 automatable: true
+automation_result: candidate
 checkpoints: [local, mr, signoff]
 severity: error
 ---

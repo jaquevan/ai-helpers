@@ -3,6 +3,7 @@ id: status-label-colors-icons
 title: Status Label Colors and Icons
 category: labels
 automatable: true
+automation_result: candidate
 checkpoints: [local, mr, signoff]
 severity: warning
 ---

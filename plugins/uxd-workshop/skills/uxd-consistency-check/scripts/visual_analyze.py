@@ -18,17 +18,19 @@ from pathlib import Path
 from datetime import datetime
 from typing import Dict
 
-try:
-    from playwright.sync_api import sync_playwright
-except ImportError as e:
-    print(f"Error: Missing required dependency: {e}")
-    print("\nInstall Playwright with:")
-    print("  pip install playwright")
-    print("  playwright install chromium")
-    sys.exit(1)
-
-def extract_page_data(url: str, page_load_timeout: int = 30000) -> Dict:
+def extract_page_data(
+    url: str,
+    page_load_timeout: int = 30000,
+    capture_screenshot: bool = True,
+) -> Dict:
     """Extract data from the page using Playwright."""
+    try:
+        from playwright.sync_api import sync_playwright
+    except ImportError as exc:
+        raise RuntimeError(
+            "URL extraction requires Playwright. Install requirements-visual.txt "
+            "and a Chromium browser, or use --screenshot."
+        ) from exc
     print("Launching browser...")
 
     with sync_playwright() as p:
@@ -41,9 +43,10 @@ def extract_page_data(url: str, page_load_timeout: int = 30000) -> Dict:
             page.goto(url, wait_until='load', timeout=page_load_timeout)
             page.wait_for_timeout(2000)  # Wait for JS to execute
 
-            # Take screenshot
-            print("Capturing screenshot...")
-            screenshot_bytes = page.screenshot(full_page=True, type='png')
+            screenshot_bytes = None
+            if capture_screenshot:
+                print("Capturing screenshot...")
+                screenshot_bytes = page.screenshot(full_page=True, type='png')
 
             # Extract page structure with bounding boxes
             print("Extracting DOM elements with positions...")
@@ -161,6 +164,8 @@ def main():
                         help='Output directory for extracted data (default: visual-extraction)')
     parser.add_argument('--page-load-timeout', type=int, default=30000,
                         help='Page load timeout in milliseconds (default: 30000)')
+    parser.add_argument('--dom-only', action='store_true',
+                        help='Extract DOM data without capturing a duplicate screenshot')
     args = parser.parse_args()
 
     print("Visual Page Data Extractor\n")
@@ -170,13 +175,19 @@ def main():
         parser.error("Either URL or --screenshot must be provided")
     if args.screenshot and args.url:
         parser.error("Cannot specify both URL and --screenshot")
+    if args.screenshot and args.dom_only:
+        parser.error("--dom-only requires a URL")
 
     # Extract or load page data
     try:
         if args.screenshot:
             page_data = load_screenshot_data(args.screenshot)
         else:
-            page_data = extract_page_data(args.url, args.page_load_timeout)
+            page_data = extract_page_data(
+                args.url,
+                args.page_load_timeout,
+                capture_screenshot=not args.dom_only,
+            )
     except Exception as e:
         print(f"Error: {e}", file=sys.stderr)
         sys.exit(1)
@@ -188,10 +199,12 @@ def main():
     timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
 
     # Save screenshot
-    screenshot_path = output_dir / f"screenshot_{timestamp}.png"
-    with open(screenshot_path, 'wb') as f:
-        f.write(page_data['screenshot_bytes'])
-    print(f"\nScreenshot saved: {screenshot_path}")
+    screenshot_path = None
+    if page_data.get('screenshot_bytes') is not None:
+        screenshot_path = output_dir / f"screenshot_{timestamp}.png"
+        with open(screenshot_path, 'wb') as f:
+            f.write(page_data['screenshot_bytes'])
+        print(f"\nScreenshot saved: {screenshot_path}")
 
     # Save structured data (without screenshot bytes)
     data_to_save = {
@@ -222,7 +235,8 @@ def main():
         print(f"  • {len(data_to_save.get('icons', []))} icons")
 
     # Output paths for Claude Code to consume
-    print(f"\nOUTPUT_SCREENSHOT={screenshot_path}")
+    if screenshot_path:
+        print(f"\nOUTPUT_SCREENSHOT={screenshot_path}")
     print(f"OUTPUT_DATA={data_path}")
 
 

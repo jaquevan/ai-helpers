@@ -76,6 +76,7 @@ MODEL ?=
 SKILLS ?=
 EVAL_PROVIDER ?=
 EVAL_PLATFORM ?=
+MAX_TURNS ?=
 
 langfuse-eval: ## Score eval artifacts locally and log quality to Langfuse
 	@if [ -z "$(KEY)" ]; then echo "Usage: make langfuse-eval KEY=RHAISTRAT-1492"; exit 1; fi
@@ -105,19 +106,26 @@ langfuse-compare: ## Compare direct-API models on subskills
 mlflow-compare: ## Deprecated compatibility alias for langfuse-compare
 	@$(MAKE) langfuse-compare KEY=$(KEY) URL=$(URL) MODEL=$(MODEL)
 
-langfuse-pipeline: ## Direct API pipeline with Langfuse: make langfuse-pipeline KEY=... URL=...
-	@if [ -z "$(KEY)" ] || [ -z "$(URL)" ]; then \
-		echo "Usage: make langfuse-pipeline KEY=RHAISTRAT-1492 URL=http://127.0.0.1:3000"; exit 1; fi
+langfuse-pipeline: ## MCP-staged direct API pipeline with Langfuse
+	@if [ -z "$(KEY)" ] || [ -z "$(URL)" ] || [ -z "$(WORKSPACE)" ] || [ -z "$(JIRA_CONTEXT)" ]; then \
+		echo "Usage: make langfuse-pipeline KEY=RHAISTRAT-1492 URL=http://127.0.0.1:3000 WORKSPACE=/path/to/prototype JIRA_CONTEXT=tmp/benchmarks/RHAISTRAT-1492/jira-context.json"; exit 1; fi
 	$(PYTHON_RUN) $(EVAL_SCRIPTS)/langfuse-trace-pipeline.py \
-		--key $(KEY) --url $(URL) \
+		--key $(KEY) --url $(URL) --workspace $(WORKSPACE) --jira-context $(JIRA_CONTEXT) \
+		$(if $(BENCHMARK_DIR),--benchmark-dir $(BENCHMARK_DIR),) \
+		$(if $(PREFLIGHT_ONLY),--preflight-only,) \
+		$(if $(DETERMINISTIC_ONLY),--deterministic-only,) \
+		$(if $(PHASE_PLAN_ONLY),--phase-plan-only,) \
+		$(if $(BASE_REF),--base-ref $(BASE_REF),) \
+		$(if $(ALL_FILES),--all-files,) \
 		$(if $(MODEL),--model $(MODEL),) \
 		$(if $(EVAL_PROVIDER),--provider $(EVAL_PROVIDER),) \
 		$(if $(EVAL_PLATFORM),--platform $(EVAL_PLATFORM),) \
+		$(if $(MAX_TURNS),--max-turns $(MAX_TURNS),) \
 		$(if $(ITERATE_FLAGS),--iterate-flags="$(ITERATE_FLAGS)",) \
 		$(if $(EXPERIMENT),--experiment-label="$(EXPERIMENT)",)
 
 mlflow-pipeline: ## Deprecated compatibility alias for langfuse-pipeline
-	@$(MAKE) langfuse-pipeline KEY=$(KEY) URL=$(URL) MODEL=$(MODEL) EVAL_PROVIDER=$(EVAL_PROVIDER) EVAL_PLATFORM=$(EVAL_PLATFORM) ITERATE_FLAGS="$(ITERATE_FLAGS)" EXPERIMENT=$(EXPERIMENT)
+	@$(MAKE) langfuse-pipeline KEY=$(KEY) URL=$(URL) WORKSPACE=$(WORKSPACE) JIRA_CONTEXT=$(JIRA_CONTEXT) MODEL=$(MODEL) EVAL_PROVIDER=$(EVAL_PROVIDER) EVAL_PLATFORM=$(EVAL_PLATFORM) ITERATE_FLAGS="$(ITERATE_FLAGS)" EXPERIMENT=$(EXPERIMENT)
 
 langfuse-env: ## Export Langfuse env for UXDPOC7 (eval "$(make langfuse-env)")
 	@echo 'export LANGFUSE_HOST=$(LANGFUSE_POC7_URI)'

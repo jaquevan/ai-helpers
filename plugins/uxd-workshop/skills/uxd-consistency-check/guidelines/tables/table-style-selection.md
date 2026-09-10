@@ -3,6 +3,7 @@ id: table-style-selection
 title: Table Style and Row Patterns
 category: tables
 automatable: true
+automation_result: candidate
 checkpoints: [local, mr, signoff]
 severity: warning
 ---

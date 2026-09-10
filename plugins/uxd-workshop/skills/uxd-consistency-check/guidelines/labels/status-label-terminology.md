@@ -3,6 +3,7 @@ id: status-label-terminology
 title: Status Label Terminology
 category: labels
 automatable: true
+automation_result: candidate
 checkpoints: [local, mr, signoff]
 severity: warning
 ---

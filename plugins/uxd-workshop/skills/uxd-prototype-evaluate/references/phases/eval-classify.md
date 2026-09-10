@@ -33,6 +33,18 @@ These prototypes are **functional TypeScript applications** built with Cursor --
 
 ## Procedure
 
+### Standard execution
+
+Run the packaged deterministic classifier. `EVALUATOR_SKILL_DIR` is the
+directory containing this skill's `SKILL.md`:
+
+```bash
+node "${EVALUATOR_SKILL_DIR}/scripts/run-classification.js" "${ARTIFACTS_DIR}"
+```
+
+The script performs Steps 1–3 below and validates reproducibility through the
+bundled test suite. Do not ask a model to recreate these rules.
+
 ### Step 1a: Read extract-state.json
 
 Load the AC list, criterion-to-reference map, and `feature_context` from `.artifacts/<KEY>/eval/extract-state.json`.
@@ -42,7 +54,7 @@ If `feature_context.ui_enhancements` exists, use it as supplementary signal for 
 ### Step 1b: Run T3 misclassification guard
 
 ```bash
-node ${CLAUDE_SKILL_DIR}/scripts/classify-ac-tier.js .artifacts/<KEY>/eval/
+node "${EVALUATOR_SKILL_DIR}/scripts/classify-ac-tier.js" "${ARTIFACTS_DIR}"
 ```
 
 This produces `.artifacts/<KEY>/eval/tier-overrides.json` — a list of ACs that have backend keywords but confirmed UI surfaces. Any AC listed there is locked to the specified tier (typically T1) and MUST NOT be overridden to T3 in Step 2.

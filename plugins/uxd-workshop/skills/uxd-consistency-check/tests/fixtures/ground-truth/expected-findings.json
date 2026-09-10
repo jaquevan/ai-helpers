@@ -1,0 +1,37 @@
+{
+  "no-custom-css": {
+    "result": "FLAGGED",
+    "severity": "warning",
+    "expected_findings": [
+      {
+        "file": "src/index.html",
+        "line": 8,
+        "kind": "non-PatternFly stylesheet link"
+      },
+      {
+        "file": "src/index.html",
+        "line": 9,
+        "kind": "embedded style block"
+      },
+      {
+        "file": "src/index.html",
+        "line": 26,
+        "kind": "inline style attribute"
+      },
+      {
+        "file": "src/custom.css",
+        "line": null,
+        "kind": "authored stylesheet"
+      }
+    ]
+  },
+  "rhoai_conventions": {
+    "page": "Model registry",
+    "expected_examples": [
+      "PatternFly page, masthead, navigation, card, and button classes",
+      "Selected navigation item marked with pf-m-current",
+      "Text-only page-level Create model action"
+    ],
+    "note": "These examples document RHOAI conventions. The existing legacy RHOAI rules evaluate TSX source, so static HTML only receives automated no-custom-CSS findings today."
+  }
+}

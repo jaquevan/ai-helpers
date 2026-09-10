@@ -10,10 +10,14 @@ QUIET="${1:-}"
 PASS=0
 FAIL=0
 WARN=0
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+SKILL_DIR="$(cd "${SCRIPT_DIR}/.." && pwd)"
 
 check_pass() {
   PASS=$((PASS + 1))
-  [ "${QUIET}" != "--quiet" ] && echo "  [PASS] $1"
+  if [ "${QUIET}" != "--quiet" ]; then
+    echo "  [PASS] $1"
+  fi
 }
 
 check_fail() {
@@ -24,7 +28,9 @@ check_fail() {
 
 check_warn() {
   WARN=$((WARN + 1))
-  [ "${QUIET}" != "--quiet" ] && echo "  [WARN] $1"
+  if [ "${QUIET}" != "--quiet" ]; then
+    echo "  [WARN] $1"
+  fi
 }
 
 echo "Eval Pipeline Preflight Check"
@@ -50,44 +56,32 @@ else
 fi
 
 # ── Atlassian MCP ─────────────────────────────────────────────────────
-# Test by checking if the MCP tool is callable (agent context)
-if [ -n "${MCP_ATLASSIAN_AVAILABLE:-}" ]; then
-  check_pass "Atlassian MCP configured"
-else
-  # Fallback: check if jira CLI or config exists
-  if [ -f "${HOME}/.atlassian-mcp.json" ] || [ -f "${HOME}/.config/atlassian-mcp/config.json" ]; then
-    check_pass "Atlassian MCP config found"
+# The host agent calls Atlassian MCP before model execution and stages JSON.
+# This script never searches home directories, credential files, or Keychain.
+if [ -n "${JIRA_CONTEXT_FILE:-}" ]; then
+  if python3 "${SCRIPT_DIR}/jira_context.py" \
+    --file "${JIRA_CONTEXT_FILE}" --key "${JIRA_ISSUE_KEY:-unknown}" >/dev/null 2>&1; then
+    check_pass "Atlassian MCP Jira context staged"
   else
-    check_fail "Atlassian MCP not configured" \
-      "Required for Jira ticket extraction. Configure the Atlassian MCP server in your IDE."
+    check_fail "Invalid staged Jira context" \
+      "Set JIRA_CONTEXT_FILE and JIRA_ISSUE_KEY to MCP-fetched Jira JSON."
   fi
+elif [ -n "${MCP_ATLASSIAN_AVAILABLE:-}" ]; then
+  check_pass "Atlassian MCP configured (Jira context not staged yet)"
+else
+  check_fail "Atlassian MCP context unavailable" \
+    "Fetch Jira with the host Atlassian MCP and stage JIRA_CONTEXT_FILE; local credential lookup is disabled."
 fi
 
-# ── Consistency checker (bundled first; clone optional) ───────────────
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-SKILL_DIR="$(cd "${SCRIPT_DIR}/.." && pwd)"
-PREFLIGHT_ROOT="$(git rev-parse --show-toplevel 2>/dev/null || pwd)"
+# ── Consistency checker (local sibling skill) ─────────────────────────
 guideline_count() {
   find "$1/guidelines" -name '*.md' 2>/dev/null | wc -l | tr -d ' '
 }
-BUNDLED_COUNT="$(guideline_count "${SKILL_DIR}/consistency-checker")"
-CONTEXT_COUNT="$(guideline_count "${PREFLIGHT_ROOT}/.context/consistency-checker")"
-if [ "${BUNDLED_COUNT}" -gt 0 ]; then
-  check_pass "Bundled consistency-checker guidelines (${BUNDLED_COUNT} files)"
-elif [ "${CONTEXT_COUNT}" -gt 0 ]; then
-  check_pass "Cloned consistency-checker guidelines (${CONTEXT_COUNT} files)"
+CONSISTENCY_COUNT="$(guideline_count "${SKILL_DIR}/../uxd-consistency-check")"
+if [ "${CONSISTENCY_COUNT}" -gt 0 ]; then
+  check_pass "Local uxd-consistency-check guidelines (${CONSISTENCY_COUNT} files)"
 else
-  OVERLAY_CONSISTENCY="$(node "${SCRIPT_DIR}/overlay-get.js" context_repos.consistency_checker 2>/dev/null || true)"
-  CONSISTENCY_URL="${CONSISTENCY_CHECKER_REPO:-${OVERLAY_CONSISTENCY:-}}"
-  if [ -n "${CONSISTENCY_URL}" ]; then
-    if timeout 10 git ls-remote --exit-code "${CONSISTENCY_URL}" HEAD > /dev/null 2>&1; then
-      check_warn "Consistency guidelines not on disk yet; override repo reachable (${CONSISTENCY_URL})"
-    else
-      check_warn "No bundled consistency-checker and override repo unreachable (${CONSISTENCY_URL})"
-    fi
-  else
-    check_warn "No bundled consistency-checker/guidelines and no CONSISTENCY_CHECKER_REPO override"
-  fi
+  check_warn "Local uxd-consistency-check guidelines missing"
 fi
 
 # ── Playwright ────────────────────────────────────────────────────────

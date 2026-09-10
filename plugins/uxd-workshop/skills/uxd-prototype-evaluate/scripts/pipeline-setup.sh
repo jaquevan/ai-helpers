@@ -165,8 +165,7 @@ python3 "${EVAL_ROOT}/scripts/eval_state.py" set "${ARTIFACTS}/eval-state.yaml" 
 echo "SOURCE_AVAILABLE=${SOURCE_AVAILABLE}"
 echo "SOURCE_DIR=${SOURCE_DIR}"
 
-# ── Context repos (consistency-checker + usability-testing) ───────────
-# Bundled checker is enough; bootstrap clones only when an override URL is set.
+# ── Bundled consistency skill + usability-testing context ──────────────
 CONSISTENCY_AVAILABLE="false"
 CONSISTENCY_DIR=""
 while IFS= read -r line; do
@@ -177,7 +176,7 @@ while IFS= read -r line; do
   esac
 done < <(bash "${EVAL_ROOT}/scripts/bootstrap-consistency-checker.sh" || true)
 if [ "${CONSISTENCY_AVAILABLE}" != "true" ]; then
-  echo "WARNING: consistency-checker guidelines missing (bundled + .context/)"
+  echo "WARNING: local uxd-consistency-check guidelines missing"
 fi
 
 python3 "${EVAL_ROOT}/scripts/eval_state.py" set "${ARTIFACTS}/eval-state.yaml" \

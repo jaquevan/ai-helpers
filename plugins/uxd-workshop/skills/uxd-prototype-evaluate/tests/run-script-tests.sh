@@ -45,7 +45,68 @@ run_validator() {
   fi
 }
 
+run_shell_test() {
+  local script_name="$1"
+  local script_path="$SCRIPT_DIR/$script_name"
+
+  if bash "$script_path" > /dev/null 2>&1; then
+    echo "Test $script_name (local consistency): "
+    echo "PASS"
+    PASS_COUNT=$((PASS_COUNT + 1))
+  else
+    echo "Test $script_name (local consistency): "
+    echo "FAIL"
+    FAIL_COUNT=$((FAIL_COUNT + 1))
+  fi
+}
+
+run_python_test() {
+  local script_name="$1"
+  local script_path="$SCRIPT_DIR/$script_name"
+
+  if python3 "$script_path" > /dev/null 2>&1; then
+    echo "Test $script_name (Langfuse phases): "
+    echo "PASS"
+    PASS_COUNT=$((PASS_COUNT + 1))
+  else
+    echo "Test $script_name (Langfuse phases): "
+    echo "FAIL"
+    FAIL_COUNT=$((FAIL_COUNT + 1))
+  fi
+}
+
+run_node_test() {
+  local script_name="$1"
+  local script_path="$SCRIPT_DIR/$script_name"
+
+  if node "$script_path" > /dev/null 2>&1; then
+    echo "Test $script_name (live browser persona): "
+    echo "PASS"
+    PASS_COUNT=$((PASS_COUNT + 1))
+  else
+    echo "Test $script_name (live browser persona): "
+    echo "FAIL"
+    FAIL_COUNT=$((FAIL_COUNT + 1))
+  fi
+}
+
 echo "=== Subskill Validation Tests ==="
+echo ""
+
+run_shell_test "test-consistency-resolution.sh"
+run_shell_test "test-consistency-validator.sh"
+run_python_test "test-langfuse-trace.py"
+run_python_test "test-openai-api-agent.py"
+run_python_test "test-benchmark-preflight.py"
+run_python_test "test-deterministic-evaluator.py"
+run_python_test "test-deterministic-extract.py"
+run_python_test "test-bounded-phase-pipeline.py"
+run_python_test "test-portable-deterministic-phases.py"
+run_python_test "test-structured-journey.py"
+run_python_test "test-structured-visual.py"
+run_python_test "test-live-usability-adapter.py"
+run_python_test "test-portable-evidence-capture.py"
+run_node_test "test-browser-persona.js"
 echo ""
 
 # Full validators (require a complete artifact set)

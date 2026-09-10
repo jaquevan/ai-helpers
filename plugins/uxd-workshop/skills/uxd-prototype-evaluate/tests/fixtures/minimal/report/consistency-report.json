@@ -1,5 +1,6 @@
 {
-  "source": "pf-css-token-check",
+  "source": "uxd-consistency-check",
+  "guidelines_version": "test-version",
   "degraded": false,
   "checked_at": "2026-08-01T10:00:00.000Z",
   "source_mode": { "ran": true, "violations": [] },
