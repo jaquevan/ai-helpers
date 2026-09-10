@@ -25,7 +25,7 @@ Applies fixes to the prototype based on evaluation findings. Does NOT re-evaluat
 
 Read `.artifacts/<KEY>/eval/refinement-suggestions.json`. Suggestions have three types, applied in this order:
 
-1. **Consistency violations** (`type: "consistency"`) — Deterministic fixes with explicit file paths and line numbers. Apply directly. These are guaranteed correct (PatternFly docs are the reference).
+1. **Consistency violations** (`type: "consistency"`) — Apply only high-confidence deterministic fixes with explicit file paths and line numbers. Keep review candidates for human judgment.
 2. **AC failures** (`type: "ac_failure"`) — Code changes to make failing acceptance criteria pass. Require reading the verdict rationale.
 3. **Usability gaps** (`type: "usability"`, score 0-1) — Design improvements from persona scoring.
 

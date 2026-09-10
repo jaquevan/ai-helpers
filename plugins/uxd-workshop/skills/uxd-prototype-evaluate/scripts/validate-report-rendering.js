@@ -9,7 +9,7 @@
  * due to field name mismatches, missing template placeholders, or broken lookups.
  *
  * Usage:
- *   node validate-report-rendering.js <artifacts-dir>
+ *   node validate-report-rendering.js <artifacts-dir> [--skip-render]
  *
  * Exit codes:
  *   0 = all checks pass
@@ -18,7 +18,7 @@
 
 const { readFileSync, existsSync } = require('fs');
 const { join } = require('path');
-const { execSync } = require('child_process');
+const { spawnSync } = require('child_process');
 
 const artifactsDir = process.argv[2];
 if (!artifactsDir) {
@@ -27,6 +27,7 @@ if (!artifactsDir) {
 }
 
 const absArtifacts = require('path').resolve(artifactsDir);
+const skipRender = process.argv.includes('--skip-render');
 const results = [];
 let hasFailure = false;
 
@@ -37,16 +38,18 @@ function check(name, condition, detail) {
 }
 
 // ─── Step 1: Render the report ───────────────────────────────────────────────
-const renderScript = join(__dirname, '..', 'scripts', 'render-report.js');
-try {
-  execSync(`node "${renderScript}" "${absArtifacts}" --note="test-render"`, {
-    stdio: ['pipe', 'pipe', 'pipe'],
-    cwd: join(__dirname, '..', '..', '..', '..')
+const renderScript = join(__dirname, 'render-report.js');
+if (!skipRender) {
+  const render = spawnSync(process.execPath, [renderScript, absArtifacts], {
+    encoding: 'utf8',
+    cwd: absArtifacts,
   });
-} catch (e) {
-  check('Report Renders Without Error', false, `render-report.js crashed: ${e.stderr ? e.stderr.toString().slice(0, 200) : e.message}`);
-  console.log(JSON.stringify({ results, pass_count: 0, fail_count: 1, all_pass: false }, null, 2));
-  process.exit(1);
+  if (render.status !== 0) {
+    const detail = (render.stderr || render.stdout || render.error?.message || '').slice(0, 200);
+    check('Report Renders Without Error', false, `render-report.js crashed: ${detail}`);
+    console.log(JSON.stringify({ results, pass_count: 0, fail_count: 1, all_pass: false }, null, 2));
+    process.exit(1);
+  }
 }
 
 const reportPath = join(absArtifacts, 'evaluation-report.html');

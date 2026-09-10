@@ -2,6 +2,11 @@
 
 Read and follow this file when running the full evaluate pipeline. Phase procedures live in `references/phases/` — execute each when the orchestrator reaches that step.
 
+`EVALUATOR_SKILL_DIR` means the directory containing this skill's `SKILL.md`.
+Resolve it from the active local skill package, never from a home-directory or
+marketplace cache search. Legacy examples that use `CLAUDE_SKILL_DIR` refer to
+that same already-resolved directory; they do not authorize cache discovery.
+
 ## Model Defaults Per Phase
 
 Each phase delegates to `--model` when launched via Task tool. Source of truth:
@@ -15,13 +20,13 @@ designer which platform they are using before selecting a model.
 
 | Phase | OpenAI default | Rationale |
 |-------|--------------|-----------|
-| eval-extract | `gpt-5.6-luna` | Low-cost structured extraction. |
-| eval-classify | `gpt-5.6-luna` | Low-cost tier assignment. |
-| eval-journey | `gpt-5.6-terra` | Tool use, Playwright, and verdicts. |
+| eval-extract | Local script | Deterministic MCP payload extraction. |
+| eval-classify | Local script | Deterministic tier assignment. |
+| eval-journey | `gpt-5.6-terra` | Structured visual judgment and verdicts. |
 | eval-fix | `gpt-5.6-sol` | Highest-reasoning phase; code changes. |
 | eval-usability | `gpt-5.6-terra` | Persona walkthroughs and synthesis. |
 | eval-consistency | `gpt-5.6-terra` | Design audit against guidelines. |
-| eval-report | `gpt-5.6-luna` | Mostly deterministic report assembly. |
+| eval-report | Local script | Schema validation and template rendering. |
 
 When `--model` is set, ALL phases use that model (useful for comparison runs).
 
@@ -36,8 +41,21 @@ no_fix = parse --no-fix (default: false)
 no_report = parse --no-report (default: false)
 
 # ── Preflight check (fail-fast before any work) ───────────────────────
+# For a direct API benchmark, the host has already called Atlassian MCP:
+export JIRA_ISSUE_KEY=<KEY>
+export JIRA_CONTEXT_FILE=<absolute gitignored benchmark path>/jira-context.json
 bash ${CLAUDE_SKILL_DIR}/scripts/preflight-check.sh
 # Exits non-zero if required prerequisites are missing.
+# Never fall back to home-directory config, credential files, or Keychain.
+
+# Direct OpenAI no-fix runs use langfuse-trace-pipeline.py's bounded controller.
+# It inlines only the active phase procedure and declares required inputs and
+# expected outputs. Jira extraction, classification, and baseline screenshot
+# capture are deterministic. Journey is one tool-free strict Structured Outputs
+# call; visual consistency and usability receive at most two turns each under
+# one 12-turn ceiling. A validator failure stops the pipeline before the next
+# model call.
+# Do not replace this with one agent invocation over this orchestration file.
 
 # ── Pipeline setup (path pinning, eval-state init, workspace capture) ──
 bash ${CLAUDE_SKILL_DIR}/scripts/pipeline-setup.sh <KEY> <URL> <workspace> $max_iterations "" <MR_URL>
@@ -53,11 +71,7 @@ ARTIFACTS_DIR="${KEY_DIR}/eval"
 # ── Langfuse trace ID (correlates CLI + Cursor + ledger) ─────────────
 EVAL_RUN_ID="eval-<KEY>-$(date +%Y%m%d-%H%M%S)-$(openssl rand -hex 3)"
 python3 ${CLAUDE_SKILL_DIR}/scripts/eval_state.py set ${ARTIFACTS_DIR}/eval-state.yaml \
-  eval_run_id=$EVAL_RUN_ID invocation=cursor
-
-# Phase event helper (coarse Cursor attribution — no per-turn tokens):
-#   python3 ${CLAUDE_SKILL_DIR}/scripts/langfuse_trace.py phase \
-#     --artifacts-dir "${ARTIFACTS_DIR}" --phase <name> --action start|end [--duration-ms N]
+  eval_run_id=$EVAL_RUN_ID invocation=${AI_HELPERS_PLATFORM:-cli}
 
 # ── Read source access state (hybrid mode) ───────────────────────────
 SOURCE_AVAILABLE=$(python3 ${CLAUDE_SKILL_DIR}/scripts/eval_state.py get ${ARTIFACTS_DIR}/eval-state.yaml source_available)
@@ -171,9 +185,6 @@ if workspace provided:
 python3 ${CLAUDE_SKILL_DIR}/scripts/eval_state.py set ${ARTIFACTS_DIR}/eval-state.yaml \
   extract_core_start=$(python3 ${CLAUDE_SKILL_DIR}/scripts/eval_state.py timestamp)
 
-python3 ${CLAUDE_SKILL_DIR}/scripts/langfuse_trace.py phase \
-  --artifacts-dir "${ARTIFACTS_DIR}" --phase eval-extract --action start
-
 Read ${CLAUDE_SKILL_DIR}/references/phases/eval-extract.md and execute it with --phase=core
 # Produces: extract-state.json, mr-delta.json
 # Defers: outcome-context.json, tasks_to_be_done, breadcrumb (run before Phase B)
@@ -182,33 +193,16 @@ python3 ${CLAUDE_SKILL_DIR}/scripts/eval_state.py set ${ARTIFACTS_DIR}/eval-stat
   extract_core_end=$(python3 ${CLAUDE_SKILL_DIR}/scripts/eval_state.py timestamp) \
   consistency_source_start=$(python3 ${CLAUDE_SKILL_DIR}/scripts/eval_state.py timestamp)
 
-python3 ${CLAUDE_SKILL_DIR}/scripts/langfuse_trace.py phase \
-  --artifacts-dir "${ARTIFACTS_DIR}" --phase eval-extract --action end
-
-python3 ${CLAUDE_SKILL_DIR}/scripts/langfuse_trace.py phase \
-  --artifacts-dir "${ARTIFACTS_DIR}" --phase eval-consistency-source --action start
-
-# ── Pre-flight: verify consistency guidelines exist ────────────────
-# Bundled path is primary; .context/ is an optional fork pin.
-BUNDLED="${CLAUDE_SKILL_DIR}/consistency-checker"
-CONTEXT="${UXD_PROJECT_ROOT}/.context/consistency-checker"
-guideline_count() { find "$1/guidelines" -name '*.md' 2>/dev/null | wc -l | tr -d ' '; }
-if [ "$(guideline_count "$CONTEXT")" -eq 0 ] && [ "$(guideline_count "$BUNDLED")" -eq 0 ]; then
-  echo "WARNING: No consistency guidelines found. Attempting bootstrap..."
-  bash "${CLAUDE_SKILL_DIR}/scripts/bootstrap-consistency-checker.sh"
-fi
-if [ "$(guideline_count "$CONTEXT")" -gt 0 ]; then
-  CONSISTENCY_DIR="$CONTEXT"
-elif [ "$(guideline_count "$BUNDLED")" -gt 0 ]; then
-  CONSISTENCY_DIR="$BUNDLED"
-fi
-GUIDELINE_COUNT=$(guideline_count "${CONSISTENCY_DIR:-/nonexistent}")
-echo "Consistency guidelines available: ${GUIDELINE_COUNT} files (${CONSISTENCY_DIR:-missing})"
-
-Read ${CLAUDE_SKILL_DIR}/references/phases/eval-consistency.md and execute it with --mode=source
-# Runs ONCE (source-mode only). Produces: consistency-report.json, appends to refinement-suggestions.json
+# ── Deterministic source consistency ────────────────────────────────
+python3 "${CLAUDE_SKILL_DIR}/scripts/run_evaluator.py" \
+  --key "${KEY}" \
+  --workspace "${UXD_PROJECT_ROOT}" \
+  --jira-context "${JIRA_CONTEXT_FILE}" \
+  --benchmark-dir "${BENCHMARK_DIR}"
+# Runs ONCE and validates its JSON before model-assisted phases begin.
+# Produces: consistency-report.json and deterministic-source-result.json.
 # Visual-mode deferred to after eval-journey when screenshots exist.
-# Uses analyze.py bash commands for deterministic checks (no report generation).
+# Do not ask a model to discover the checker, choose commands, or rerun source mode.
 
 python3 ${CLAUDE_SKILL_DIR}/scripts/eval_state.py set ${ARTIFACTS_DIR}/eval-state.yaml \
   consistency_source_end=$(python3 ${CLAUDE_SKILL_DIR}/scripts/eval_state.py timestamp)
@@ -221,7 +215,7 @@ LOOP:
 
   # ── Classify ───────────────────────────────────────────────────
   if iteration == 1:
-    Read ${CLAUDE_SKILL_DIR}/references/phases/eval-classify.md and execute it
+    node "${EVALUATOR_SKILL_DIR}/scripts/run-classification.js" "${ARTIFACTS_DIR}"
     # Produces: evaluation-report.csv (Section 1, tiers only)
   # Iteration 2+: skip classify entirely. Tiers are structural and don't change.
   # The CSV already has tier assignments from iteration 1. Only verdicts need updating.
@@ -505,8 +499,7 @@ if --no-report:
   node ${CLAUDE_SKILL_DIR}/scripts/render-mini-report.js ${ARTIFACTS_DIR}/
 
 else:
-  Read ${CLAUDE_SKILL_DIR}/references/phases/eval-report.md and execute it with:
-    --note="Phase A: <exit_reason> (<iteration> iterations). Phase B: <usability status>"
+  node "${EVALUATOR_SKILL_DIR}/scripts/run-report.js" "${ARTIFACTS_DIR}"
 
 # ═══════════════════════════════════════════════════════════════════
 # LANGFUSE LOGGING (opt-in)
@@ -688,4 +681,4 @@ one additional Phase A crank. See the git history for full design details.
 - **Prototype URL unreachable:** Wait 10s, retry once. If still down, stop with error.
 - **eval-fix produces no changes:** Stop Phase A — more iterations won't help. Proceed to Phase B.
 - **Dev server crashes after fix:** Stop Phase A, note which files may have caused it. Proceed to Phase B.
-- **Missing usability-testing context:** Phase B runs using the bundled plugin persona catalog with reduced behavioral fidelity. Re-run `bootstrap-usability-testing.sh` after setting `USABILITY_TESTING_REPO` (or overlay `context_repos`). Consistency guidelines ship in `${CLAUDE_SKILL_DIR}/consistency-checker/`; `CONSISTENCY_CHECKER_REPO` is only a fork pin.
+- **Missing usability-testing context:** Phase B runs using the bundled plugin persona catalog with reduced behavioral fidelity. Re-run `bootstrap-usability-testing.sh` after setting `USABILITY_TESTING_REPO` (or overlay `context_repos`). Consistency guidelines and analyzer ship in the local sibling `${CLAUDE_SKILL_DIR}/../uxd-consistency-check/` skill.

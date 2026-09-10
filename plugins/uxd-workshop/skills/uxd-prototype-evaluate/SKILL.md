@@ -39,7 +39,8 @@ Per-key eval files under `${UXD_PROJECT_ROOT}/.artifacts/<KEY>/eval/` (`ARTIFACT
 | `evaluation-report.html` | Final HTML report (both phases) |
 | `evaluation-report.csv` | AC verdicts + usability dimensions |
 | `iteration-log.json` | Per-iteration counts + Phase B usability |
-| `journey-log.json` | Playwright step log + usability overlays |
+| `prototype-evidence.json` | Compact DOM evidence + relative baseline screenshot paths |
+| `journey-log.json` | Schema-validated journey findings + usability overlays |
 | `scripts/journey-test.mjs` / `persona-walkthrough.mjs` | Generated Playwright scripts |
 | `evaluation-report-iter-N.csv`, `screenshots-iter-N/` | Phase A archives |
 | `screenshots/persona-<id>-step-N.png` | Phase B screenshots |
@@ -111,7 +112,66 @@ cd "${UXD_PROJECT_ROOT}"
 
 Stop if Chromium install fails; do not start Playwright without it.
 
-Design guidelines ship in `${CLAUDE_SKILL_DIR}/consistency-checker/` (no git bootstrap). Optional `CONSISTENCY_CHECKER_REPO` still clones a fork into `.context/consistency-checker/`. Usability-testing still bootstraps into `.context/usability-testing/` when `USABILITY_TESTING_REPO` (or overlay `context_repos`) is set; otherwise that phase degrades. Product overlay: [references/skill-overlays.md](references/skill-overlays.md).
+Design guidelines and the analyzer ship in the local sibling skill `${EVALUATOR_SKILL_DIR}/../uxd-consistency-check/`. Consistency runs without a project checkout, bootstrap clone, or network access. Usability-testing still bootstraps into `.context/usability-testing/` when `USABILITY_TESTING_REPO` (or overlay `context_repos`) is set; otherwise that phase degrades. Product overlay: [references/skill-overlays.md](references/skill-overlays.md).
+
+## Portable execution contract
+
+Treat the directory containing this `SKILL.md` as `EVALUATOR_SKILL_DIR`. Invoke
+all evaluator code from `${EVALUATOR_SKILL_DIR}/scripts/`; never resolve a
+script through a user home directory, marketplace cache, or machine-specific
+absolute path. Scripts resolve their own helpers and templates from their file
+location, so the current working directory may be any consumer workspace.
+
+Before the runner starts, the Assistant uses the configured Atlassian MCP to
+fetch the requested Jira issue and writes the returned payload to the
+gitignored benchmark directory. When an MR is supplied, use the configured
+GitLab MCP to resolve the repository and revision, then pass the resulting
+checkout as `--workspace`. The packaged scripts never retrieve credentials or
+make Jira/GitLab API calls themselves.
+
+The standard direct-API entrypoint is:
+
+```bash
+python3 "${EVALUATOR_SKILL_DIR}/scripts/langfuse-trace-pipeline.py" \
+  --key "$KEY" \
+  --url "$PROTOTYPE_URL" \
+  --workspace "$WORKSPACE" \
+  --jira-context "$JIRA_CONTEXT_FILE" \
+  --iterate-flags="--no-fix --max-iterations=1"
+```
+
+That entrypoint always runs source consistency, Jira extraction, AC
+classification, and baseline screenshot capture locally. It invokes models only
+for journey, visual consistency, and usability; then it validates and renders
+the report locally. The local entrypoints are also independently runnable:
+
+```bash
+node "${EVALUATOR_SKILL_DIR}/scripts/run-classification.js" "$ARTIFACTS_DIR"
+node "${EVALUATOR_SKILL_DIR}/scripts/capture-prototype-evidence.js" "$ARTIFACTS_DIR" "$PROTOTYPE_URL"
+node "${EVALUATOR_SKILL_DIR}/scripts/run-report.js" "$ARTIFACTS_DIR"
+```
+
+**Direct API safety:** Before a paid direct-API run, fetch the requested issue
+with the host Atlassian MCP and stage normalized JSON under the gitignored
+benchmark directory. Pass it as `--jira-context`. The runner uses this exact
+skill directory and must not discover global plugin caches. It rejects
+Keychain/credential lookup, strips secrets from the shell environment, limits
+filesystem scope to the workspace + local skill + benchmark directory, and
+allows at most 12 model turns. Use `--preflight-only` to validate inputs, then
+`--deterministic-only` to run source consistency and schema validation without
+a model. A paid OpenAI run consumes that validated report, deterministically
+extracts and classifies Jira context locally, requires `--no-fix`, and runs
+three isolated model phases. Journey and visual consistency are single,
+tool-free Responses API calls whose `text.format` uses strict `json_schema`
+Structured Outputs and whose image inputs come from relative artifact paths.
+Visual rules are loaded from the sibling bundled consistency skill. Usability
+remains a live persona walkthrough, but its model can use only packaged browser
+observe/click/type/navigate/keyboard functions; it cannot search files, run a
+shell, inspect source, or call Jira. Fresh DOM and screenshot evidence follows
+every browser action. Every model phase must pass its local validator before the
+next phase begins. Report validation and rendering then
+run locally. Fix-loop support remains with the interactive skill workflow until
+a separately bounded implementation is available.
 
 **Personas:** `${CLAUDE_PLUGIN_ROOT}/knowledge/personas/catalog.yaml` + overlays. Deep YAML from `.context/usability-testing/`. Internal study URLs: `node ${CLAUDE_SKILL_DIR}/scripts/overlay-get.js --knowledge-persona <id>` when internal-ai-helpers is present.
 

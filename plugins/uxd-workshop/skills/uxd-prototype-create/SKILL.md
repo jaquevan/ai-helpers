@@ -39,6 +39,7 @@ Written under `.artifacts/{ID}/` in the consumer project (never `${CLAUDE_SKILL_
 | RFE snapshot, metadata, changeset, summary | `rfe-snapshot.md`, `metadata.json`, `changeset.md`, `prototype-summary.yaml` |
 | Journeys + scenarios | `journeys.json`, `scenarios.json` |
 | Prototype Bar config | `prototype-bar.json` |
+| Creation consistency check | `consistency-report.json` |
 | Design decisions | `decisions/` (only when `--decisions` is `auto` or `human`) |
 | Optional exports | `exports/` when `--export` |
 
@@ -209,6 +210,14 @@ Decision pages use [references/decision-page-template.html](references/decision-
 
 Use PatternFly docs MCP if available. Same scenario wiring as above.
 
+**Temporary RHAI UX convention:** For RHAI UX prototype UI, use PatternFly components, classes, and tokens only. Do not add custom stylesheets, `<style>` blocks, inline `style` attributes, or JSX style props. This is a current RHAI UX default, not a blanket rule for other teams; follow an explicit product overlay or user requirement when one permits custom styling.
+
+Read product-specific consistency decisions from
+`.design/product/design-guidelines/consistency/` when that directory exists.
+Bundled checker rules remain the portable default; project context explains
+local decisions and explicit exceptions. See
+[the consistency context contract](../uxd-consistency-check/references/project-context.md).
+
 **Reachability self-check** (a minute or two, then move on):
 
 - Every new route is registered and linked from nav/CTAs — no orphan screens
@@ -240,9 +249,35 @@ Re-run after evaluate so the Eval tab gets the report (`public/evals/{ID}/`). Pa
 
 ## Step 11: Post-Change Verification
 
-*Workspace mode only. Mandatory.*
+*All modes. Mandatory.*
 
-Install deps if needed, lint/build/type-check changed files, fix failures introduced by the prototype, update `changeset.md`, record pass/fail in `.artifacts/{ID}/verification.json`.
+Run the bundled sibling checker before handing off the prototype:
+
+```bash
+CONSISTENCY_SKILL="${CLAUDE_SKILL_DIR}/../uxd-consistency-check"
+CONSISTENCY_SOURCE=".artifacts/{ID}/prototype" # standalone
+# Workspace mode: set CONSISTENCY_SOURCE to workspace_path instead.
+
+if [ "{MODE}" = "workspace" ]; then
+  python3 "${CONSISTENCY_SKILL}/scripts/analyze.py" \
+    --src="${CONSISTENCY_SOURCE}" --changed --base-ref=HEAD \
+    --json-file=".artifacts/{ID}/consistency-report.json"
+else
+  python3 "${CONSISTENCY_SKILL}/scripts/analyze.py" \
+    --src="${CONSISTENCY_SOURCE}" \
+    --json-file=".artifacts/{ID}/consistency-report.json"
+fi
+```
+
+The checker includes untracked workspace files and supports standalone HTML
+folders without a `src/` directory. Fix high-confidence findings introduced by
+the prototype, then rerun once. Keep low-confidence review candidates as
+`FLAGGED`; do not auto-fix them.
+
+In workspace mode, also install deps if needed and lint/build/type-check changed
+files. Fix failures introduced by the prototype. Update `changeset.md`; record
+command results, consistency counts, and the report path in
+`.artifacts/{ID}/verification.json`.
 
 ## Step 12: Journey export (when `--export`)
 
@@ -306,6 +341,7 @@ Reads `.artifacts/{ID}/eval/evaluation-report.csv` + `refinement-suggestions.jso
 - **Do not invent journeys or scenarios** that the source does not support — record assumptions instead.
 - **Scenarios must be visually distinct** on load; interaction states belong in journey `actions`, not scenarios.
 - **Workspace verification is mandatory** — lint/build failures introduced by the prototype must be fixed.
+- **Consistency verification is mandatory in every mode** — resolve the checker from the sibling skill, never from the consumer project or network.
 
 ## Reference Docs
 

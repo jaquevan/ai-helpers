@@ -5,7 +5,7 @@
 # internal-ai-helpers plugin uxd-eval-config (auto-discovered). Optional:
 #   1. config/product-overlay.local.yaml (gitignored personal override), OR
 #   2. EVAL_OVERLAY_PATH / UXD_INTERNAL_HELPERS
-# Env vars (LANGFUSE_HOST, CONSISTENCY_CHECKER_REPO, …) still win.
+# Env vars (LANGFUSE_HOST, …) still win.
 # See references/skill-overlays.md.
 
 product:
@@ -35,13 +35,10 @@ git:
   diff_url_template: ""
 
 # Optional context git remotes.
-# consistency_checker: empty = use the skill-bundled checker (consistency-checker/).
-#   Set a git URL (or CONSISTENCY_CHECKER_REPO) only to pin a fork into
-#   .context/consistency-checker/.
+# The checker is a required local sibling skill, not a context repository.
 # usability_testing: empty = skip bootstrap (pipeline degrades).
-# Override with CONSISTENCY_CHECKER_REPO / USABILITY_TESTING_REPO env vars.
+# Override with USABILITY_TESTING_REPO.
 context_repos:
-  consistency_checker: ""
   usability_testing: ""
 
 # Langfuse tracking (opt-in). Credentials remain environment-only.
@@ -59,9 +56,9 @@ publish:
 # Paths are skill-relative (resolved from CLAUDE_SKILL_DIR / EVAL_ROOT).
 design_system:
   name: "PatternFly 6"
-  context_path: "consistency-checker/"
-  guidelines_path: "consistency-checker/guidelines/"
-  analyze_script: "consistency-checker/scripts/analyze.py"
+  context_path: "../uxd-consistency-check/"
+  guidelines_path: "../uxd-consistency-check/guidelines/"
+  analyze_script: "../uxd-consistency-check/scripts/analyze.py"
 
 # Personas — canonical catalogs live in the plugin; deep behavioral YAML from .context/usability-testing/
 personas:

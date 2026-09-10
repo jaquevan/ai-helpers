@@ -12,11 +12,12 @@ Usage:
 import os
 import sys
 import re
+import json
 import subprocess
 import argparse
 from datetime import datetime
 from pathlib import Path
-from typing import Dict, List, Optional, Tuple
+from typing import Dict, List, Optional, Set, Tuple
 
 # ANSI color codes
 class Colors:
@@ -310,6 +311,18 @@ def get_changed_files(base_ref: str, cwd: str, verbose: bool) -> Optional[set]:
 
         changed_files = set(line.strip() for line in result.stdout.split('\n') if line.strip())
 
+        untracked = subprocess.run(
+            ['git', 'ls-files', '--others', '--exclude-standard'],
+            cwd=cwd,
+            capture_output=True,
+            text=True,
+            timeout=10,
+        )
+        if untracked.returncode == 0:
+            changed_files.update(
+                line.strip() for line in untracked.stdout.splitlines() if line.strip()
+            )
+
         if verbose and changed_files:
             print(f"{Colors.CYAN}Found {len(changed_files)} changed file(s) compared to {base_ref}{Colors.RESET}")
 
@@ -321,9 +334,129 @@ def get_changed_files(base_ref: str, cwd: str, verbose: bool) -> Optional[set]:
         return None
 
 
-def run_check_command(command: str, cwd: str, verbose: bool, changed_files: Optional[set] = None) -> Optional[List[str]]:
-    """Run a check command and return violations, optionally filtered to changed files."""
+def get_changed_lines(base_ref: str, cwd: str, verbose: bool) -> Optional[Dict[str, Set[int]]]:
+    """Return added/modified line numbers by file for a zero-context Git diff."""
     try:
+        result = subprocess.run(
+            ['git', 'diff', '--unified=0', '--no-color', base_ref, '--'],
+            cwd=cwd,
+            capture_output=True,
+            text=True,
+            timeout=15,
+        )
+        if result.returncode != 0:
+            if verbose:
+                print(f"{Colors.YELLOW}Warning: git diff failed: {result.stderr.strip()}{Colors.RESET}")
+            return None
+
+        changed_lines: Dict[str, Set[int]] = {}
+        current_file = None
+        for line in result.stdout.splitlines():
+            if line.startswith('+++ '):
+                current_file = line[4:].strip()
+                if current_file == '/dev/null':
+                    current_file = None
+                    continue
+                if current_file.startswith('b/'):
+                    current_file = current_file[2:]
+                changed_lines.setdefault(current_file, set())
+                continue
+
+            if current_file and line.startswith('@@ '):
+                match = re.search(r'\+(\d+)(?:,(\d+))?', line)
+                if not match:
+                    continue
+                start = int(match.group(1))
+                count = int(match.group(2) or '1')
+                changed_lines[current_file].update(range(start, start + count))
+
+        untracked = subprocess.run(
+            ['git', 'ls-files', '--others', '--exclude-standard'],
+            cwd=cwd,
+            capture_output=True,
+            text=True,
+            timeout=10,
+        )
+        if untracked.returncode == 0:
+            for relative_path in untracked.stdout.splitlines():
+                source_path = Path(cwd) / relative_path
+                if not source_path.is_file():
+                    continue
+                line_count = len(source_path.read_text(errors='ignore').splitlines())
+                changed_lines[relative_path] = set(range(1, line_count + 1))
+
+        return changed_lines
+    except Exception as e:
+        if verbose:
+            print(f"{Colors.YELLOW}Error getting changed lines: {e}{Colors.RESET}")
+        return None
+
+
+def _changed_line_match(line: str, changed_lines: Dict[str, Set[int]]) -> bool:
+    """Whether grep-like output points to an added or modified line."""
+    colon_match = re.match(r'^(.+?):(\d+):', line)
+    dash_match = re.match(r'^(.+?)-(\d+)-', line)
+    match = colon_match or dash_match
+    file_path = match.group(1) if match else line.split(':', 1)[0]
+    normalized = file_path.removeprefix('./')
+
+    matching_path = next((
+        path for path in changed_lines
+        if normalized == path or normalized.endswith('/' + path) or path.endswith('/' + normalized)
+    ), None)
+    if matching_path is None:
+        return False
+    if not match:
+        return True
+    return int(match.group(2)) in changed_lines[matching_path]
+
+
+CATEGORY_MARKERS = {
+    'foundations': re.compile(r'<style\b|\bstyle\s*=|\bstyle\s*=\s*\{\{|\.s?css\b|rel=["\']stylesheet["\']'),
+    'buttons': re.compile(r'\bButton\b|variant=["\'](?:primary|secondary|tertiary)["\']'),
+    'icons': re.compile(r'\b[A-Z][A-Za-z0-9]*Icon\b|@patternfly/react-icons'),
+    'labels': re.compile(r'\b(?:Label|Badge)\b'),
+    'layouts': re.compile(r'\b(?:Page|PageSection|Stack|Split|Flex|Card|EmptyState|Toolbar)\b'),
+    'menus': re.compile(r'\b(?:Menu|MenuToggle|Dropdown|Select)\b'),
+    'navigation': re.compile(r'\b(?:Nav|NavItem|NavExpandable|Sidebar)\b|pf-v\d+-c-nav'),
+    'tables': re.compile(r'\b(?:Table|Tr|Td|Th|Thead|Tbody|Pagination)\b'),
+}
+
+
+def detect_applicable_categories(changed_files: set, cwd: str) -> Optional[set]:
+    """Select guideline categories from changed source without an LLM pre-pass."""
+    content = []
+    for relative_path in changed_files:
+        path = Path(cwd) / relative_path
+        if not path.is_file() or path.suffix.lower() not in {
+            '.css', '.htm', '.html', '.js', '.jsx', '.scss', '.ts', '.tsx'
+        }:
+            continue
+        content.append(path.read_text(errors='ignore'))
+    if not content:
+        return None
+    joined = '\n'.join(content)
+    matched = {
+        category for category, marker in CATEGORY_MARKERS.items()
+        if marker.search(joined)
+    }
+    if not matched:
+        return None
+    matched.add('foundations')
+    return matched
+
+
+def run_check_command(
+    command: str,
+    cwd: str,
+    verbose: bool,
+    changed_files: Optional[set] = None,
+    changed_lines: Optional[Dict[str, Set[int]]] = None,
+) -> Optional[List[str]]:
+    """Run a check command and optionally filter findings to changed lines."""
+    try:
+        if not (Path(cwd) / 'src').is_dir():
+            command = re.sub(r'(?<![\w.-])src(?=/|\s|$)', '.', command)
         result = subprocess.run(
             command,
             shell=True,
@@ -338,7 +471,9 @@ def run_check_command(command: str, cwd: str, verbose: bool, changed_files: Opti
             lines = [line for line in result.stdout.strip().split('\n') if line.strip()]
 
             # Filter to only changed files if specified
-            if changed_files:
+            if changed_lines is not None:
+                lines = [line for line in lines if _changed_line_match(line, changed_lines)]
+            elif changed_files:
                 filtered_lines = []
                 for line in lines:
                     # Extract file path from grep output (format: file:line:content or file:content)
@@ -389,6 +524,16 @@ def parse_matches_to_by_file(matches: List[str]) -> Dict[str, List[Dict]]:
         if not trimmed:
             continue
 
+        # Parse grep context lines first. Their content can contain colons (common
+        # in JSX object props), which would otherwise be mistaken for separators.
+        dash_match = re.match(r'^(.+?)-([0-9]+)-(.*)$', trimmed)
+        if dash_match:
+            file, line, content = dash_match.groups()
+            if file not in by_file:
+                by_file[file] = []
+            by_file[file].append({'line': line, 'content': content.strip()})
+            continue
+
         # Try file:line:content format
         if ':' in trimmed:
             parts = trimmed.split(':', 2)
@@ -405,15 +550,6 @@ def parse_matches_to_by_file(matches: List[str]) -> Dict[str, List[Dict]]:
                         by_file[file] = []
                     by_file[file].append({'line': None, 'content': parts[1].strip()})
                     continue
-
-        # Try file-line-content format (grep context lines)
-        dash_match = re.match(r'^(.+?)-(\d+)-(.*)$', trimmed)
-        if dash_match:
-            file, line, content = dash_match.groups()
-            if file not in by_file:
-                by_file[file] = []
-            by_file[file].append({'line': line, 'content': content.strip()})
-            continue
 
         # Just a file path
         if is_file_path(trimmed):
@@ -463,7 +599,14 @@ def print_file_group(by_file: Dict, project_root: str):
     if len(file_entries) > MAX_FILES:
         print(f"\n    {Colors.GRAY}… and {len(file_entries) - MAX_FILES} more files{Colors.RESET}")
 
-def check_guideline(category: str, filename: str, project_root: str, verbose: bool, changed_files: Optional[set] = None) -> Optional[Dict]:
+def check_guideline(
+    category: str,
+    filename: str,
+    project_root: str,
+    verbose: bool,
+    changed_files: Optional[set] = None,
+    changed_lines: Optional[Dict[str, Set[int]]] = None,
+) -> Optional[Dict]:
     """Check a single guideline file, optionally filtered to changed files."""
     guidelines_dir = Path(__file__).parent.parent / 'guidelines'
     filepath = guidelines_dir / category / filename
@@ -503,7 +646,9 @@ def check_guideline(category: str, filename: str, project_root: str, verbose: bo
         if verbose:
             print(f"{Colors.GRAY}Running exception check: {command}{Colors.RESET}")
 
-        result = run_check_command(command, project_root, verbose, changed_files)
+        result = run_check_command(
+            command, project_root, verbose, changed_files, changed_lines
+        )
         if result:
             # Store file:line combinations from exceptions
             for match in result:
@@ -535,7 +680,9 @@ def check_guideline(category: str, filename: str, project_root: str, verbose: bo
         if verbose:
             print(f"{Colors.GRAY}Running: {command}{Colors.RESET}")
 
-        result = run_check_command(command, project_root, verbose, changed_files)
+        result = run_check_command(
+            command, project_root, verbose, changed_files, changed_lines
+        )
         if result and len(result) > 0:
             # Filter out exception matches
             filtered_matches = []
@@ -574,8 +721,16 @@ def check_guideline(category: str, filename: str, project_root: str, verbose: bo
         'category': category,
         'filepath': f"{category}/{filename}",
         'severity': frontmatter.get('severity', 'warning'),
+        'automation_result': frontmatter.get('automation_result', 'finding'),
         'violations': violations if violations else None
     }
+
+
+def effective_severity(result: Dict) -> str:
+    """Candidate searches require review and must never fail a run."""
+    if result.get('automation_result') == 'candidate':
+        return 'warning'
+    return result.get('severity', 'warning')
 
 def save_report(results: List[Dict], report_dir: Path, project_root: str, args, changed_files: Optional[set] = None) -> str:
     """Save analysis results to a markdown report."""
@@ -599,7 +754,7 @@ def save_report(results: List[Dict], report_dir: Path, project_root: str, args, 
             violation_count = sum(len(v['matches']) for v in result['violations'])
             total_violations += violation_count
 
-            if result['severity'] == 'error':
+            if effective_severity(result) == 'error':
                 error_count += 1
             else:
                 warning_count += 1
@@ -637,10 +792,11 @@ def save_report(results: List[Dict], report_dir: Path, project_root: str, args, 
             for result in results:
                 if result['violations']:
                     violation_count = sum(len(v['matches']) for v in result['violations'])
-                    severity_emoji = "❌" if result['severity'] == 'error' else "⚠️"
+                    severity = effective_severity(result)
+                    severity_emoji = "❌" if severity == 'error' else "⚠️"
 
                     f.write(f"### {severity_emoji} {result['title']}\n\n")
-                    f.write(f"**Severity:** {result['severity']}\n\n")
+                    f.write(f"**Severity:** {severity}\n\n")
                     f.write(f"**Violations:** {violation_count}\n\n")
 
                     if result['rule']:
@@ -1000,7 +1156,7 @@ def save_html_report(html_path: Path, results: List[Dict], total_violations: int
             for result in results:
                 if result['violations']:
                     violation_count = sum(len(v['matches']) for v in result['violations'])
-                    severity = result['severity']
+                    severity = effective_severity(result)
                     severity_class = 'error' if severity == 'error' else 'warning'
                     severity_emoji = "❌" if severity == 'error' else "⚠️"
 
@@ -1100,6 +1256,69 @@ def save_html_report(html_path: Path, results: List[Dict], total_violations: int
 </html>
 """)
 
+
+def build_evaluator_report(results: List[Dict]) -> Dict:
+    """Return the stable JSON contract consumed by uxd-prototype-evaluate."""
+    source_violations = []
+    error_guidelines = 0
+    warning_guidelines = 0
+
+    for result in results:
+        violations = result['violations'] or []
+        if not violations:
+            continue
+
+        severity = effective_severity(result)
+        is_candidate = result.get('automation_result') == 'candidate'
+
+        if severity == 'error':
+            error_guidelines += 1
+        else:
+            warning_guidelines += 1
+
+        for violation in violations:
+            for file, locations in parse_matches_to_by_file(violation['matches']).items():
+                for location in locations:
+                    source_violations.append({
+                        'guideline_id': result['id'],
+                        'guideline_title': result['title'],
+                        'category': result['category'],
+                        'severity': severity,
+                        'verdict': 'FLAGGED' if is_candidate or severity == 'warning' else 'VIOLATION',
+                        'confidence': 'low' if is_candidate else 'high',
+                        'review_candidate': is_candidate,
+                        'file': file,
+                        'line': int(location['line']) if location['line'] else None,
+                        'property': result['id'],
+                        'value': location['content'],
+                        'description': violation['description'],
+                        'suggestion': result['rule'],
+                        'check_method': 'automated_candidate' if is_candidate else 'automated',
+                    })
+
+    passes = len(results) - error_guidelines - warning_guidelines
+    return {
+        'source': 'uxd-consistency-check',
+        'degraded': False,
+        'checked_at': datetime.now().astimezone().isoformat(),
+        'guidelines_version': (Path(__file__).parent.parent / 'VERSION').read_text().strip(),
+        'source_mode': {
+            'ran': True,
+            'violations': source_violations,
+        },
+        'visual_mode': {
+            'ran': False,
+            'screenshots_checked': 0,
+            'findings': [],
+        },
+        'summary': {
+            'total_guidelines_checked': len(results),
+            'violations': error_guidelines,
+            'warnings': warning_guidelines,
+            'passes': passes,
+        },
+    }
+
 def main():
     parser = argparse.ArgumentParser(description='Design Guidelines Checker')
     parser.add_argument('--src', '--source-dir', dest='source_dir',
@@ -1113,21 +1332,30 @@ def main():
                         help='Only check files changed compared to base branch')
     parser.add_argument('--base-ref', default='main',
                         help='Base git ref for comparison (default: main)')
+    parser.add_argument('--json-output', action='store_true',
+                        help='Write the evaluator consistency-report JSON to stdout')
+    parser.add_argument('--json-file',
+                        help='Write the evaluator consistency-report JSON to this path')
     args = parser.parse_args()
+    evaluator_output = args.json_output or bool(args.json_file)
 
-    print(f"{Colors.BOLD}{Colors.BLUE}Design Guidelines Checker{Colors.RESET}\n")
+    if evaluator_output:
+        args.report_dir = None
+    else:
+        print(f"{Colors.BOLD}{Colors.BLUE}Design Guidelines Checker{Colors.RESET}\n")
 
     # Determine project root
     if args.source_dir:
         project_root = Path(args.source_dir).resolve()
         if not project_root.exists():
-            print(f"{Colors.RED}Error: Source directory not found: {args.source_dir}{Colors.RESET}")
+            print(f"{Colors.RED}Error: Source directory not found: {args.source_dir}{Colors.RESET}", file=sys.stderr)
             sys.exit(1)
     else:
         # Default: assume project is parent of design-checker/
         design_checker_root = Path(__file__).parent.parent.parent.resolve()
         project_root = design_checker_root.parent.resolve()
-        print(f"{Colors.YELLOW}Warning: No --src specified, using default: {project_root}{Colors.RESET}\n")
+        if not evaluator_output:
+            print(f"{Colors.YELLOW}Warning: No --src specified, using default: {project_root}{Colors.RESET}\n")
 
     # Determine check_cwd - the working directory for grep commands
     # If project_root points to a 'src' directory, use its parent since
@@ -1138,21 +1366,52 @@ def main():
     design_checker_root = Path(__file__).parent.parent.resolve()
     guidelines_dir = design_checker_root / 'guidelines'
 
-    categories = ['buttons', 'icons', 'labels', 'layouts', 'menus', 'navigation', 'tables']
+    # Discover categories so the guideline corpus can grow without requiring a
+    # matching source-code change in the analyzer.
+    categories = sorted(
+        directory.name for directory in guidelines_dir.iterdir() if directory.is_dir()
+    )
     categories_to_check = [args.category] if args.category else categories
 
     # Get changed files if --changed flag is set
     changed_files = None
+    changed_lines = None
     if args.changed:
         changed_files = get_changed_files(args.base_ref, str(check_cwd), args.verbose)
         if changed_files is None:
-            print(f"{Colors.RED}Error: Cannot use --changed mode (not in git repo or git command failed){Colors.RESET}")
+            print(f"{Colors.RED}Error: Cannot use --changed mode (not in git repo or git command failed){Colors.RESET}", file=sys.stderr)
             sys.exit(1)
         if not changed_files:
-            print(f"{Colors.YELLOW}No changed files found compared to {args.base_ref}{Colors.RESET}")
-            print(f"{Colors.GREEN}All checks passed! (no files to check){Colors.RESET}")
+            if evaluator_output:
+                report_json = json.dumps(build_evaluator_report([]), indent=2)
+                if args.json_file:
+                    output_path = Path(args.json_file)
+                    output_path.parent.mkdir(parents=True, exist_ok=True)
+                    output_path.write_text(report_json + '\n')
+                else:
+                    print(report_json)
+            else:
+                print(f"{Colors.YELLOW}No changed files found compared to {args.base_ref}{Colors.RESET}")
+                print(f"{Colors.GREEN}All checks passed! (no files to check){Colors.RESET}")
             sys.exit(0)
-        print(f"{Colors.CYAN}Analyzing {len(changed_files)} changed file(s) compared to {args.base_ref}{Colors.RESET}\n")
+        if not evaluator_output:
+            print(f"{Colors.CYAN}Analyzing {len(changed_files)} changed file(s) compared to {args.base_ref}{Colors.RESET}\n")
+        changed_lines = get_changed_lines(args.base_ref, str(check_cwd), args.verbose)
+        if changed_lines is None:
+            print(f"{Colors.RED}Error: Cannot resolve changed lines compared to {args.base_ref}{Colors.RESET}", file=sys.stderr)
+            sys.exit(1)
+
+        if not args.category:
+            applicable = detect_applicable_categories(changed_files, str(check_cwd))
+            if applicable:
+                categories_to_check = [
+                    category for category in categories if category in applicable
+                ]
+                if args.verbose and not evaluator_output:
+                    print(
+                        f"{Colors.CYAN}Applicable categories: "
+                        f"{', '.join(categories_to_check)}{Colors.RESET}\n"
+                    )
 
     results = []
 
@@ -1160,14 +1419,22 @@ def main():
         category_path = guidelines_dir / category
 
         if not category_path.exists():
-            print(f"{Colors.RED}Error: Category not found: {category}{Colors.RESET}")
+            if not evaluator_output:
+                print(f"{Colors.RED}Error: Category not found: {category}{Colors.RESET}")
             continue
 
         for md_file in category_path.glob('*.md'):
             if args.guideline and args.guideline not in md_file.name:
                 continue
 
-            result = check_guideline(category, md_file.name, str(check_cwd), args.verbose, changed_files)
+            result = check_guideline(
+                category,
+                md_file.name,
+                str(check_cwd),
+                args.verbose,
+                changed_files,
+                changed_lines,
+            )
             if result:
                 results.append(result)
 
@@ -1185,7 +1452,7 @@ def main():
             total_violations += violation_count
 
             # Track severity
-            if result['severity'] == 'error':
+            if effective_severity(result) == 'error':
                 error_count += 1
             else:
                 warning_count += 1
@@ -1194,6 +1461,16 @@ def main():
             for violation in result['violations']:
                 by_file = parse_matches_to_by_file(violation['matches'])
                 all_affected_files.update(by_file.keys())
+
+    if evaluator_output:
+        report_json = json.dumps(build_evaluator_report(results), indent=2)
+        if args.json_file:
+            output_path = Path(args.json_file)
+            output_path.parent.mkdir(parents=True, exist_ok=True)
+            output_path.write_text(report_json + '\n')
+        else:
+            print(report_json)
+        sys.exit(1 if error_count > 0 else 0)
 
     # Print summary first
     print(f"{Colors.BOLD}Summary{Colors.RESET}")
@@ -1229,7 +1506,7 @@ def main():
         else:
             violation_count = sum(len(v['matches']) for v in result['violations'])
 
-            severity_color = Colors.RED if result['severity'] == 'error' else Colors.YELLOW
+            severity_color = Colors.RED if effective_severity(result) == 'error' else Colors.YELLOW
             print(f"{severity_color}✗{Colors.RESET} {result['title']} {Colors.GRAY}({violation_count} violation{'s' if violation_count > 1 else ''}){Colors.RESET}")
 
             if args.verbose:
@@ -1278,7 +1555,7 @@ def main():
     if not args.verbose:
         print(f"\n{Colors.YELLOW}Run with --verbose (-v) to see violation locations, rules, and UI links.{Colors.RESET}")
 
-    sys.exit(1)
+    sys.exit(1 if error_count > 0 else 0)
 
 if __name__ == '__main__':
     main()

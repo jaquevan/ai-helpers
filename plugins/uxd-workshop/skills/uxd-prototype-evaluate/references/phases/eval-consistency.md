@@ -1,48 +1,22 @@
 # eval-consistency
 
-Runs PatternFly design consistency checks against the prototype using bundled guidelines from `${CLAUDE_SKILL_DIR}/consistency-checker/` (shipped with the skill). An optional `CONSISTENCY_CHECKER_REPO` clone into `.context/consistency-checker/` overrides the bundle (fork pin).
+Runs PatternFly design consistency checks against the prototype using the local sibling `${EVALUATOR_SKILL_DIR}/../uxd-consistency-check/` skill. It never clones a checker, reads a project `.context/` checker, or requires network access.
 
 **Resolve `CONSISTENCY_DIR` before any skip or check:**
 
 ```bash
-BUNDLED="${CLAUDE_SKILL_DIR}/consistency-checker"
-CONTEXT="${UXD_PROJECT_ROOT}/.context/consistency-checker"
-guideline_count() { find "$1/guidelines" -name '*.md' 2>/dev/null | wc -l | tr -d ' '; }
-if [ "$(guideline_count "$CONTEXT")" -gt 0 ]; then
-  CONSISTENCY_DIR="$CONTEXT"
-elif [ "$(guideline_count "$BUNDLED")" -gt 0 ]; then
-  CONSISTENCY_DIR="$BUNDLED"
-else
-  bash "${CLAUDE_SKILL_DIR}/scripts/bootstrap-consistency-checker.sh"
-  if [ "$(guideline_count "$CONTEXT")" -gt 0 ]; then
-    CONSISTENCY_DIR="$CONTEXT"
-  elif [ "$(guideline_count "$BUNDLED")" -gt 0 ]; then
-    CONSISTENCY_DIR="$BUNDLED"
-  fi
-fi
-echo "CONSISTENCY_DIR=${CONSISTENCY_DIR:-}"
-echo "Guideline files: $(guideline_count "${CONSISTENCY_DIR:-/nonexistent}")"
+RESOLUTION="$(bash "${EVALUATOR_SKILL_DIR}/scripts/bootstrap-consistency-checker.sh")"
+printf '%s\n' "$RESOLUTION"
+CONSISTENCY_DIR="$(printf '%s\n' "$RESOLUTION" | sed -n 's/^CONSISTENCY_DIR=//p')"
 ```
 
-Only write `{"skipped": true, "reason": "consistency-checker not bundled"}` if `CONSISTENCY_DIR` is still empty after bootstrap. "Network unreachable" is NOT a valid skip reason when bundled guideline files exist on disk.
-
-### Degraded Mode (no consistency-checker, workspace available)
-
-If `CONSISTENCY_DIR` is still empty after the bootstrap retry BUT `--workspace` is provided, run a lightweight fallback before writing the skipped report:
-
-1. Check if the `pf-css-token-check` skill is available (skill invocation does not return "unknown skill"). If unavailable, skip to step 5. **Note:** `pf-css-token-check` is part of the `pf-design-audit` plugin (`plugins/patternfly/pf-design-audit/`), which must be installed separately.
-2. Invoke `pf-css-token-check` against the workspace MR delta files (new + modified CSS/SCSS/TSX files only).
-3. Capture its output as `consistency-report.json` with `"source": "pf-css-token-check-fallback"` and `"degraded": true`.
-4. This provides basic PatternFly token compliance (hardcoded colors, spacing, typography) without the full guideline set. Do NOT run visual mode in degraded mode — only source-level token checks.
-5. If `pf-css-token-check` is not available, write `{"skipped": true, "reason": "consistency-checker not bundled, pf-css-token-check plugin unavailable"}` to `consistency-report.json` and exit.
-
-This ensures that eval-fix still receives actionable suggestions for the most common violations (hardcoded hex values, missing design tokens) even when the full checker is unavailable.
+If `CONSISTENCY_DIR` is empty, stop and report an incomplete plugin install. Do not substitute a project-local copy or a network fallback.
 
 ## Execution Modes
 
 eval-consistency runs in two modes, invoked separately by the orchestrator:
 
-- **`--mode=source`** (Phase A setup): Runs deterministic source-code checks against MR delta files. Fast, no screenshots needed. Produces initial `consistency-report.json` and appends to `refinement-suggestions.json`. Called before eval-classify.
+- **`--mode=source`** (Phase A setup): Runs deterministic source-code checks against changed files. The analyzer pre-filters guideline categories locally; do not spend model tokens pre-reading the corpus. Produces initial `consistency-report.json` and appends to `refinement-suggestions.json`. Called before eval-classify.
 - **`--mode=visual`** (post-journey): Runs AI-powered visual checks against journey screenshots. Appends visual findings to the existing `consistency-report.json`. Called after eval-journey captures screenshots.
 - **`--mode=both`** (legacy): Runs source then visual sequentially. Use when both inputs are available.
 
@@ -52,8 +26,7 @@ When called without `--mode`, defaults to `both` (legacy behavior).
 
 | Input | Description | Required |
 |-------|-------------|----------|
-| `${CONSISTENCY_DIR}/guidelines/` | Bundled (or override) PatternFly guideline markdown files | Yes |
-| `.artifacts/<KEY>/eval/mr-delta.json` | Changed files list (scopes source-mode checks) | For source mode |
+| `${CONSISTENCY_DIR}/guidelines/` | Local bundled PatternFly guideline markdown files | Yes |
 | `.artifacts/<KEY>/eval/journey-log.json` | Screenshots for visual-mode checks | For visual mode |
 | `.artifacts/<KEY>/eval/screenshots/` | Journey screenshots | For visual mode |
 | `--workspace` | Path to prototype source | For source mode |
@@ -72,85 +45,29 @@ When called without `--mode`, defaults to `both` (legacy behavior).
 
 **Mode gate:** Runs with `--mode=source` or `--mode=both`. Skip when `--mode=visual`.
 
-**REQUIRED: Actually read the guideline files.** Do not produce placeholder results.
+#### 1a: Run the local analyzer
 
-#### 1a: Detect applicable guideline categories and load only matching guidelines
-
-Pre-filter guidelines based on what component types are actually used in the MR delta files. This avoids loading and checking guidelines for component categories not present in the prototype changes.
-
-```bash
-cd <workspace>
-# Scan MR delta files for component type markers
-DELTA_CONTENT=$(cat <new_files + modified_files from mr-delta.json> 2>/dev/null)
-
-# Detect which categories are present
-HAS_TABLES=$(echo "$DELTA_CONTENT" | grep -l '<Table\|<Tr\|<Td\|<Th\|<Thead\|<Tbody' | head -1)
-HAS_BUTTONS=$(echo "$DELTA_CONTENT" | grep -l '<Button\|variant="primary"\|variant="secondary"' | head -1)
-HAS_ICONS=$(echo "$DELTA_CONTENT" | grep -l 'Icon\b\|from.*icons' | head -1)
-HAS_LABELS=$(echo "$DELTA_CONTENT" | grep -l '<Label\|<Badge' | head -1)
-HAS_MENUS=$(echo "$DELTA_CONTENT" | grep -l '<Menu\|<Dropdown\|<Select' | head -1)
-HAS_NAV=$(echo "$DELTA_CONTENT" | grep -l '<Nav\|<Sidebar\|NavItem\|nav__link' | head -1)
-HAS_LAYOUTS=$(echo "$DELTA_CONTENT" | grep -l '<Page\|<PageSection\|<Stack\|<Split' | head -1)
-```
-
-**Only load guideline `.md` files from categories that matched.** For example, if `HAS_TABLES` and `HAS_BUTTONS` matched but nothing else, only read files from `guidelines/tables/` and `guidelines/buttons/`.
-
-If NO categories match (rare — usually at least buttons or layouts), fall back to loading ALL guidelines.
-
-The directory structure is organized by category:
-- `tables/` — table-cell-content, table-column-headers, table-pagination, table-style-selection, table-toolbar-layout
-- `icons/` — icon style patterns
-- `labels/` — label usage patterns
-- `layouts/` — page layout patterns
-- `menus/` — menu patterns
-- `navigation/` — nav patterns
-- `buttons/` — button patterns
-
-For each guideline file in the **matched categories**, extract:
-- **Frontmatter:** `id`, `title`, `category`, `severity` (from YAML between `---` markers)
-- **Rule:** The content under the `## Rule` heading (the actual check to perform)
-
-#### 1b: Scope to MR delta files
-
-Read `.artifacts/<KEY>/eval/mr-delta.json`. Collect `new_files` + `modified_files`. Only check these files — pre-existing violations in unchanged files are not this prototype's responsibility.
-
-#### 1c: Run deterministic checks via analyze.py bash commands
-
-The consistency-checker guidelines include `## Automated Checks` sections with literal bash commands (grep/find patterns) that can be extracted and executed. Use these for fast, deterministic, reproducible checking instead of LLM interpretation.
-
-**Step 1c-i: Extract and run bash commands from guidelines**
-
-For each guideline loaded in 1a, check if it has an `## Automated Checks` section with bash commands. If the guideline frontmatter has `automatable: true`, its bash commands are reliable.
+The evaluator entrypoint resolves the bundled analyzer, discovers changed and
+untracked files, detects applicable categories, writes the evaluator contract,
+and validates it. Do not read the full guideline corpus, repeat category
+detection in agent context, or reconstruct these commands with a model.
 
 ```bash
-# Option A: Use analyze.py directly (preferred if available)
-# Run in check-only mode scoped to MR delta files. Capture violation data, skip report.
-cd "${CONSISTENCY_DIR}"
-python3 scripts/analyze.py --src=<workspace> --changed --json-output 2>/dev/null
-
-# Option B: If analyze.py is not available or fails, extract bash commands manually:
-# For each guideline .md file, parse the ## Automated Checks section,
-# extract the grep/find commands, and run them against MR delta files only.
+python3 "${EVALUATOR_SKILL_DIR}/scripts/run_evaluator.py" \
+  --key=<KEY> --workspace=<workspace> \
+  --jira-context="${JIRA_CONTEXT_FILE}" \
+  --benchmark-dir="${BENCHMARK_DIR}"
 ```
 
-**Step 1c-ii: Parse violation output**
+If validation fails, stop. Do not synthesize or repair JSON manually.
 
-From the analyze.py output (or manual bash command results), extract each violation:
-- `guideline_id` — from the guideline that defined the check
-- `file`, `line` — from the grep/find output
-- `description` — from the guideline's rule text
-- `suggestion` — from the guideline's fix recommendation
-- `severity` — from the guideline frontmatter
+#### 1b: Consume findings
 
-**Do NOT generate the analyze.py HTML/markdown report.** Only capture the structured violation data.
+Use the JSON as written. For high-confidence findings entering the fix queue,
+read only the matching guideline's `## Rule` and recommendation. Do not load
+guideline prose for low-confidence review candidates.
 
-**Step 1c-iii: LLM-assisted judgment (edge cases only)**
-
-For guidelines that have `automatable: false` or no `## Automated Checks` section, apply LLM-based analysis as a fallback. These are typically nuanced checks (e.g., "is the button order semantically correct in this context?") that grep cannot determine.
-
-Record each violation with: `guideline_id`, `guideline_title`, `category`, `severity`, `file`, `line`, `description`, `suggestion`, `pf_doc_url`, `check_method` (`automated` or `llm_assisted`).
-
-#### 1d: Compute summary
+#### 1c: Summary contract
 
 ```
 total_guidelines_checked = number of guidelines where the rule was applicable to at least one file
@@ -167,19 +84,33 @@ passes = total_guidelines_checked - violations - warnings
 
 Cross-reference captured screenshots against PatternFly guidelines for visual violations (icon style, layout patterns, empty states, CTA placement) that source-mode cannot detect.
 
+Visual analysis is bounded because it is the only model-assisted consistency
+step:
+
+1. Deduplicate screenshot paths by content hash.
+2. Select at most three representative screens by default: primary, most
+   interactive, and alternate/error state.
+3. Check only visual rules not already resolved by deterministic source checks.
+4. Load only each applicable guideline's `## Rule` and manual checklist.
+5. Record screenshot count, applicable guideline count, and input byte count in
+   `visual_mode.input_metrics` for Langfuse comparison.
+
 **Structured extraction (preferred):** If `${CONSISTENCY_DIR}/scripts/visual_analyze.py` exists, use it to extract DOM structure with bounding boxes from key pages. This gives the LLM structured visual input instead of raw PNGs:
 
 ```bash
 cd "${CONSISTENCY_DIR}"
-python3 scripts/visual_analyze.py --url=<prototype-url> --pages=<key-routes-from-journey-log>
+python3 scripts/visual_analyze.py <one-ambiguous-page-url> \
+  --dom-only --output-dir=<eval-artifacts>/visual-extraction
 ```
 
-The script captures screenshot + DOM with bounding boxes. Feed this structured data to the LLM for guideline analysis.
+Use DOM extraction only when an existing screenshot is ambiguous. `--dom-only`
+avoids capturing a duplicate PNG. Feed the compact JSON plus the existing
+journey screenshot to the model.
 
 **Fallback:** If visual_analyze.py is not available, analyze the raw journey screenshots directly.
 
-1. Collect unique screenshots from `journey-log.json` (`journeys[].steps[].screenshot`). Also include Phase B persona screenshots if available (`screenshots/persona-*.png`).
-2. For each screenshot, check against applicable visual guidelines (from matched categories in Step 1a).
+1. Collect unique screenshots from `journey-log.json` (`journeys[].steps[].screenshot`).
+2. Select the bounded representative set above.
 3. Each finding records: `screenshot`, `journey`, `step`, `guideline_id`, `guideline_title`, `category`, `severity`, `verdict` (`VIOLATION`), `description`, `suggestion`.
 4. **Deduplicate:** If the same violation appears on multiple screenshots, collapse to one finding with a `seen_on` array.
 
@@ -192,16 +123,23 @@ The script captures screenshot + DOM with bounding boxes. Feed this structured d
 
 ```json
 {
-  "source": "consistency-checker",
+  "source": "uxd-consistency-check",
   "checked_at": "<ISO timestamp>",
   "guidelines_version": "<contents of ${CONSISTENCY_DIR}/VERSION, or git short hash if .git exists>",
+  "degraded": false,
   "source_mode": {
     "ran": true,
     "violations": []
   },
   "visual_mode": {
     "ran": true,
-    "screenshots_checked": 12,
+    "screenshots_checked": 3,
+    "input_metrics": {
+      "screenshots_considered": 12,
+      "screenshots_analyzed": 3,
+      "guidelines_analyzed": 4,
+      "input_bytes": 123456
+    },
     "findings": []
   },
   "summary": {
@@ -217,7 +155,9 @@ Set `"ran": false` for any mode that could not execute (no workspace = no source
 
 ### Step 4: Append to refinement-suggestions.json
 
-For each violation, add a consistency suggestion entry:
+For each high-confidence violation, add a consistency suggestion entry.
+Low-confidence `review_candidate` findings stay in the report and must not enter
+the automatic fix queue.
 
 ```json
 {

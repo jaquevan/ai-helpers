@@ -7,8 +7,8 @@ const { execSync } = require('child_process');
 
 const artifactsDir = process.argv[2];
 if (!artifactsDir) {
-  console.error('Usage: node ${CLAUDE_SKILL_DIR}/scripts/render-report.js <artifacts-dir>');
-  console.error('  e.g. node ${CLAUDE_SKILL_DIR}/scripts/render-report.js .artifacts/PROJ-298/eval/');
+  console.error('Usage: node render-report.js <artifacts-dir>');
+  console.error('  The script resolves its template and helpers relative to its own directory.');
   process.exit(1);
 }
 
@@ -622,6 +622,10 @@ function buildSummaryJson() {
   const suggestions = readJsonOr(path.join(absArtifacts, 'refinement-suggestions.json'), []);
   const ud = journeyLog ? normalizeUsabilityDimensions(journeyLog.usability_dimensions) : null;
   const csvRows = parseCsv(csvRaw);
+  const externalEvidenceRows = csvRows.filter(row =>
+    row.tier === 'T4' && (row.human_action || '').startsWith('Confirm the design-process deliverable outside the prototype:')
+  );
+  const prototypeRows = csvRows.filter(row => !externalEvidenceRows.includes(row));
 
   let passCount = 0, failCount = 0, flaggedCount = 0;
   for (const r of csvRows) {
@@ -633,6 +637,7 @@ function buildSummaryJson() {
   const total = passCount + failCount + flaggedCount;
 
   let status = 'needs-attention';
+  if (csvRows.length > 0 && prototypeRows.length === 0 && externalEvidenceRows.length > 0) status = 'external-evidence-required';
   if (total > 0 && failCount === 0 && flaggedCount === 0) status = 'pass';
   else if (failCount > 0) status = 'fail';
 
@@ -674,7 +679,11 @@ function buildSummaryJson() {
     timestamp: (journeyLog && journeyLog.evaluated_at) || new Date().toISOString(),
     status,
     ac_verdicts: acVerdicts,
-    counts: { pass: passCount, fail: failCount, flagged: flaggedCount, total },
+    counts: {
+      pass: passCount, fail: failCount, flagged: flaggedCount, total,
+      prototype_testable: prototypeRows.length,
+      external_evidence_required: externalEvidenceRows.length,
+    },
     usability: Object.keys(usability).length ? usability : null,
     suggestions_pending: pendingSuggestions,
     iteration: Object.keys(iteration).length ? iteration : null,
@@ -1760,8 +1769,17 @@ function buildCodeDeltasHtml() {
 }
 
 function buildHeroStatus(csvRows, passCount, failCount, flaggedCount, extractState, iterationLog) {
+  const externalEvidenceRows = csvRows.filter(row =>
+    row.tier === 'T4' && (row.human_action || '').startsWith('Confirm the design-process deliverable outside the prototype:')
+  );
+  const prototypeRows = csvRows.filter(row => !externalEvidenceRows.includes(row));
+  const prototypePassCount = prototypeRows.filter(row => (row.verdict || '').toUpperCase() === 'PASS').length;
+  const prototypeFailCount = prototypeRows.filter(row => (row.verdict || '').toUpperCase() === 'FAIL').length;
+  const prototypeFlaggedCount = prototypeRows.filter(row => (row.verdict || '').toUpperCase() === 'FLAGGED').length;
+  const allCriteriaNeedExternalEvidence = csvRows.length > 0 && prototypeRows.length === 0;
+  const scoredTotal = prototypePassCount + prototypeFailCount + prototypeFlaggedCount;
   const totalCount = passCount + failCount + flaggedCount;
-  const passPercent = totalCount > 0 ? Math.round((passCount / totalCount) * 100) : 0;
+  const passPercent = scoredTotal > 0 ? Math.round((prototypePassCount / scoredTotal) * 100) : 0;
 
   const delta = normalizeDelta(readJsonOr(path.join(absArtifacts, 'mr-delta.json'), null));
   const filesChanged = delta ? (delta.total_files_changed || 0) : '—';
@@ -1769,14 +1787,14 @@ function buildHeroStatus(csvRows, passCount, failCount, flaggedCount, extractSta
   const iterCount = iterationLog && iterationLog.iterations ? iterationLog.iterations.length : 0;
   const totalFixed = iterationLog ? (iterationLog.total_criteria_fixed || 0) : 0;
 
-  const hasProblems = failCount > 0 || flaggedCount > 0;
-  const heroColor = hasProblems ? (failCount > 0 ? 'var(--status-danger)' : 'var(--status-warning)') : 'var(--status-success)';
+  const hasProblems = prototypeFailCount > 0 || prototypeFlaggedCount > 0;
+  const heroColor = allCriteriaNeedExternalEvidence ? 'var(--status-warning)' : (hasProblems ? (prototypeFailCount > 0 ? 'var(--status-danger)' : 'var(--status-warning)') : 'var(--status-success)');
 
   let html = '<section class="status-section">';
 
   html += `<div class="status-hero">`;
-  html += `<div class="status-hero-value" style="color:${heroColor}">${passCount}/${totalCount}</div>`;
-  html += '<div class="status-hero-label">acceptance criteria passing</div>';
+  html += `<div class="status-hero-value" style="color:${heroColor}">${allCriteriaNeedExternalEvidence ? externalEvidenceRows.length : `${prototypePassCount}/${scoredTotal}`}</div>`;
+  html += `<div class="status-hero-label">${allCriteriaNeedExternalEvidence ? 'Jira criteria need external evidence' : 'prototype-testable criteria passing'}</div>`;
   html += '<div class="status-bar">';
   html += `<div class="status-bar-fill" style="width:${passPercent}%;background:${heroColor}"></div>`;
   html += '</div>';
@@ -1793,9 +1811,13 @@ function buildHeroStatus(csvRows, passCount, failCount, flaggedCount, extractSta
     html += `<div class="status-hero-meta">${metaParts.join(' · ')}</div>`;
   }
 
+  if (externalEvidenceRows.length) {
+    html += `<p class="small muted" style="margin:0.5rem 0 0">${externalEvidenceRows.length} Jira ${externalEvidenceRows.length === 1 ? 'criterion is' : 'criteria are'} design-process or handoff evidence, not claims a rendered prototype can prove. They are not counted as prototype pass/fail.</p>`;
+  }
+
   // Inline problem callouts within the hero card
-  if (failCount > 0) {
-    const failItems = csvRows.filter(r => (r.verdict || '').toUpperCase() === 'FAIL');
+  if (prototypeFailCount > 0) {
+    const failItems = prototypeRows.filter(r => (r.verdict || '').toUpperCase() === 'FAIL');
     html += '<div class="status-hero-issues">';
     for (const f of failItems) {
       const acId = f.criterion_id || '?';
@@ -1804,8 +1826,8 @@ function buildHeroStatus(csvRows, passCount, failCount, flaggedCount, extractSta
     }
     html += '</div>';
   }
-  if (flaggedCount > 0) {
-    const flagItems = csvRows.filter(r => (r.verdict || '').toUpperCase() === 'FLAGGED');
+  if (prototypeFlaggedCount > 0) {
+    const flagItems = prototypeRows.filter(r => (r.verdict || '').toUpperCase() === 'FLAGGED');
     html += '<div class="status-hero-issues">';
     for (const f of flagItems) {
       const acId = f.criterion_id || '?';
@@ -1814,17 +1836,20 @@ function buildHeroStatus(csvRows, passCount, failCount, flaggedCount, extractSta
     }
     html += '</div>';
   }
-  html += '<div class="status-hero-legend" style="font-size:0.65rem;color:var(--text-secondary);margin-top:0.5rem;font-style:italic">AC = Acceptance Criteria (from Jira ticket)</div>';
+  html += '<div class="status-hero-legend" style="font-size:0.65rem;color:var(--text-secondary);margin-top:0.5rem;font-style:italic">AC = Acceptance Criteria imported from Jira. External-evidence ACs are tracked separately from prototype findings.</div>';
 
   html += '</div>';
 
   // Action CTAs
   let primaryText, primaryAction;
-  if (flaggedCount > 0) {
-    primaryText = `Review ${flaggedCount} flagged item${flaggedCount !== 1 ? 's' : ''}`;
+  if (externalEvidenceRows.length && !prototypeFlaggedCount && !prototypeFailCount) {
+    primaryText = `Review ${externalEvidenceRows.length} external-evidence item${externalEvidenceRows.length !== 1 ? 's' : ''}`;
+    primaryAction = "scrollToSection('ac-results')";
+  } else if (prototypeFlaggedCount > 0) {
+    primaryText = `Review ${prototypeFlaggedCount} flagged item${prototypeFlaggedCount !== 1 ? 's' : ''}`;
     primaryAction = "openReviewPanel()";
-  } else if (failCount > 0) {
-    primaryText = `View ${failCount} failure${failCount !== 1 ? 's' : ''}`;
+  } else if (prototypeFailCount > 0) {
+    primaryText = `View ${prototypeFailCount} failure${prototypeFailCount !== 1 ? 's' : ''}`;
     primaryAction = "scrollToSection('ac-results')";
   } else {
     primaryText = 'View conclusion';
@@ -2182,7 +2207,7 @@ function buildSmartComplianceTab(reason) {
   html += `<div class="card card-flat" style="margin:0 0 1.5rem">`;
   html += `<p style="font-weight:700;margin:0 0 0.25rem;color:var(--status-warning)">Automated Compliance Check Not Available</p>`;
   html += `<p class="small" style="margin:0">${escapeHtml(reason || 'consistency-checker not bootstrapped')}</p>`;
-  html += `<p class="small muted" style="margin:0.5rem 0 0">Guidelines should ship in the skill at <code>consistency-checker/guidelines/</code>. Optional fork pin: set <code>CONSISTENCY_CHECKER_REPO</code> to clone into <code>.context/consistency-checker/</code>.</p>`;
+  html += `<p class="small muted" style="margin:0.5rem 0 0">Install the sibling <code>uxd-consistency-check</code> skill so its local guidelines are available.</p>`;
   html += `</div>`;
 
   const componentMap = readJsonOr(path.join(absArtifacts, 'component-map.json'), null);
@@ -3098,13 +3123,19 @@ function buildTokens(opts = {}) {
       criterionHtml += `<details class="ac-details"><summary class="ac-expand">Expand</summary><p class="ac-full-text">${escapeHtml(rawText)}</p></details>`;
     }
 
-    const verdict = badgeHtml(r.verdict, r.criterion_id);
+    const requiresExternalEvidence = r.tier === 'T4' && (r.human_action || '').startsWith('Confirm the design-process deliverable outside the prototype:');
+    const verdict = requiresExternalEvidence
+      ? '<span class="badge badge-flagged" title="This is design-process or handoff evidence, not a prototype failure">External evidence</span>'
+      : badgeHtml(r.verdict, r.criterion_id);
 
     const evidenceRaw = r.evidence || '';
     const hasScreenshot = /screenshot/i.test(evidenceRaw) || /\.png/i.test(evidenceRaw) || /\.jpg/i.test(evidenceRaw);
     let evidenceHtml = `<a href="#" class="ac-view-link" onclick="openEvidenceViewer('${escapeHtml(r.criterion_id)}');return false">View evidence →</a>`;
     if (!hasScreenshot) {
       evidenceHtml += `<span style="display:inline-flex;align-items:center;gap:0.25rem;color:var(--status-warning);font-size:0.7rem;margin-left:0.5rem" title="No screenshot evidence linked for this criterion">${SVG_ICON.warningSmall} No visual evidence</span>`;
+    }
+    if (requiresExternalEvidence) {
+      evidenceHtml += `<span style="display:inline-flex;align-items:center;gap:0.25rem;color:var(--text-secondary);font-size:0.7rem;margin-left:0.5rem">Not testable from rendered prototype</span>`;
     }
     if (evidenceText) evidenceHtml += `<span class="ac-evidence-text">${escapeHtml(evidenceText)}</span>`;
 
@@ -3846,9 +3877,21 @@ function buildTokens(opts = {}) {
   // ---- Conclusion (generated from results) ----
   const personasEvaluated = ud ? (ud.personas_evaluated || []) : [];
   let conclusionHtml = '';
-  if (passCount + failCount + flaggedCount > 0) {
-    const total = passCount + failCount + flaggedCount;
-    const passRate = Math.round((passCount / total) * 100);
+  const externalEvidenceRows = csvRows.filter(row =>
+    row.tier === 'T4' && (row.human_action || '').startsWith('Confirm the design-process deliverable outside the prototype:')
+  );
+  const prototypeRows = csvRows.filter(row => !externalEvidenceRows.includes(row));
+  const prototypePassCount = prototypeRows.filter(row => (row.verdict || '').toUpperCase() === 'PASS').length;
+  const prototypeFailCount = prototypeRows.filter(row => (row.verdict || '').toUpperCase() === 'FAIL').length;
+  const prototypeFlaggedCount = prototypeRows.filter(row => (row.verdict || '').toUpperCase() === 'FLAGGED').length;
+  const allCriteriaNeedExternalEvidence = csvRows.length > 0 && prototypeRows.length === 0;
+
+  if (allCriteriaNeedExternalEvidence) {
+    conclusionHtml += `<p style="font-size:0.875rem;color:var(--text-secondary);margin:0 0 0.75rem"><strong style="color:var(--text)">${externalEvidenceRows.length} Jira acceptance criteria were imported correctly from the linked story.</strong> Each describes design exploration, feedback, engineering validation, a Figma handoff, or competitive research. Those are external deliverables, so this prototype cannot pass or fail them.</p>`;
+    conclusionHtml += `<p style="font-size:0.875rem;color:var(--text-secondary);margin:0 0 0.75rem">Prototype findings are reported separately through the live usability walkthrough and local consistency checker. Collect links or evidence for these Jira deliverables before closing the story.</p>`;
+  } else if (passCount + failCount + flaggedCount > 0) {
+    const total = prototypePassCount + prototypeFailCount + prototypeFlaggedCount;
+    const passRate = total ? Math.round((prototypePassCount / total) * 100) : 0;
     const iterLog = readJsonOr(path.join(absArtifacts, 'iteration-log.json'), null);
     const iterations = iterLog ? (iterLog.iterations || []).length : 1;
     const fixCount = iterLog ? iterLog.total_criteria_fixed || 0 : 0;
@@ -3857,11 +3900,11 @@ function buildTokens(opts = {}) {
     const extractState = readJsonOr(path.join(absArtifacts, 'extract-state.json'), null);
 
     // Score bar with fraction (Decision 7: Fraction with Visual Bar)
-    const barPct = Math.round((passCount / total) * 100);
+    const barPct = total ? Math.round((prototypePassCount / total) * 100) : 0;
     const barColor = barPct >= 70 ? 'var(--status-success)' : barPct >= 40 ? 'var(--status-warning)' : 'var(--status-danger)';
 
     conclusionHtml += `<div style="display:flex;align-items:center;gap:1.25rem;margin-bottom:1rem">`;
-    conclusionHtml += `<div style="font-family:var(--font-heading);font-size:1.75rem;font-weight:700;color:${barColor};line-height:1">${passCount}/${total}</div>`;
+    conclusionHtml += `<div style="font-family:var(--font-heading);font-size:1.75rem;font-weight:700;color:${barColor};line-height:1">${prototypePassCount}/${total}</div>`;
     conclusionHtml += `<div style="flex:1;max-width:16rem"><div style="font-size:0.7rem;color:var(--text-secondary);font-family:var(--font-mono);margin-bottom:0.25rem">Criteria passing (${barPct}%)</div><div style="height:6px;background:var(--border);border-radius:3px;overflow:hidden"><div style="width:${barPct}%;height:100%;background:${barColor};border-radius:3px;transition:width 0.4s ease"></div></div></div>`;
     if (concUsabilityRaw != null) {
       const scoreNum = typeof concUsabilityRaw === 'number' ? concUsabilityRaw : parseFloat(String(concUsabilityRaw));
@@ -3873,7 +3916,7 @@ function buildTokens(opts = {}) {
     conclusionHtml += `</div>`;
 
     conclusionHtml += `<p style="font-size:0.875rem;color:var(--text-secondary);margin:0 0 0.75rem">`;
-    conclusionHtml += `Evaluated <strong style="color:var(--text)">${total} acceptance criteria</strong> from the Jira ticket`;
+    conclusionHtml += `Evaluated <strong style="color:var(--text)">${total} prototype-testable acceptance criteria</strong> from the Jira ticket`;
     if (extractState && extractState.rfe_key) conclusionHtml += ` (linked from RFE ${extractState.rfe_key})`;
     conclusionHtml += `.`;
     if (iterations > 1) conclusionHtml += ` Pipeline ran <strong style="color:var(--text)">${iterations} iterations</strong>, fixing ${fixCount} initially-failing criteria.`;
@@ -4287,7 +4330,11 @@ function main() {
   const csvFlaggedCount = csvLines.filter(l => l.includes(',FLAGGED,')).length;
   const csvTotal = csvPassCount + csvFailCount + csvFlaggedCount;
   const heroMatch = template.match(/(\d+)\/(\d+)/);
-  if (heroMatch && csvTotal > 0) {
+  const acceptanceRows = parseCsv(csvRaw);
+  const allExternalEvidence = acceptanceRows.length > 0 && acceptanceRows.every(row =>
+    row.tier === 'T4' && (row.human_action || '').startsWith('Confirm the design-process deliverable outside the prototype:')
+  );
+  if (heroMatch && csvTotal > 0 && !allExternalEvidence) {
     const htmlPass = parseInt(heroMatch[1], 10);
     const htmlTotal = parseInt(heroMatch[2], 10);
     if (htmlPass !== csvPassCount || htmlTotal !== csvTotal) {

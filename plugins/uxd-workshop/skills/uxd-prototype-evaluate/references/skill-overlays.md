@@ -43,7 +43,6 @@ Auto-discovery checks:
 Environment variables still override individual keys when the scripts read them first:
 
 - `LANGFUSE_HOST`, `LANGFUSE_PUBLIC_KEY`, `LANGFUSE_SECRET_KEY`
-- `CONSISTENCY_CHECKER_REPO` (optional fork pin; bundled checker is the default)
 - `USABILITY_TESTING_REPO`
 - `EVAL_PAGES_REPO` / `EVAL_PAGES_URL`
 - `JIRA_BASE_URL`
@@ -68,7 +67,6 @@ export EVAL_OVERLAY_PATH="$UXD_INTERNAL_HELPERS/plugins/uxd-eval-config/overlays
 | `git.base_branch` | What branch to diff against for MR delta |
 | `git.remote_url` | Prototype repo URL used when building MR/PR links |
 | `git.mr_url_style` | `gitlab` (`/-/merge_requests/N`) or `github` (`/pull/N`) |
-| `context_repos.consistency_checker` | Optional git URL to pin a fork into `.context/` (empty = use skill-bundled `consistency-checker/`) |
 | `context_repos.usability_testing` | Git URL for deep persona YAML bootstrap (empty = skip) |
 | `langfuse.host` | Optional Langfuse host (empty = use `LANGFUSE_HOST`) |
 | `publish.*` | Pages repo, Pages base URL, Jira base, hosted dashboard URL |

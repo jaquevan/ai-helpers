@@ -36,7 +36,49 @@ PHASE_NAMES = frozenset({
     "eval-extract", "eval-classify", "eval-consistency-source",
     "eval-journey", "eval-fix", "eval-consistency-visual",
     "eval-usability", "eval-report", "render-report.js",
-    "validate-artifact-schemas", "playwright-run",
+    "validate-artifact-schemas", "playwright-run", "source-reader",
+    "uxd-consistency-check", "uxd-prototype-create",
+    "uxd-prototype-evaluate", "prototype-iteration",
+})
+
+NON_LLM_PHASES = frozenset({
+    "eval-consistency-source",
+    "render-report.js",
+    "validate-artifact-schemas",
+    "playwright-run",
+    "source-reader",
+    "uxd-consistency-check",
+    "uxd-prototype-create",
+    "prototype-iteration",
+})
+
+PHASE_METADATA_FIELDS = frozenset({
+    "acceptance_criteria",
+    "affected_files",
+    "after_match_count",
+    "artifact_sha256",
+    "audience",
+    "base_ref",
+    "before_match_count",
+    "changed_file_count",
+    "changed_files",
+    "changed_line_count",
+    "decision_count",
+    "fixed_count",
+    "guideline_count",
+    "guidelines_version",
+    "high_confidence_findings",
+    "issue_count",
+    "match_count",
+    "source_mode",
+    "status",
+    "review_candidates",
+    "screenshots_analyzed",
+    "screenshots_considered",
+    "guidelines_analyzed",
+    "input_bytes",
+    "violation_groups",
+    "warning_groups",
 })
 
 
@@ -88,6 +130,28 @@ def redact_text(text: str | None, max_chars: int = MAX_TEXT_CHARS) -> str | None
     return s
 
 
+def complete_redacted_text(text: str | None) -> str | None:
+    """Redact secrets without truncating telemetry payloads."""
+    if text is None:
+        return None
+    return redact_text(text, max_chars=max(len(str(text)), MAX_TEXT_CHARS))
+
+
+def content_sha256(text: str | None) -> str:
+    return hashlib.sha256(str(text or "").encode()).hexdigest()
+
+
+def langfuse_usage(phase: dict[str, Any]) -> dict[str, int]:
+    """Map OpenAI inclusive input usage to Langfuse exclusive cache fields."""
+    total_input = int(phase.get("input_tokens", 0) or 0)
+    cache_read = int(phase.get("cache_read_tokens", 0) or 0)
+    return {
+        "input": max(total_input - cache_read, 0),
+        "output": int(phase.get("output_tokens", 0) or 0),
+        "cache_read_input_tokens": min(cache_read, total_input),
+    }
+
+
 def parse_iterate_flags(flags: str) -> dict[str, str]:
     flags = flags or ""
     run_mode = "fresh" if "--fresh" in flags.split() else "incremental"
@@ -124,6 +188,24 @@ def infer_provider(model: str | None, invocation: str = "cli") -> str:
     if model and "claude" in model.lower():
         return "anthropic"
     return "unknown"
+
+
+def detect_invocation(explicit: str | None = None) -> str:
+    """Identify the agent host without falsely attributing phase events."""
+    invocation = (
+        explicit
+        or os.environ.get("LANGFUSE_INVOCATION")
+        or os.environ.get("AI_HELPERS_PLATFORM")
+    )
+    if invocation:
+        normalized = invocation.strip().lower()
+        if normalized in {"api", "anthropic", "cli", "codex", "cursor"}:
+            return normalized
+    if os.environ.get("CODEX_THREAD_ID") or os.environ.get("CODEX_SESSION_ID"):
+        return "codex"
+    if os.environ.get("CURSOR_TRACE_ID") or os.environ.get("CURSOR_SESSION_ID"):
+        return "cursor"
+    return "cli"
 
 
 def make_eval_run_id(prototype_key: str, seed: str | None = None) -> str:
@@ -341,6 +423,43 @@ def _non_llm_phases(artifacts_dir: Path) -> list[dict[str, Any]]:
             "llm_cost_usd": 0,
             "duration_ms": None,
         })
+
+    consistency_path = artifacts_dir / "consistency-report.json"
+    if consistency_path.is_file():
+        try:
+            report = json.loads(consistency_path.read_text())
+            summary = report.get("summary") or {}
+            source_mode = report.get("source_mode") or {}
+            visual_mode = report.get("visual_mode") or {}
+            visual_metrics = visual_mode.get("input_metrics") or {}
+            source_findings = source_mode.get("violations") or []
+            affected_files = {
+                finding.get("file") for finding in source_findings if finding.get("file")
+            }
+            phases.append({
+                "phase": "uxd-consistency-check",
+                "model": None,
+                "llm_cost_usd": 0,
+                "output_bytes": consistency_path.stat().st_size,
+                "guideline_count": summary.get("total_guidelines_checked", 0),
+                "guidelines_version": report.get("guidelines_version", "unknown"),
+                "violation_groups": summary.get("violations", 0),
+                "warning_groups": summary.get("warnings", 0),
+                "match_count": len(source_findings),
+                "affected_files": len(affected_files),
+                "source_mode": bool(source_mode.get("ran")),
+                "audience": ["developer", "designer"],
+            })
+            if visual_mode.get("ran") and visual_metrics:
+                phases.append({
+                    "phase": "eval-consistency-visual",
+                    "screenshots_considered": visual_metrics.get("screenshots_considered", 0),
+                    "screenshots_analyzed": visual_metrics.get("screenshots_analyzed", 0),
+                    "guidelines_analyzed": visual_metrics.get("guidelines_analyzed", 0),
+                    "input_bytes": visual_metrics.get("input_bytes", 0),
+                })
+        except (json.JSONDecodeError, OSError):
+            pass
     return phases
 
 
@@ -374,9 +493,7 @@ def _allocate_costs(
 ) -> list[dict[str, Any]]:
     llm_phases = [
         p for p in phases
-        if p.get("phase") not in (
-            "render-report.js", "validate-artifact-schemas", "playwright-run"
-        )
+        if p.get("phase") not in NON_LLM_PHASES
     ]
     if not llm_phases:
         return phases
@@ -470,37 +587,26 @@ def _trace_url(client, trace_id: str) -> str:
         return f"{host}/trace/{trace_id}"
 
 
-def log_pipeline_run(payload: dict[str, Any]) -> dict[str, Any]:
-    """Log a full pipeline run to Langfuse. Returns summary with trace_url."""
-    client = _get_client()
+def pipeline_run_status(run_result: dict[str, Any]) -> str:
+    explicit = str(run_result.get("status") or "").lower()
+    if explicit in {"completed", "blocked", "failed"}:
+        return explicit
+    if int(run_result.get("exit_code", 0) or 0) != 0:
+        return "failed"
+    output = str(run_result.get("output_text") or "").lower()
+    if "workflow blocked" in output or "blocked at preflight" in output:
+        return "blocked"
+    return "completed"
+
+
+def _trace_values(payload: dict[str, Any]) -> dict[str, Any]:
     prototype_key = payload.get("prototype_key", "unknown")
     eval_run_id = payload.get("eval_run_id") or make_eval_run_id(prototype_key)
-    iterate_flags = payload.get("iterate_flags", "")
-    dims = parse_iterate_flags(iterate_flags)
+    dims = parse_iterate_flags(payload.get("iterate_flags", ""))
     invocation = payload.get("invocation", "cli")
     model = payload.get("model")
     provider = payload.get("provider") or infer_provider(model, invocation)
     model_tier = payload.get("model_tier") or infer_model_tier(model, invocation)
-
-    run_result = payload.get("run_result", {})
-    token_usage = run_result.get("token_usage") or {}
-    cost_usd = run_result.get("cost_usd") or 0
-    per_model = run_result.get("per_model_usage") or {}
-    phases = payload.get("phases") or []
-
-    summary = {
-        "eval_run_id": eval_run_id,
-        "langfuse_trace_url": "",
-        "langfuse_enabled": is_enabled(),
-        "llm_cost_usd": cost_usd,
-        "logged": False,
-    }
-
-    if not client:
-        return summary
-
-    trace_id = langfuse_trace_id(eval_run_id)
-    trace_context = {"trace_id": trace_id}
     metadata = {
         "prototype_key": prototype_key,
         "eval_run_id": eval_run_id,
@@ -522,100 +628,337 @@ def log_pipeline_run(payload: dict[str, Any]) -> dict[str, Any]:
         metadata["depth_tier"] = payload["depth_tier"]
     if payload.get("experiment"):
         metadata["experiment"] = payload["experiment"]
+    return {
+        "prototype_key": prototype_key,
+        "eval_run_id": eval_run_id,
+        "provider": provider,
+        "model": model,
+        "metadata": metadata,
+        "trace_id": langfuse_trace_id(eval_run_id),
+    }
+
+
+def _record_pipeline_content(
+    client,
+    root,
+    payload: dict[str, Any],
+    values: dict[str, Any],
+    *,
+    skip_phases: frozenset[str] = frozenset(),
+) -> None:
+    run_result = payload.get("run_result", {})
+    token_usage = run_result.get("token_usage") or {}
+    cost_usd = run_result.get("cost_usd") or 0
+    per_model = run_result.get("per_model_usage") or {}
+    status = pipeline_run_status(run_result)
+    level = "ERROR" if status == "failed" else "WARNING" if status == "blocked" else "DEFAULT"
+
+    for phase in payload.get("phases") or []:
+        phase_name = phase.get("phase", "unknown")
+        if phase_name in skip_phases:
+            continue
+        phase_metadata = {
+            key: value for key, value in phase.items()
+            if key in PHASE_METADATA_FIELDS and value is not None
+        }
+        is_llm = phase_name not in NON_LLM_PHASES
+        if is_llm and phase.get("model"):
+            usage = langfuse_usage(phase)
+            cost_details = {}
+            if phase.get("llm_cost_usd") is not None:
+                cost_details["total"] = float(phase["llm_cost_usd"])
+            observation = client.start_observation(
+                name=phase_name,
+                as_type="generation",
+                model=phase.get("model"),
+                input=complete_redacted_text(payload.get("prompt", "")),
+                output=complete_redacted_text(run_result.get("output_text")),
+                usage_details=usage,
+                cost_details=cost_details or None,
+                level=level,
+                metadata={
+                    "phase": phase_name,
+                    "provider": phase.get("provider") or values["provider"],
+                    "status": status,
+                    **phase_metadata,
+                },
+            )
+            observation.end()
+        else:
+            client.create_event(
+                name=phase_name,
+                metadata={
+                    "phase": phase_name,
+                    "duration_ms": phase.get("duration_ms"),
+                    "output_bytes": phase.get("output_bytes"),
+                    "llm_cost_usd": 0,
+                    **phase_metadata,
+                },
+            )
+
+    if not payload.get("phases") and per_model:
+        for model_name, usage in per_model.items():
+            client.start_observation(
+                name=f"generation/{model_name}",
+                as_type="generation",
+                model=model_name,
+                input=redact_text(payload.get("prompt", "")[:200]),
+                output=redact_text(run_result.get("output_text")),
+                usage_details={
+                    "input": usage.get("inputTokens", 0),
+                    "output": usage.get("outputTokens", 0),
+                },
+                cost_details={"total": usage.get("costUSD", 0)},
+                level=level,
+                metadata={"status": status},
+            ).end()
+
+    for score_name, value in (payload.get("quality") or {}).items():
+        if value is not None and score_name != "golden_verdict":
+            try:
+                client.create_score(
+                    trace_id=values["trace_id"],
+                    name=score_name,
+                    value=float(value) if isinstance(value, (int, float)) else value,
+                )
+            except Exception:
+                pass
+
+    output = run_result.get("output_text") or (
+        f"cost_usd={cost_usd} tokens_in={token_usage.get('input_tokens', 0)}"
+    )
+    root.update(
+        output=redact_text(output),
+        level=level,
+        status_message=redact_text(output, 200),
+        metadata={
+            **values["metadata"],
+            "status": status,
+            "duration_ms": int(float(run_result.get("duration_s") or 0) * 1000),
+            "llm_cost_usd": cost_usd,
+            "billing_source": run_result.get("billing_source", "unknown"),
+        },
+    )
+
+
+class LivePipelineTrace:
+    """Keep Langfuse observations open for the actual model runtime."""
+
+    def __init__(self, payload: dict[str, Any]):
+        self.payload = payload
+        self.values = _trace_values(payload)
+        self.client = _get_client()
+        self.root = None
+        self.generation = None
+        self._root_context = None
+        self._attributes_context = None
+        self.live_phase_names: set[str] = set()
+        self.finished = False
+        self.summary = {
+            "eval_run_id": self.values["eval_run_id"],
+            "langfuse_trace_url": "",
+            "langfuse_enabled": bool(self.client),
+            "llm_cost_usd": 0,
+            "logged": False,
+        }
+
+    def __enter__(self):
+        if not self.client:
+            return self
+        from langfuse import propagate_attributes
+
+        self._root_context = self.client.start_as_current_observation(
+            trace_context={"trace_id": self.values["trace_id"]},
+            name=f"eval-iterate/{self.values['prototype_key']}",
+            as_type="span",
+            input=complete_redacted_text(self.payload.get("prompt", "")),
+            metadata=self.values["metadata"],
+        )
+        self.root = self._root_context.__enter__()
+        self._attributes_context = propagate_attributes(
+            user_id=self.values["metadata"]["designer_id_hash"],
+            metadata={
+                "prototype_key": self.values["prototype_key"],
+                "eval_run_id": self.values["eval_run_id"],
+            },
+            tags=[
+                "team:uxd",
+                "pipeline:prototype-evaluator",
+                f"provider:{self.values['provider']}",
+            ],
+        )
+        self._attributes_context.__enter__()
+        self.generation = self.client.start_observation(
+            name="uxd-prototype-evaluate",
+            as_type="span",
+            input=complete_redacted_text(self.payload.get("prompt", "")),
+            metadata={
+                "phase": "uxd-prototype-evaluate",
+                "provider": self.values["provider"],
+                "status": "running",
+                "telemetry_role": "pipeline-summary-no-usage",
+            },
+        )
+        return self
+
+    def start_phase(self, *, name: str, model: str, input_text: str):
+        """Open a model phase while its provider work is actually running."""
+        if not self.client or not self.root:
+            return None
+        observation = self.client.start_observation(
+            name=name,
+            as_type="generation",
+            model=model,
+            input=complete_redacted_text(input_text),
+            metadata={
+                "phase": name,
+                "provider": self.values["provider"],
+                "status": "running",
+                "input_chars": len(input_text),
+                "input_sha256": content_sha256(input_text),
+                "input_complete": True,
+            },
+        )
+        self.live_phase_names.add(name)
+        return observation
+
+    def finish_phase(self, observation, *, phase: dict[str, Any], output_text: str) -> None:
+        """Close a live model phase with exact usage, cost, and status."""
+        if observation is None:
+            return
+        phase_status = phase.get("status", "failed")
+        level = "ERROR" if phase_status == "failed" else "DEFAULT"
+        observation.update(
+            output=complete_redacted_text(output_text),
+            usage_details=langfuse_usage(phase),
+            cost_details={"total": float(phase.get("llm_cost_usd", 0) or 0)},
+            level=level,
+            status_message=redact_text(output_text, 200),
+            metadata={
+                "phase": phase.get("phase"),
+                "provider": phase.get("provider") or self.values["provider"],
+                "status": phase_status,
+                "duration_ms": phase.get("duration_ms"),
+                "turns_used": phase.get("turns_used"),
+                "validation": phase.get("validation"),
+                "output_chars": len(output_text),
+                "output_sha256": content_sha256(output_text),
+                "output_complete": True,
+            },
+        )
+        observation.end()
+
+    def finish(self, payload: dict[str, Any]) -> dict[str, Any]:
+        self.payload = payload
+        run_result = payload.get("run_result", {})
+        status = pipeline_run_status(run_result)
+        level = "ERROR" if status == "failed" else "WARNING" if status == "blocked" else "DEFAULT"
+        cost = float(run_result.get("cost_usd") or 0)
+        self.summary["llm_cost_usd"] = cost
+
+        if self.client and self.generation and self.root:
+            self.generation.update(
+                output=complete_redacted_text(run_result.get("output_text")),
+                level=level,
+                status_message=redact_text(run_result.get("output_text"), 200),
+                metadata={
+                    "phase": "uxd-prototype-evaluate",
+                    "provider": self.values["provider"],
+                    "status": status,
+                    "duration_ms": int(float(run_result.get("duration_s") or 0) * 1000),
+                    "billing_source": run_result.get("billing_source", "unknown"),
+                    "telemetry_role": "pipeline-summary-no-usage",
+                },
+            )
+            self.generation.end()
+            self.generation = None
+            _record_pipeline_content(
+                self.client,
+                self.root,
+                payload,
+                self.values,
+                skip_phases=frozenset({"uxd-prototype-evaluate", *self.live_phase_names}),
+            )
+            self.finished = True
+        return self.summary
+
+    def __exit__(self, exc_type, exc_value, traceback):
+        try:
+            if self.generation:
+                self.generation.update(
+                    level="ERROR",
+                    status_message=redact_text(str(exc_value or "pipeline ended before finish"), 200),
+                )
+                self.generation.end()
+                self.generation = None
+            if self.root and not self.finished:
+                self.root.update(
+                    level="ERROR",
+                    status_message=redact_text(str(exc_value or "pipeline ended before finish"), 200),
+                )
+        finally:
+            if self._attributes_context:
+                self._attributes_context.__exit__(exc_type, exc_value, traceback)
+            if self._root_context:
+                self._root_context.__exit__(exc_type, exc_value, traceback)
+            if self.client:
+                self.client.flush()
+                self.summary["langfuse_trace_url"] = _trace_url(
+                    self.client, self.values["trace_id"]
+                )
+                self.summary["logged"] = self.finished
+                self.client.shutdown()
+        return False
+
+
+def log_pipeline_run(payload: dict[str, Any]) -> dict[str, Any]:
+    """Log a full pipeline run to Langfuse. Returns summary with trace_url."""
+    client = _get_client()
+    values = _trace_values(payload)
+    run_result = payload.get("run_result", {})
+    cost_usd = run_result.get("cost_usd") or 0
+    summary = {
+        "eval_run_id": values["eval_run_id"],
+        "langfuse_trace_url": "",
+        "langfuse_enabled": is_enabled(),
+        "llm_cost_usd": cost_usd,
+        "logged": False,
+    }
+
+    if not client:
+        return summary
 
     try:
-        # The root observation is active while children are created. Passing the
-        # trace_context to every child would mark each one as another root in
-        # Langfuse v4, so child observations intentionally rely on context.
         from langfuse import propagate_attributes
 
         with client.start_as_current_observation(
-            trace_context=trace_context,
-            name=f"eval-iterate/{prototype_key}",
+            trace_context={"trace_id": values["trace_id"]},
+            name=f"eval-iterate/{values['prototype_key']}",
             as_type="span",
             input=redact_text(payload.get("prompt", "")[:200]),
-            metadata=metadata,
+            metadata=values["metadata"],
         ) as root:
             with propagate_attributes(
-                user_id=metadata["designer_id_hash"],
-                metadata={"prototype_key": prototype_key, "eval_run_id": eval_run_id},
-                tags=["team:uxd", "pipeline:prototype-evaluator", f"provider:{provider}"],
+                user_id=values["metadata"]["designer_id_hash"],
+                metadata={
+                    "prototype_key": values["prototype_key"],
+                    "eval_run_id": values["eval_run_id"],
+                },
+                tags=[
+                    "team:uxd",
+                    "pipeline:prototype-evaluator",
+                    f"provider:{values['provider']}",
+                ],
             ):
-                for phase in phases:
-                    phase_name = phase.get("phase", "unknown")
-                    is_llm = phase_name not in (
-                        "render-report.js", "validate-artifact-schemas", "playwright-run"
-                    )
-                    if is_llm and phase.get("model"):
-                        usage = {
-                            "input": phase.get("input_tokens", 0),
-                            "output": phase.get("output_tokens", 0),
-                        }
-                        if phase.get("cache_read_tokens"):
-                            usage["cache_read_input_tokens"] = phase["cache_read_tokens"]
-                        cost_details = {}
-                        if phase.get("llm_cost_usd") is not None:
-                            cost_details["total"] = float(phase["llm_cost_usd"])
-                        client.start_observation(
-                            name=phase_name,
-                            as_type="generation",
-                            model=phase.get("model"),
-                            usage_details=usage,
-                            cost_details=cost_details or None,
-                            metadata={
-                                "phase": phase_name,
-                                "provider": phase.get("provider") or provider,
-                            },
-                        ).end()
-                    else:
-                        client.create_event(
-                            name=phase_name,
-                            metadata={
-                                "phase": phase_name,
-                                "duration_ms": phase.get("duration_ms"),
-                                "output_bytes": phase.get("output_bytes"),
-                                "llm_cost_usd": 0,
-                            },
-                        )
-
-                if not phases and per_model:
-                    for model_name, usage in per_model.items():
-                        client.start_observation(
-                            name=f"generation/{model_name}",
-                            as_type="generation",
-                            model=model_name,
-                            usage_details={
-                                "input": usage.get("inputTokens", 0),
-                                "output": usage.get("outputTokens", 0),
-                            },
-                            cost_details={"total": usage.get("costUSD", 0)},
-                        ).end()
-
-                quality = payload.get("quality") or {}
-                if quality:
-                    for score_name, value in quality.items():
-                        if value is not None and score_name != "golden_verdict":
-                            try:
-                                client.create_score(
-                                    trace_id=trace_id,
-                                    name=score_name,
-                                    value=float(value) if isinstance(value, (int, float)) else value,
-                                )
-                            except Exception:
-                                pass
-
-                root.update(
-                    output=redact_text(
-                        f"cost_usd={cost_usd} tokens_in={token_usage.get('input_tokens', 0)}"
-                    ),
-                    metadata={**metadata, "llm_cost_usd": cost_usd},
-                )
+                _record_pipeline_content(client, root, payload, values)
 
         client.flush()
-        summary["langfuse_trace_url"] = _trace_url(client, trace_id)
+        summary["langfuse_trace_url"] = _trace_url(client, values["trace_id"])
         summary["logged"] = True
     except Exception as e:
         print(f"Langfuse export failed: {e}", file=sys.stderr)
+    finally:
+        client.shutdown()
 
     return summary
 
@@ -626,8 +969,9 @@ def log_phase_span(
     action: str,
     duration_ms: int | None = None,
     metadata: dict | None = None,
+    invocation: str | None = None,
 ) -> None:
-    """Record coarse phase boundary for Cursor runs."""
+    """Record a coarse phase boundary for the active agent host."""
     state_path = Path(artifacts_dir) / "eval-state.yaml"
     eval_run_id = None
     if state_path.exists():
@@ -646,7 +990,16 @@ def log_phase_span(
 
     trace_id = langfuse_trace_id(eval_run_id)
     trace_context = {"trace_id": trace_id}
-    meta = {"phase": phase, "action": action, "invocation": "cursor", **(metadata or {})}
+    safe_metadata = {
+        key: value for key, value in (metadata or {}).items()
+        if key in PHASE_METADATA_FIELDS and value is not None
+    }
+    meta = {
+        "phase": phase,
+        "action": action,
+        "invocation": detect_invocation(invocation),
+        **safe_metadata,
+    }
     if duration_ms is not None:
         meta["duration_ms"] = duration_ms
 
@@ -711,11 +1064,18 @@ def cmd_smoke(_args: list[str]) -> int:
 
 
 def cmd_phase(args: argparse.Namespace) -> int:
+    metadata = None
+    if args.metadata_file:
+        metadata = json.loads(Path(args.metadata_file).read_text())
+        if not isinstance(metadata, dict):
+            raise ValueError("phase metadata file must contain a JSON object")
     log_phase_span(
         args.artifacts_dir,
         args.phase,
         args.action,
         duration_ms=args.duration_ms,
+        metadata=metadata,
+        invocation=args.invocation,
     )
     return 0
 
@@ -737,7 +1097,17 @@ def main() -> int:
     phase_p.add_argument("--artifacts-dir", required=True)
     phase_p.add_argument("--phase", required=True, choices=sorted(PHASE_NAMES))
     phase_p.add_argument("--action", required=True, choices=["start", "end"])
+    phase_p.add_argument(
+        "--invocation",
+        choices=["api", "anthropic", "cli", "codex", "cursor"],
+        default=None,
+        help="Agent host; auto-detected when omitted",
+    )
     phase_p.add_argument("--duration-ms", type=int, default=None)
+    phase_p.add_argument(
+        "--metadata-file",
+        help="Path to a metadata-only JSON object; never include source or Jira text",
+    )
 
     log_p = sub.add_parser("log-pipeline")
     log_p.add_argument("--json-file", required=True)

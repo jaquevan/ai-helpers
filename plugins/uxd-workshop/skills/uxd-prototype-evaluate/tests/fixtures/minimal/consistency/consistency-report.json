@@ -1,23 +1,58 @@
 {
-  "source": "pf-css-token-check",
+  "source": "uxd-consistency-check",
+  "guidelines_version": "test-version",
   "degraded": false,
   "checked_at": "2026-08-01T10:00:00.000Z",
   "source_mode": {
     "ran": true,
     "violations": [
       {
+        "guideline_id": "no-custom-css",
+        "guideline_title": "No Custom CSS in Prototypes",
+        "category": "foundations",
+        "severity": "error",
+        "verdict": "VIOLATION",
+        "confidence": "high",
+        "review_candidate": false,
         "file": "src/app/AIHub/Deployments/Deployments.tsx",
         "line": 42,
         "property": "color",
         "value": "#c9190b",
-        "suggestion": "Use --pf-t--global--color--status--danger--default"
+        "description": "Custom color",
+        "suggestion": "Use --pf-t--global--color--status--danger--default",
+        "check_method": "automated"
       },
       {
+        "guideline_id": "no-custom-css",
+        "guideline_title": "No Custom CSS in Prototypes",
+        "category": "foundations",
+        "severity": "error",
+        "verdict": "VIOLATION",
+        "confidence": "high",
+        "review_candidate": false,
         "file": "src/app/AIHub/Deployments/Deployments.tsx",
         "line": 87,
         "property": "margin-top",
         "value": "16px",
-        "suggestion": "Use --pf-t--global--spacer--md"
+        "description": "Custom spacing",
+        "suggestion": "Use --pf-t--global--spacer--md",
+        "check_method": "automated"
+      },
+      {
+        "guideline_id": "table-pagination",
+        "guideline_title": "Table Pagination",
+        "category": "tables",
+        "severity": "warning",
+        "verdict": "FLAGGED",
+        "confidence": "low",
+        "review_candidate": true,
+        "file": "src/app/AIHub/Deployments/Deployments.tsx",
+        "line": 100,
+        "property": "table-pagination",
+        "value": "<Pagination />",
+        "description": "Review pagination placement",
+        "suggestion": "Confirm pagination follows the product convention",
+        "check_method": "automated_candidate"
       }
     ]
   },
@@ -28,8 +63,8 @@
   },
   "summary": {
     "total_guidelines_checked": 10,
-    "violations": 2,
+    "violations": 1,
     "warnings": 1,
-    "passes": 7
+    "passes": 8
   }
 }
