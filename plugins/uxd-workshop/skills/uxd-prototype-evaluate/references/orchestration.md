@@ -533,11 +533,6 @@ open ${ARTIFACTS_DIR}/evaluation-report.html
 EXPORT_SKILL="${CLAUDE_SKILL_DIR}/../uxd-prototype-export"
 node "${EXPORT_SKILL}/scripts/sync-prototype-bar-config.mjs" --artifacts ${KEY_DIR}
 
-# Prototype Bar: ensure Sources (outcome/strat) + views.eval are current
-# (also performed inside eval-report.md Step 5)
-EXPORT_SKILL="${CLAUDE_SKILL_DIR}/../uxd-prototype-export"
-node "${EXPORT_SKILL}/scripts/sync-prototype-bar-config.mjs" --artifacts .artifacts/<KEY>
-
 # Present narrative summary in chat (same model as eval-review)
 Read ${ARTIFACTS_DIR}/evaluation-report.csv and ${ARTIFACTS_DIR}/extract-state.json
 Compute pass/fail/flagged counts from CSV
