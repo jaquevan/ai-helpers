@@ -1,0 +1,6 @@
+# Guidance for the AskUserQuestion auto-answerer (eval harness).
+instruction: >
+  If asked to confirm understanding, answer "yes, that's correct."
+  If asked about user groups, answer "those look right, proceed."
+  If asked about strategic decisions, answer "yes, those cover the right areas."
+  If asked about constraints, answer "no additional constraints."

@@ -1,0 +1,44 @@
+{
+  "package": "@patternfly/patternfly-mcp",
+  "repo": "patternfly/patternfly-mcp",
+  "collected_by": "github-actions",
+  "snapshots": [
+    {
+      "date": "2026-07-31",
+      "npm_weekly_downloads": 312,
+      "npm_latest_version": "2.0.1"
+    },
+    {
+      "date": "2026-08-11",
+      "npm_weekly_downloads": 487,
+      "npm_latest_version": "2.0.1"
+    },
+    {
+      "date": "2026-08-18",
+      "npm_weekly_downloads": 614,
+      "npm_latest_version": "2.1.0"
+    },
+    {
+      "date": "2026-08-25",
+      "npm_weekly_downloads": 781,
+      "npm_latest_version": "2.1.0",
+      "npm_last_publish": "2026-08-14",
+      "github_unique_visitors_14d": 42,
+      "github_views_14d": 613
+    },
+    {
+      "date": "2026-09-02",
+      "npm_weekly_downloads": 2083,
+      "npm_latest_version": "2.3.0",
+      "npm_last_publish": "2026-08-24"
+    },
+    {
+      "date": "2026-09-07",
+      "npm_weekly_downloads": 679,
+      "npm_latest_version": "2.3.0",
+      "npm_last_publish": "2026-08-24",
+      "github_unique_visitors_14d": 36,
+      "github_views_14d": 598
+    }
+  ]
+}

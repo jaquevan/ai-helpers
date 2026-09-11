@@ -1,0 +1,216 @@
+name: Collect Adoption Metrics
+
+on:
+  schedule:
+    - cron: '17 8 * * 1'  # Weekly on Monday ~8am UTC (offset to avoid GHA queue congestion)
+  workflow_dispatch:
+
+concurrency:
+  group: collect-metrics
+  cancel-in-progress: true
+
+jobs:
+  collect:
+    if: github.repository == 'rh-uxd/ai-helpers'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        with:
+          persist-credentials: false
+
+      - name: Collect metrics
+        env:
+          GH_TOKEN: ${{ secrets.METRICS_TOKEN }}
+          MCP_GH_TOKEN: ${{ secrets.MCP_METRICS_TOKEN }}
+        run: |
+          set -e
+          REPO="${{ github.repository }}"
+          DATE=$(date -u +%Y-%m-%d)
+
+          VIEWS_JSON=$(gh api "repos/${REPO}/traffic/views")
+          VISITORS=$(echo "${VIEWS_JSON}" | jq '.uniques')
+          TOTAL_VIEWS=$(echo "${VIEWS_JSON}" | jq '.count')
+
+          REPO_REFS_RAW=$(gh api "search/code?q=%22rh-uxd/ai-helpers%22+NOT+repo:rh-uxd/ai-helpers+NOT+repo:rh-uxd/ai-helpers-internal&per_page=100")
+          RAW_COUNT=$(echo "${REPO_REFS_RAW}" | jq '.total_count')
+          PREV_REFS=$(jq length metrics/repo-references.json 2>/dev/null || echo 0)
+          if [ "$RAW_COUNT" -eq 0 ] && [ "$PREV_REFS" -gt 0 ]; then
+            echo "WARNING: code search returned 0 results but previous data has ${PREV_REFS} entries — keeping existing repo-references.json"
+          else
+            echo "${REPO_REFS_RAW}" | jq '
+              [.items | group_by(.repository.full_name)[] |
+               {name: .[0].repository.full_name, url: .[0].repository.html_url, description: (.[0].repository.description // ""), files: [.[].path]}] |
+              map(select(.files | map(test("\\.(txt|csv|log)$") or test("(^|/)README") or test("(^|/)(awesome-|cached-)")) | all | not)) |
+              sort_by(.name)
+            ' > metrics/repo-references.json
+          fi
+          REPO_REFS=$(jq length metrics/repo-references.json 2>/dev/null || echo 0)
+
+          # Discover pending integrations (open GitHub PRs referencing this marketplace)
+          gh api "search/issues?q=%22rh-uxd/ai-helpers%22+is:pr+is:open+-repo:rh-uxd/ai-helpers+-repo:rh-uxd/ai-helpers-internal&per_page=100" \
+            > /tmp/gh-pending1.json || echo '{"items":[]}' > /tmp/gh-pending1.json
+          gh api "search/issues?q=%22uxd-workshop%22+is:pr+is:open+-repo:rh-uxd/ai-helpers+-repo:rh-uxd/ai-helpers-internal&per_page=100" \
+            > /tmp/gh-pending2.json || echo '{"items":[]}' > /tmp/gh-pending2.json
+
+          PREV_PENDING=$(jq length metrics/pending-integrations.json 2>/dev/null || echo 0)
+          jq -s '
+            [.[].items[] | {
+              name: (.repository_url | split("/") | .[-2:] | join("/")),
+              url: .html_url,
+              description: .title
+            }] | unique_by(.url) | group_by(.name) | map(.[0])
+          ' /tmp/gh-pending1.json /tmp/gh-pending2.json | jq \
+            --slurpfile refs metrics/repo-references.json \
+            '
+            ($refs[0] | map(.name)) as $adopted |
+            [.[] | select(.name as $n | $adopted | index($n) | not)] |
+            sort_by(.name)
+            ' > /tmp/pending-candidates.json
+
+          # Verify each candidate PR actually references rh-uxd/ai-helpers in its diff
+          echo '[]' > /tmp/pending-verified.json
+          jq -c '.[]' /tmp/pending-candidates.json | while IFS= read -r entry; do
+            PR_URL=$(echo "$entry" | jq -r '.url')
+            PR_NUM=$(echo "$PR_URL" | grep -oE '[0-9]+$')
+            PR_REPO=$(echo "$PR_URL" | sed 's|https://github.com/||; s|/pull/[0-9]*||')
+            if gh pr diff "$PR_NUM" -R "$PR_REPO" 2>/dev/null | grep -q 'rh-uxd/ai-helpers'; then
+              jq --argjson e "$entry" '. + [$e]' /tmp/pending-verified.json > /tmp/pv-tmp.json
+              mv /tmp/pv-tmp.json /tmp/pending-verified.json
+            else
+              echo "FILTERED: ${PR_REPO}#${PR_NUM} — no 'rh-uxd/ai-helpers' in diff"
+            fi
+          done
+
+          NEW_PENDING=$(jq length /tmp/pending-verified.json)
+          if [ "$NEW_PENDING" -eq 0 ] && [ "$PREV_PENDING" -gt 0 ]; then
+            echo "WARNING: PR search returned 0 pending results but previous data has ${PREV_PENDING} entries — keeping existing pending-integrations.json"
+          else
+            cp /tmp/pending-verified.json metrics/pending-integrations.json
+          fi
+
+          # --- patternfly-mcp repo references (who references the MCP server?) ---
+          MCP_REFS_RAW=$(gh api "search/code?q=%22patternfly-mcp%22+NOT+repo:patternfly/patternfly-mcp+NOT+repo:rh-uxd/ai-helpers+NOT+repo:rh-uxd/ai-helpers-internal&per_page=100" || echo '{"items":[],"total_count":0}')
+          MCP_RAW_COUNT=$(echo "${MCP_REFS_RAW}" | jq '.total_count')
+          PREV_MCP_REFS=$(jq length metrics/mcp-references.json 2>/dev/null || echo 0)
+          if [ "$MCP_RAW_COUNT" -eq 0 ] && [ "$PREV_MCP_REFS" -gt 0 ]; then
+            echo "WARNING: MCP code search returned 0 results but previous data has ${PREV_MCP_REFS} entries — keeping existing mcp-references.json"
+          else
+            echo "${MCP_REFS_RAW}" | jq '
+              [.items | group_by(.repository.full_name)[] |
+               {name: .[0].repository.full_name, url: .[0].repository.html_url, description: (.[0].repository.description // ""), files: [.[].path]}] |
+              map(select(.files | map(test("\\.(txt|csv|log)$") or test("(^|/)README") or test("(^|/)(awesome-|cached-)")) | all | not)) |
+              sort_by(.name)
+            ' > metrics/mcp-references.json
+          fi
+
+          # Discover pending MCP integrations (open PRs referencing patternfly-mcp)
+          gh api "search/issues?q=%22patternfly-mcp%22+is:pr+is:open+-repo:patternfly/patternfly-mcp+-repo:rh-uxd/ai-helpers&per_page=100" \
+            > /tmp/mcp-pending-raw.json || echo '{"items":[]}' > /tmp/mcp-pending-raw.json
+          jq '
+            [.items[] | {
+              name: (.repository_url | split("/") | .[-2:] | join("/")),
+              url: .html_url,
+              description: .title
+            }] | unique_by(.url) | group_by(.name) | map(.[0]) | sort_by(.name)
+          ' /tmp/mcp-pending-raw.json | jq \
+            --slurpfile refs metrics/mcp-references.json \
+            '
+            ($refs[0] | map(.name)) as $adopted |
+            [.[] | select(.name as $n | $adopted | index($n) | not)]
+            ' > /tmp/mcp-pending-candidates.json
+
+          # Verify each candidate PR actually references patternfly-mcp in its diff
+          echo '[]' > /tmp/mcp-pending-verified.json
+          jq -c '.[]' /tmp/mcp-pending-candidates.json | while IFS= read -r entry; do
+            PR_URL=$(echo "$entry" | jq -r '.url')
+            PR_NUM=$(echo "$PR_URL" | grep -oE '[0-9]+$')
+            PR_REPO=$(echo "$PR_URL" | sed 's|https://github.com/||; s|/pull/[0-9]*||')
+            if gh pr diff "$PR_NUM" -R "$PR_REPO" 2>/dev/null | grep -q 'patternfly-mcp'; then
+              jq --argjson e "$entry" '. + [$e]' /tmp/mcp-pending-verified.json > /tmp/mcp-pv-tmp.json
+              mv /tmp/mcp-pv-tmp.json /tmp/mcp-pending-verified.json
+            else
+              echo "FILTERED: ${PR_REPO}#${PR_NUM} — no 'patternfly-mcp' in diff"
+            fi
+          done
+          cp /tmp/mcp-pending-verified.json metrics/mcp-pending.json
+
+          # GITHUB_TOKEN lacks org:read — hardcoded maintainers list (update when team changes)
+          MAINTAINERS="-author:jpuzz0+-author:dlabaj+-author:andybraren"
+          EXTERNAL_ISSUES=$(gh api "search/issues?q=repo:${REPO}+is:issue+is:open+${MAINTAINERS}" --jq '.total_count')
+          EXTERNAL_PRS=$(gh api "search/issues?q=repo:${REPO}+is:pr+${MAINTAINERS}" --jq '.total_count')
+
+          PLUGINS=$(find plugins -name 'plugin.json' -path '*/.claude-plugin/*' | wc -l | tr -d ' ')
+          SKILLS=$(find plugins -name 'SKILL.md' | wc -l | tr -d ' ')
+          AGENTS=$(find plugins -path '*/agents/*.md' -not -path '*/agents/*/*.md' | wc -l | tr -d ' ')
+
+          REFERRERS=$(gh api "repos/${REPO}/traffic/popular/referrers")
+          PATHS=$(gh api "repos/${REPO}/traffic/popular/paths")
+          echo "${REFERRERS}" | jq -r --arg d "$DATE" '.[] | [$d, "referrer", .referrer, (.count|tostring), (.uniques|tostring)] | @csv' >> metrics/traffic-discovery.csv
+          echo "${PATHS}" | jq -r --arg d "$DATE" '.[] | [$d, "path", .path, (.count|tostring), (.uniques|tostring)] | @csv' >> metrics/traffic-discovery.csv
+
+          # --- patternfly-mcp metrics (AUTOMATED: collected weekly by this workflow) ---
+          MCP_REPO="patternfly/patternfly-mcp"
+          MCP_NPM_PKG="@patternfly/patternfly-mcp"
+
+          MCP_TMP="/tmp/npm-registry-${GITHUB_RUN_ID:-local}.json"
+          curl -sf "https://registry.npmjs.org/${MCP_NPM_PKG}" -o "$MCP_TMP" || echo '{}' > "$MCP_TMP"
+          NPM_DOWNLOADS=$(curl -sf "https://api.npmjs.org/downloads/point/last-week/${MCP_NPM_PKG}" | jq '.downloads // 0' 2>/dev/null || echo 0)
+          NPM_DOWNLOADS=$(echo "${NPM_DOWNLOADS:-0}" | tr -d '[:space:]')
+          [[ "$NPM_DOWNLOADS" =~ ^[0-9]+$ ]] || NPM_DOWNLOADS=0
+          NPM_VERSION=$(jq -r '.["dist-tags"].latest // "unknown"' "$MCP_TMP" 2>/dev/null || echo "unknown")
+          NPM_VERSION=${NPM_VERSION:-unknown}
+          NPM_LAST_PUBLISH=$(jq -r '(.time[.["dist-tags"].latest] // empty) | split("T")[0]' "$MCP_TMP" 2>/dev/null || echo "unknown")
+          NPM_LAST_PUBLISH=${NPM_LAST_PUBLISH:-unknown}
+
+          MCP_VIEWS_JSON=$(GH_TOKEN="$MCP_GH_TOKEN" gh api "repos/${MCP_REPO}/traffic/views" 2>/dev/null || echo '{}')
+          MCP_VISITORS=$(echo "$MCP_VIEWS_JSON" | jq '.uniques // null' 2>/dev/null || echo null)
+          MCP_VISITORS=$(echo "${MCP_VISITORS:-null}" | tr -d '[:space:]')
+          [[ "$MCP_VISITORS" =~ ^(null|[0-9]+)$ ]] || MCP_VISITORS=null
+          MCP_VIEWS=$(echo "$MCP_VIEWS_JSON" | jq '.count // null' 2>/dev/null || echo null)
+          MCP_VIEWS=$(echo "${MCP_VIEWS:-null}" | tr -d '[:space:]')
+          [[ "$MCP_VIEWS" =~ ^(null|[0-9]+)$ ]] || MCP_VIEWS=null
+
+          NEW_MCP_SNAP=$(jq -n \
+            --arg date "$DATE" \
+            --argjson downloads "${NPM_DOWNLOADS}" \
+            --arg version "${NPM_VERSION}" \
+            --arg last_publish "${NPM_LAST_PUBLISH}" \
+            --argjson visitors "${MCP_VISITORS}" \
+            --argjson views "${MCP_VIEWS}" \
+            '{date: $date, npm_weekly_downloads: $downloads, npm_latest_version: $version, npm_last_publish: $last_publish} | if $visitors then .github_unique_visitors_14d = $visitors else . end | if $views then .github_views_14d = $views else . end' 2>/dev/null || true)
+
+          MCP_FILE="metrics/mcp-metrics.json"
+          if [ -n "$NEW_MCP_SNAP" ] && [ -f "$MCP_FILE" ]; then
+            jq --argjson snap "$NEW_MCP_SNAP" '
+              .snapshots = [.snapshots[] | select(.date != $snap.date)] + [$snap] | .snapshots |= sort_by(.date)
+            ' "$MCP_FILE" > /tmp/mcp-metrics.json && mv /tmp/mcp-metrics.json "$MCP_FILE"
+          elif [ -n "$NEW_MCP_SNAP" ]; then
+            jq -n --argjson snap "$NEW_MCP_SNAP" '{
+              package: "@patternfly/patternfly-mcp",
+              repo: "patternfly/patternfly-mcp",
+              collected_by: "github-actions",
+              snapshots: [$snap]
+            }' > "$MCP_FILE"
+          else
+            echo "WARNING: MCP snapshot build failed, skipping MCP metrics update"
+          fi
+
+          sed -i "/^${DATE},/d" metrics/adoption-metrics.csv
+          echo "${DATE},${VISITORS},${TOTAL_VIEWS},${REPO_REFS},${EXTERNAL_ISSUES},${EXTERNAL_PRS},${PLUGINS},${SKILLS},${AGENTS}" >> metrics/adoption-metrics.csv
+
+      - name: Commit updated metrics
+        env:
+          GH_TOKEN: ${{ secrets.METRICS_TOKEN }}
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git remote set-url origin "https://x-access-token:${GH_TOKEN}@github.com/${{ github.repository }}.git"
+          git add metrics/adoption-metrics.csv metrics/traffic-discovery.csv metrics/repo-references.json metrics/pending-integrations.json metrics/mcp-metrics.json metrics/mcp-references.json metrics/mcp-pending.json
+          if git diff --cached --quiet; then
+            echo "No changes to commit"
+          else
+            git commit -m "chore: collect weekly adoption metrics"
+            git push
+          fi

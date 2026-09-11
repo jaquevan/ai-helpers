@@ -1,0 +1,2 @@
+prompt: |
+  I have a PatternFly React app in this directory with a package.json that has a build script. The repo is connected to GitHub. Can you deploy it to GitHub Pages?

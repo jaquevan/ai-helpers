@@ -1,0 +1,2 @@
+prompt: |
+  I already ran the build and my output is in the build/ directory (not dist/). Can you just deploy what's there without rebuilding?

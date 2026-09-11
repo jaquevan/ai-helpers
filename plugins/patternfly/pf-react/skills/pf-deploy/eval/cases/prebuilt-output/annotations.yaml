@@ -1,0 +1,3 @@
+expect_pfcli: true
+has_prerequisites: true
+expect_flags: true

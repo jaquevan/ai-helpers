@@ -1,0 +1,2 @@
+prompt: |
+  I need to check if my Figma designs follow PatternFly v6 standards. The file is at https://www.figma.com/design/abc123DEF456/MyApp-Designs. Can you run the PatternFly compliance checker on it?

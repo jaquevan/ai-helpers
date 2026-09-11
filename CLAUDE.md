@@ -26,7 +26,8 @@ Load additional context based on the task at hand:
 ## Project Structure
 
 ```
-plugins/uxd-workshop/              — UXD plugins (top level)
+plugins/uxd-workshop/              — UXD workshop (skill incubator)
+plugins/uxd-prototype/             — UX prototyping (create)
 plugins/patternfly/                — PatternFly meta-plugin (installs all PF sub-plugins)
   ├── .claude-plugin/plugin.json   — Meta-plugin manifest (dependencies only, no skills)
   ├── agents/pf-assist.md          — PatternFly routing agent
@@ -41,9 +42,6 @@ scripts/                           — Automation scripts
 ## Meta-plugin Architecture
 
 The `patternfly` plugin at `plugins/patternfly/` is a **meta-plugin** — it uses a `dependencies` array to auto-install all PF sub-plugins (`pf-react`, `pf-design-guide`, `pf-design-audit`, `pf-migration`, `pf-mcp`). It has no skills of its own, only the `pf-assist` routing agent. **Claude Code only** — Cursor does not support `dependencies`, so Cursor users install sub-plugins individually.
-
-**Delisted plugins** (kept on disk, not in marketplace.json):
-- `pf-a11y` — empty, no skills yet
 
 ## Versioning
 

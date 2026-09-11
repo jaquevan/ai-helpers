@@ -1,0 +1,6 @@
+prompt: >-
+  Using the uxd-design-handoff skill: create a handoff spec for the
+  notifications panel described in fixture-design.md in this case directory.
+  Pay special attention to enumerating all states for every component.
+  Do not call network or MCP.
+fixture: fixture-design.md

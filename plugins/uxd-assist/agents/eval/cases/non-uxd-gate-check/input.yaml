@@ -1,0 +1,4 @@
+prompt: >-
+  I'm getting a TypeScript compilation error in my Express API handler.
+  The type for req.body doesn't match the expected interface. Can you help
+  me fix the type mismatch?

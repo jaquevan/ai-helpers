@@ -1,0 +1,3 @@
+expect_findings: true
+migration_type: major
+has_css_only: false

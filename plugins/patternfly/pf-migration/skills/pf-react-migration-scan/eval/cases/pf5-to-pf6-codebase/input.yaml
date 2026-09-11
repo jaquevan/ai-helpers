@@ -1,0 +1,14 @@
+prompt: |
+  We're upgrading from PatternFly 5 to PatternFly 6. Here's what our codebase looks like:
+
+  package.json has "@patternfly/react-core": "^5.4.0", "@patternfly/react-table": "^5.4.0"
+
+  Our src/ directory has components using:
+  - import { Chip, ChipGroup } from '@patternfly/react-core'
+  - import { Text, TextContent, TextVariants } from '@patternfly/react-core'
+  - import { KebabToggle } from '@patternfly/react-core'
+  - import { Tile } from '@patternfly/react-core'
+  - Several components use the isActive prop on NavItem
+  - Some components import from '@patternfly/react-charts' directly (not the victory subpath)
+
+  Scan for breaking changes and give me a migration report.

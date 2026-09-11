@@ -1,0 +1,8 @@
+# Guidance for the AskUserQuestion auto-answerer (eval harness).
+instruction: >
+  If asked what problem or feature to cover, answer "I'd like to explore
+  improving the onboarding experience for new users of our analytics platform."
+  If asked to confirm understanding, answer "yes, that's right."
+  If asked about user groups, answer "those look correct."
+  If asked about strategic decisions, answer "good, proceed."
+  If asked about constraints, answer "no additional constraints."

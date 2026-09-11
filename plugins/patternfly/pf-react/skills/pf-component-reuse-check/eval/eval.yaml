@@ -1,0 +1,110 @@
+name: pf-component-reuse-check-eval
+description: Evaluate pf-component-reuse-check's scope discipline and match reporting
+
+# A/B delta: Without the skill, baseline Claude would scan the entire codebase and
+# suggest replacements freely. The skill uniquely contributes: strict uncommitted-only
+# scope (never audit committed code), confidence levels (High/Medium/Low), structured
+# suggestion format with "Replace with PatternFly?" prompt, and asking before replacing.
+
+skill: pf-react:pf-component-reuse-check
+
+execution:
+  mode: case
+  arguments: "{prompt}"
+
+runner:
+  type: claude-code
+
+models:
+  skill: claude-sonnet-4-6
+  judge: claude-sonnet-4-6
+
+permissions:
+  allow: []
+  deny:
+    - "mcp__*"
+
+dataset:
+  path: cases
+  schema: |
+    Each case directory contains:
+    - input.yaml: prompt describing custom React components (some uncommitted, some committed)
+    - annotations.yaml: expect_match (true/false), scope_violation (true/false for testing committed-only scoping)
+
+outputs:
+  - path: artifacts
+    schema: |
+      The skill produces a suggestion report for each custom component that overlaps
+      with PatternFly, including confidence level, import path, docs link, and a
+      prompt asking before replacing.
+
+traces:
+  stdout: true
+  stderr: true
+  events: true
+  metrics: true
+
+judges:
+  - name: has_confidence_level
+    description: Match suggestions include confidence ratings
+    if: "annotations.get('expect_match') == True"
+    check: |
+      import re
+      text = outputs.get("conversation", "")
+      for path, content in outputs.get("files", {}).items():
+          text += "\n" + content
+      confidence = re.search(r'(?i)confidence.{0,20}(high|medium|low)', text)
+      confidence_alt = re.search(r'(?i)\b(high|medium|low)\b.{0,20}confidence', text)
+      if not confidence and not confidence_alt:
+          return False, "Match suggestions missing confidence level (High/Medium/Low)"
+      return True, "Match suggestions include confidence rating"
+
+  - name: asks_before_replacing
+    description: Asks user for confirmation before replacing components
+    if: "annotations.get('expect_match') == True"
+    check: |
+      import re
+      text = outputs.get("conversation", "")
+      for path, content in outputs.get("files", {}).items():
+          text += "\n" + content
+      asks = re.search(r'(?i)(replace.{0,20}(?:PatternFly|PF)\s*\?|want.{0,20}replace|confirm.{0,20}replace|proceed.{0,20}replace|shall.{0,10}(?:I|we).{0,20}replace)', text)
+      if not asks:
+          return False, "Did not ask user for confirmation before replacing"
+      return True, "Asks user before replacing components"
+
+  - name: respects_uncommitted_scope
+    description: Does not audit committed components — only uncommitted changes
+    if: "annotations.get('scope_violation') == True"
+    check: |
+      import re
+      text = outputs.get("conversation", "")
+      for path, content in outputs.get("files", {}).items():
+          text += "\n" + content
+      scope_aware = re.search(r'(?i)(uncommitted|modified|new.{0,10}file|git\s+status|not.{0,10}committed|already.{0,10}committed|committed.{0,20}code.{0,30}(?:skip|exclude|out.of.scope|not.{0,10}scan))', text)
+      if not scope_aware:
+          return False, "Did not acknowledge the uncommitted-only scope — may have audited committed code"
+      return True, "Respects uncommitted-only scope"
+
+  - name: no_audit_when_clean
+    description: Does not fabricate findings when there are no uncommitted changes
+    if: "annotations.get('expect_match') == False"
+    check: |
+      import re
+      text = outputs.get("conversation", "")
+      for path, content in outputs.get("files", {}).items():
+          text += "\n" + content
+      false_finding = re.search(r'(?i)(→\s*PatternFly|replace.{0,20}with.{0,20}(?:PF|PatternFly)|confidence.{0,10}(?:high|medium))', text)
+      no_changes = re.search(r'(?i)(no\s+(?:uncommitted|modified|new)\s+(?:file|change|component)|nothing\s+to\s+(?:check|scan|analyze)|no\s+candidates)', text)
+      if false_finding:
+          return False, "Fabricated match findings when there are no uncommitted changes"
+      return True, f"No false findings (clean-state acknowledged={'yes' if no_changes else 'no'})"
+
+thresholds:
+  has_confidence_level:
+    min_pass_rate: 0.67
+  asks_before_replacing:
+    min_pass_rate: 0.67
+  respects_uncommitted_scope:
+    min_pass_rate: 0.67
+  no_audit_when_clean:
+    min_pass_rate: 1.0

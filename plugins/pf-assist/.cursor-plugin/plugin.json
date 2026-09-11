@@ -1,0 +1,12 @@
+{
+  "name": "pf-assist",
+  "description": "PatternFly skill routing — maps project signals to the right PF sub-skills for compliance, migration, and design audits",
+  "agents": ["./agents/pf-assist.md"],
+  "author": {
+    "name": "UXD Team",
+    "url": "https://www.patternfly.org"
+  },
+  "repository": "https://github.com/rh-uxd/ai-helpers",
+  "license": "MIT",
+  "keywords": ["patternfly"]
+}

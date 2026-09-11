@@ -2,15 +2,14 @@
   "name": "patternfly",
   "description": "Everything you need for PatternFly development — React components, design guidance, migration, and MCP docs",
   "dependencies": [
+    "pf-assist",
     "pf-react",
     "pf-design-guide",
     "pf-design-audit",
+    "pf-a11y",
     "pf-migration",
     "pf-code-review",
     "pf-mcp"
-  ],
-  "agents": [
-    "./agents/pf-assist/pf-assist.md"
   ],
   "author": {
     "name": "UXD Team",
@@ -18,7 +17,5 @@
   },
   "repository": "https://github.com/rh-uxd/ai-helpers",
   "license": "MIT",
-  "keywords": [
-    "patternfly"
-  ]
+  "keywords": ["patternfly"]
 }

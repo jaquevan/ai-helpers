@@ -1,0 +1,4 @@
+prompt: >-
+  I need to build a quick prototype for a new onboarding flow. The Jira ticket
+  is UXDOPS-1234 and it has acceptance criteria for a 3-step wizard with
+  progressive disclosure. Can you help me get started?

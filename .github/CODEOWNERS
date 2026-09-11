@@ -1,5 +1,8 @@
-# All plugin content
-plugins/                            @rh-uxd/ai-helpers-maintainers
+# PatternFly plugins
+plugins/patternfly/                 @jpuzz0 @nicolethoen @dlabaj
+
+# UXD plugins
+plugins/uxd-*/                      @jpuzz0 @maryctucker @andybraren
 
 # Shared infrastructure
 .claude-plugin/marketplace.json     @rh-uxd/ai-helpers-maintainers

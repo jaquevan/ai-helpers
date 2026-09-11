@@ -1,0 +1,7 @@
+prompt: >-
+  Using the uxd-design-handoff skill: create a handoff spec for the search
+  results page described in fixture-design.md in this case directory.
+  The design rationale section includes findings from usability testing and
+  A/B testing -- make sure acceptance criteria trace back to those decisions.
+  Do not call network or MCP.
+fixture: fixture-design.md

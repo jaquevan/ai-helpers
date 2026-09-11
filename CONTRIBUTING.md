@@ -247,6 +247,7 @@ See [FAQ.md](FAQ.md) for answers to common questions — especially if you're a 
 - Test your skills locally before submitting
 - Keep documentation concise and AI-friendly
 - Don't hardcode a `model:` in agent frontmatter — it forces all users onto one model, overriding their preference
+- Keep skills concise — shorter skills consume fewer tokens per invocation. Avoid unnecessary file reads, redundant instructions, and verbose output formatting.
 - Consumer-facing skills are expected to have an eval — see [CONTRIBUTING-SKILLS.md](CONTRIBUTING-SKILLS.md#evals) for details
 
 ## Code review

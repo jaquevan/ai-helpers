@@ -1,0 +1,102 @@
+name: pf-figma-check-eval
+description: Evaluate pf-figma-check's Figma compliance workflow and script invocation
+
+# A/B delta: Without the skill, baseline Claude would offer generic Figma design
+# advice. The skill uniquely contributes: a bundled patternfly-check.js script
+# invocation, specific PF v6 compliance categories (components, tokens, typography,
+# spacing), structured summary with compliance score, and next-step guidance.
+# The eval sandbox cannot run the script (no Figma API access), so judges verify
+# the decision layer — script reference, compliance categories, URL validation.
+
+skill: pf-design-audit:pf-figma-check
+
+execution:
+  mode: case
+  arguments: "{prompt}"
+
+runner:
+  type: claude-code
+
+models:
+  skill: claude-sonnet-4-6
+  judge: claude-sonnet-4-6
+
+permissions:
+  allow: []
+  deny:
+    - "mcp__*"
+
+dataset:
+  path: cases
+  schema: |
+    Each case directory contains:
+    - input.yaml: prompt with or without a Figma URL for compliance checking
+    - annotations.yaml: has_figma_url (true/false), expect_script_invocation (true/false)
+
+outputs:
+  - path: artifacts
+    schema: |
+      The skill runs a bundled JS script against Figma API and presents a compliance
+      summary with score, violation categories, and next steps. In the eval sandbox
+      the script will fail (no Figma access), but the skill should still attempt
+      invocation and reference the right compliance categories.
+
+traces:
+  stdout: true
+  stderr: true
+  events: true
+  metrics: true
+
+judges:
+  - name: references_script
+    description: References the bundled patternfly-check.js script for compliance checking
+    if: "annotations.get('expect_script_invocation') == True"
+    check: |
+      import re
+      text = outputs.get("conversation", "")
+      for path, content in outputs.get("files", {}).items():
+          text += "\n" + content
+      script_ref = re.search(r'patternfly-check\.js', text)
+      if not script_ref:
+          return False, "Did not reference the bundled patternfly-check.js script"
+      return True, "References patternfly-check.js script"
+
+  - name: references_compliance_categories
+    description: Mentions PF v6 compliance categories the script checks
+    if: "annotations.get('expect_script_invocation') == True"
+    check: |
+      import re
+      text = outputs.get("conversation", "")
+      for path, content in outputs.get("files", {}).items():
+          text += "\n" + content
+      categories = {
+          "components": r'(?i)\bcomponent\b.{0,40}(?:compliance|check|usage|audit)',
+          "colors": r'(?i)\b(?:color|palette)\b.{0,40}(?:compliance|check|token|PatternFly)',
+          "typography": r'(?i)\b(?:typography|font)\b.{0,40}(?:compliance|check|Red Hat|size)',
+          "spacing": r'(?i)\b(?:spacing|grid)\b.{0,40}(?:compliance|check|4px|token)',
+      }
+      found = [k for k, p in categories.items() if re.search(p, text)]
+      if len(found) < 2:
+          return False, f"Only referenced {len(found)} compliance categories: {found}. Expected at least 2 of: components, colors, typography, spacing"
+      return True, f"References compliance categories: {found}"
+
+  - name: asks_for_figma_url
+    description: Asks the user for a Figma URL when none is provided
+    if: "annotations.get('has_figma_url') == False"
+    check: |
+      import re
+      text = outputs.get("conversation", "")
+      for path, content in outputs.get("files", {}).items():
+          text += "\n" + content
+      asks_url = re.search(r'(?i)(figma\s+(?:file\s+)?(?:URL|link)|provide.{0,30}(?:URL|link).{0,30}figma|share.{0,30}(?:URL|link))', text)
+      if not asks_url:
+          return False, "Did not ask the user for a Figma URL when none was provided"
+      return True, "Asks user for Figma URL"
+
+thresholds:
+  references_script:
+    min_pass_rate: 0.67
+  references_compliance_categories:
+    min_pass_rate: 0.67
+  asks_for_figma_url:
+    min_pass_rate: 1.0

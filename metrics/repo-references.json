@@ -1,0 +1,66 @@
+[
+  {
+    "name": "muditmittal/dbui",
+    "url": "https://github.com/muditmittal/dbui",
+    "description": "DBUI — Databricks UI Kit. DuBois design language on shadcn components.",
+    "files": [
+      "research/ux-standards/extracts/patternfly/AI--marketplace--marketplace.md",
+      "research/ux-standards/extracts/patternfly/AI--rapid-prototyping--enhancing-existing-projects.md",
+      "research/ux-standards/extracts/patternfly/AI--rapid-prototyping--new-prototypes.md"
+    ]
+  },
+  {
+    "name": "opendatahub-io/agentic-ci",
+    "url": "https://github.com/opendatahub-io/agentic-ci",
+    "description": "Run AI coding agents in sandboxed CI environments",
+    "files": [
+      "tests/test_plugins.py"
+    ]
+  },
+  {
+    "name": "opendatahub-io/skills-registry",
+    "url": "https://github.com/opendatahub-io/skills-registry",
+    "description": "",
+    "files": [
+      "CONTRIBUTING.md",
+      ".agents/plugins/marketplace.json",
+      ".claude-plugin/marketplace.json",
+      "registry.yaml"
+    ]
+  },
+  {
+    "name": "openshift-eng/ai-helpers",
+    "url": "https://github.com/openshift-eng/ai-helpers",
+    "description": "Developer productivity tools for Claude Code & other AI assistants",
+    "files": [
+      ".claude-plugin/marketplace.json"
+    ]
+  },
+  {
+    "name": "patternfly/patternfly-mcp",
+    "url": "https://github.com/patternfly/patternfly-mcp",
+    "description": "An MCP server that provides access to PatternFly rules and documentation.",
+    "files": [
+      "src/docs.json",
+      "src/__tests__/__snapshots__/collection.patternFlyDocs.test.ts.snap"
+    ]
+  },
+  {
+    "name": "patternfly/patternfly-org",
+    "url": "https://github.com/patternfly/patternfly-org",
+    "description": "Home of patternfly.org",
+    "files": [
+      "packages/documentation-site/patternfly-docs/content/AI/marketplace/marketplace.md",
+      "packages/documentation-site/patternfly-docs/content/AI/rapid-prototyping/new-prototypes.md",
+      "packages/documentation-site/patternfly-docs/content/AI/rapid-prototyping/enhancing-existing-projects.md"
+    ]
+  },
+  {
+    "name": "sudosubin/nix-skills",
+    "url": "https://github.com/sudosubin/nix-skills",
+    "description": "Nixpkgs overlay for AI agent skills from skills.sh and skillsdirectory.com",
+    "files": [
+      "data/source-skillsdirectory-com.json"
+    ]
+  }
+]

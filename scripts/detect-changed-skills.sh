@@ -11,6 +11,7 @@ set -euo pipefail
 # Usage:
 #   In GitHub Actions:  scripts/detect-changed-skills.sh [--skill <name>]
 #   Locally:            scripts/detect-changed-skills.sh --base main
+#   --base accepts a branch name ("main") or a remote ref ("origin/main").
 
 if ((BASH_VERSINFO[0] < 4)); then
   echo "Error: bash 4+ required (declare -A). macOS ships bash 3 — use 'brew install bash'." >&2
@@ -53,12 +54,21 @@ if [[ -n "$SKILL_NAME" ]]; then
   exit 0
 fi
 
+# --base accepts a branch name ("main") or a remote ref ("origin/main").
+DIFF_BASE="${BASE_BRANCH:-main}"
+if [[ "$DIFF_BASE" != origin/* ]]; then
+  DIFF_BASE="origin/${DIFF_BASE}"
+fi
+
 if [[ -n "${GITHUB_EVENT_NAME:-}" && "$GITHUB_EVENT_NAME" == "pull_request" ]]; then
-  CHANGED_FILES=$(gh pr diff "$PR_NUMBER" --name-only 2>/dev/null || git diff --name-only "origin/${BASE_BRANCH:-main}...HEAD")
+  if ! CHANGED_FILES=$(gh pr diff "$PR_NUMBER" --name-only); then
+    echo "gh pr diff failed; falling back to git diff ${DIFF_BASE}...HEAD" >&2
+    CHANGED_FILES=$(git diff --name-only "${DIFF_BASE}...HEAD")
+  fi
 elif [[ -n "$BASE_BRANCH" ]]; then
-  CHANGED_FILES=$(git diff --name-only "${BASE_BRANCH}...HEAD")
+  CHANGED_FILES=$(git diff --name-only "${DIFF_BASE}...HEAD")
 else
-  CHANGED_FILES=$(git diff --name-only "origin/main...HEAD")
+  CHANGED_FILES=$(git diff --name-only "${DIFF_BASE}...HEAD")
 fi
 
 declare -A SKILLS_SEEN

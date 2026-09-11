@@ -1,0 +1,2 @@
+prompt: |
+  I have a custom EmptyState component in my project at src/components/EmptyView.tsx that I committed last week. It renders a centered icon, title, and action button — pretty similar to PatternFly's EmptyState. Should I replace it with the PatternFly version?

@@ -5,9 +5,24 @@
   },
   "plugins": [
     {
+      "name": "pf-assist",
+      "source": "./plugins/pf-assist",
+      "description": "PatternFly skill routing — maps project signals to the right PF sub-skills"
+    },
+    {
+      "name": "uxd-assist",
+      "source": "./plugins/uxd-assist",
+      "description": "UXD skill routing — discover the right skills for research, design review, and prototyping workflows"
+    },
+    {
       "name": "uxd-workshop",
       "source": "./plugins/uxd-workshop",
       "description": "UXD team tools — prototyping, research, design review"
+    },
+    {
+      "name": "uxd-prototype",
+      "source": "./plugins/uxd-prototype",
+      "description": "Create UX prototypes from Jira tickets, Figma designs, or feature descriptions"
     },
     {
       "name": "pf-react",
@@ -23,6 +38,11 @@
       "name": "pf-design-audit",
       "source": "./plugins/patternfly/pf-design-audit",
       "description": "Design audit — validate designs against PatternFly standards"
+    },
+    {
+      "name": "pf-a11y",
+      "source": "./plugins/patternfly/pf-a11y",
+      "description": "Accessibility auditing — WCAG 2.2 compliance, ARIA validation, PF-specific a11y patterns"
     },
     {
       "name": "pf-migration",

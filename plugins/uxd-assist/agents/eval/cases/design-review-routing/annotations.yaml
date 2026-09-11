@@ -1,0 +1,4 @@
+expected_routing:
+  - uxd-figma-read
+  - uxd-evaluate-design-heuristics
+expected_category: design review

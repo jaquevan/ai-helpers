@@ -1,0 +1,6 @@
+prompt: >-
+  Using the uxd-discovery skill: create a discovery brief for the following
+  feature — "We need a way for users to save and share custom dashboard layouts.
+  Right now every user sees the same default dashboard, and power users have
+  asked for the ability to rearrange widgets, save their layout, and share it
+  with teammates." Do not call network or MCP.

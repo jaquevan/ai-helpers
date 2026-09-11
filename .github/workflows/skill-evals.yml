@@ -24,6 +24,7 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: read
+      pull-requests: read
     outputs:
       skills: ${{ steps.detect.outputs.skills }}
       has_evals: ${{ steps.detect.outputs.has_evals }}

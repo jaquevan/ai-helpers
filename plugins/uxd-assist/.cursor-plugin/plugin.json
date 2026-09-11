@@ -1,0 +1,10 @@
+{
+  "name": "uxd-assist",
+  "description": "UXD skill routing — discover the right skills for research, design review, and prototyping workflows",
+  "agents": ["./agents/uxd-assist.md"],
+  "author": {
+    "name": "UXD Team"
+  },
+  "repository": "https://github.com/rh-uxd/ai-helpers",
+  "license": "Apache-2.0"
+}

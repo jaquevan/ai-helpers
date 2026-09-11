@@ -1,0 +1,336 @@
+[
+  {
+    "name": "Cerdore/gdb-cli",
+    "url": "https://github.com/Cerdore/gdb-cli",
+    "description": "A GDB debugging tool designed for AI Agents (Claude Code, etc.)",
+    "files": [
+      ".playwright-cli/page-2026-03-21T17-08-13-204Z.yml",
+      ".playwright-cli/page-2026-03-21T17-06-48-359Z.yml"
+    ]
+  },
+  {
+    "name": "CryptoRodeo/calunga-ui-demo",
+    "url": "https://github.com/CryptoRodeo/calunga-ui-demo",
+    "description": "",
+    "files": [
+      ".mcp.json"
+    ]
+  },
+  {
+    "name": "Gkrumbach07/openshell-dashboard",
+    "url": "https://github.com/Gkrumbach07/openshell-dashboard",
+    "description": "Standalone upstream web admin UI for OpenShell",
+    "files": [
+      ".claude/settings.json"
+    ]
+  },
+  {
+    "name": "GoldenPassport/ds-patternfly",
+    "url": "https://github.com/GoldenPassport/ds-patternfly",
+    "description": "Brandable React design system built on PatternFly 6, for BPM/automation projects.",
+    "files": [
+      "packages/ds-patternfly-mcp/README.md",
+      "packages/ds-patternfly-mcp/package.json",
+      "README.md",
+      "packages/ds-patternfly/src/examples/README.md",
+      "packages/ds-patternfly/src/stories/ai/MCP.stories.tsx",
+      "package.json",
+      "pnpm-lock.yaml",
+      ".github/workflows/publish-mcp.yml"
+    ]
+  },
+  {
+    "name": "Hyperkid123/nxtcm-ui-agent",
+    "url": "https://github.com/Hyperkid123/nxtcm-ui-agent",
+    "description": "",
+    "files": [
+      "instance/ui-config/agent/instance.yaml"
+    ]
+  },
+  {
+    "name": "Joey629/Snappi",
+    "url": "https://github.com/Joey629/Snappi",
+    "description": "",
+    "files": [
+      "electron/patternfly-mcp.mjs",
+      "electron/main.js"
+    ]
+  },
+  {
+    "name": "OpenShift-Fleet/rehor",
+    "url": "https://github.com/OpenShift-Fleet/rehor",
+    "description": "Rehor",
+    "files": [
+      "presets/envs/patternfly-mcp/install.sh",
+      "presets/envs/patternfly-mcp/manifest.yaml",
+      "docs/presets/envs.md",
+      "docs/presets/README.md",
+      "presets/install-envs.sh",
+      "presets/workflows/onboarding/skills/detect-tech-stack/SKILL.md",
+      "docs/onboarding-new-instance.md",
+      "presets/workflows/onboarding/skills/detect-tech-stack/detect_tech_stack.py",
+      "presets/workflows/onboarding/skills/detect-tech-stack/tests/test_detect_tech_stack.py"
+    ]
+  },
+  {
+    "name": "RedHat-UX/next-gen-ui-agent",
+    "url": "https://github.com/RedHat-UX/next-gen-ui-agent",
+    "description": "The goal of this AI agent is to generate personalised and rich UI components based on the user prompt, chat history and backend data provided by other agents in your AI assistant.",
+    "files": [
+      "libs/next_gen_ui_mcp/BUILD",
+      ".cursor/plans/mcp_modules_refactor_59aefb76.plan.md",
+      "libs/next_gen_ui_mcp/README.md",
+      "libs/next_gen_ui_mcp_apps_ui_patternfly/README.md",
+      "libs/next_gen_ui_mcp_apps_ui_patternfly/package.json"
+    ]
+  },
+  {
+    "name": "RedHatInsights/consoledot-integrations-bot",
+    "url": "https://github.com/RedHatInsights/consoledot-integrations-bot",
+    "description": "Rehor Bot for the ConsoleDot Integrations team. ",
+    "files": [
+      "instance/integrations-config/agent/instance.yaml"
+    ]
+  },
+  {
+    "name": "RedHatInsights/curiosity-frontend",
+    "url": "https://github.com/RedHatInsights/curiosity-frontend",
+    "description": "A subscription reporting frontend",
+    "files": [
+      "guidelines/README.md",
+      "CONTRIBUTING.md",
+      "docs/development.md"
+    ]
+  },
+  {
+    "name": "RedHatInsights/hcc-framework-agent-dev",
+    "url": "https://github.com/RedHatInsights/hcc-framework-agent-dev",
+    "description": "Custom bot runner instance built on platform-frontend-ai-dev bot for framework development",
+    "files": [
+      "instance/framework-config/agent/instance.yaml"
+    ]
+  },
+  {
+    "name": "RedHatInsights/hcc-ui-agent-dev",
+    "url": "https://github.com/RedHatInsights/hcc-ui-agent-dev",
+    "description": "",
+    "files": [
+      "instance/ui-config/agent/instance.yaml"
+    ]
+  },
+  {
+    "name": "RedHatInsights/nxtcm-components",
+    "url": "https://github.com/RedHatInsights/nxtcm-components",
+    "description": "Shared React component library for Red Hat Insights ACM and OCM projects built with PatternFly",
+    "files": [
+      ".agents/skills/patternfly/SKILL.md"
+    ]
+  },
+  {
+    "name": "RedHatInsights/nxtcm-ui-agent",
+    "url": "https://github.com/RedHatInsights/nxtcm-ui-agent",
+    "description": "",
+    "files": [
+      "instance/ui-config/agent/instance.yaml"
+    ]
+  },
+  {
+    "name": "RedHatInsights/obsint-processing-ai-bot-instance",
+    "url": "https://github.com/RedHatInsights/obsint-processing-ai-bot-instance",
+    "description": "",
+    "files": [
+      "instance/developer-bot/agent/instance.yaml"
+    ]
+  },
+  {
+    "name": "RedHatInsights/test-rehor-onboarding-agent-dev",
+    "url": "https://github.com/RedHatInsights/test-rehor-onboarding-agent-dev",
+    "description": "Temporary repository for use with testing the Rehor onboarding agent",
+    "files": [
+      "instance/hcc-framework-config/agent/instance.yaml"
+    ]
+  },
+  {
+    "name": "RedHatInsights/uhcPortal-agent-dev",
+    "url": "https://github.com/RedHatInsights/uhcPortal-agent-dev",
+    "description": "",
+    "files": [
+      "instance/ocmui-config/agent/CLAUDE.md",
+      "instance/ocmui-config/agent/instance.yaml"
+    ]
+  },
+  {
+    "name": "brsbl/agent-mart",
+    "url": "https://github.com/brsbl/agent-mart",
+    "description": "A browsable directory of open source Claude Code plugins",
+    "files": [
+      "web/public/data/authors/patternfly.json"
+    ]
+  },
+  {
+    "name": "carlosthe19916/tsd-ui-agent",
+    "url": "https://github.com/carlosthe19916/tsd-ui-agent",
+    "description": "Task manager that automates task code resolution",
+    "files": [
+      ".mcp.json"
+    ]
+  },
+  {
+    "name": "carlosthe19916/tsd-ui-tower",
+    "url": "https://github.com/carlosthe19916/tsd-ui-tower",
+    "description": "",
+    "files": [
+      ".mcp.json"
+    ]
+  },
+  {
+    "name": "cdcabrera/t1",
+    "url": "https://github.com/cdcabrera/t1",
+    "description": "Build testing...",
+    "files": [
+      "scripts/workflow.preCheck.js"
+    ]
+  },
+  {
+    "name": "fleetshift/fleetshift-bot-instance",
+    "url": "https://github.com/fleetshift/fleetshift-bot-instance",
+    "description": "",
+    "files": [
+      "instance/fleetshift-config/agent/instance.yaml"
+    ]
+  },
+  {
+    "name": "guacsec/trustify-ui",
+    "url": "https://github.com/guacsec/trustify-ui",
+    "description": "Trustify UI component.",
+    "files": [
+      ".mcp.json"
+    ]
+  },
+  {
+    "name": "jeff-phillips-18/patternfly-mcp",
+    "url": "https://github.com/jeff-phillips-18/patternfly-mcp",
+    "description": "",
+    "files": [
+      "README.md",
+      "package.json",
+      "src/__tests__/__snapshots__/options.test.ts.snap"
+    ]
+  },
+  {
+    "name": "konflux-ci/konflux-ci.github.io",
+    "url": "https://github.com/konflux-ci/konflux-ci.github.io",
+    "description": "",
+    "files": [
+      ".mcp.json"
+    ]
+  },
+  {
+    "name": "konflux-ci/konflux-ui",
+    "url": "https://github.com/konflux-ci/konflux-ui",
+    "description": "",
+    "files": [
+      ".mcp.json"
+    ]
+  },
+  {
+    "name": "muditmittal/dbui",
+    "url": "https://github.com/muditmittal/dbui",
+    "description": "DBUI — Databricks UI Kit. DuBois design language on shadcn components.",
+    "files": [
+      "research/ux-standards/extracts/patternfly/AI--patternfly-mcp.md",
+      "research/ux-standards/extracts/patternfly/AI--marketplace--marketplace.md",
+      "research/ux-standards/extracts/patternfly/AI--ai.md",
+      "research/ux-standards/extracts/patternfly/releases--release-highlights.md"
+    ]
+  },
+  {
+    "name": "opendatahub-io/odh-dashboard",
+    "url": "https://github.com/opendatahub-io/odh-dashboard",
+    "description": "Dashboard for RedHat OpenShift AI / ODH ",
+    "files": [
+      ".claude/skills/prototype-spec/SKILL.md"
+    ]
+  },
+  {
+    "name": "patternfly/patternfly-org",
+    "url": "https://github.com/patternfly/patternfly-org",
+    "description": "Home of patternfly.org",
+    "files": [
+      "packages/documentation-site/patternfly-docs/content/AI/patternfly-mcp.md",
+      "packages/documentation-site/patternfly-docs/content/AI/marketplace/marketplace.md",
+      "packages/documentation-site/patternfly-docs/content/AI/ai.md",
+      "packages/documentation-site/patternfly-docs/content/releases/release-highlights.md"
+    ]
+  },
+  {
+    "name": "patternfly/patternfly-react-seed",
+    "url": "https://github.com/patternfly/patternfly-react-seed",
+    "description": "A PatternFly seed for React web applications ",
+    "files": [
+      "AGENTS.md"
+    ]
+  },
+  {
+    "name": "patternfly/react-console",
+    "url": "https://github.com/patternfly/react-console",
+    "description": "This package provides VncConsole, SerialConsole and DesktopViewer React components",
+    "files": [
+      "BOOKMARKS.md"
+    ]
+  },
+  {
+    "name": "patternfly/react-log-viewer",
+    "url": "https://github.com/patternfly/react-log-viewer",
+    "description": "",
+    "files": [
+      "BOOKMARKS.md"
+    ]
+  },
+  {
+    "name": "redhat-cop/babylon",
+    "url": "https://github.com/redhat-cop/babylon",
+    "description": "The Babylon Project",
+    "files": [
+      "AGENTS.md"
+    ]
+  },
+  {
+    "name": "rh-uxd/github-jira-sync",
+    "url": "https://github.com/rh-uxd/github-jira-sync",
+    "description": "Custom built bidirectional sync of Github issues & Jira issues.",
+    "files": [
+      "README.md",
+      "src/helpers.js"
+    ]
+  },
+  {
+    "name": "syntara-orchestration/syntara",
+    "url": "https://github.com/syntara-orchestration/syntara",
+    "description": "",
+    "files": [
+      ".mcp.json"
+    ]
+  },
+  {
+    "name": "tanvithsreddy-del/safemcp",
+    "url": "https://github.com/tanvithsreddy-del/safemcp",
+    "description": "",
+    "files": [
+      "public/sitemap-2.xml"
+    ]
+  },
+  {
+    "name": "tomevault-io/tomes",
+    "url": "https://github.com/tomevault-io/tomes",
+    "description": "Complete Tome bundles (config + skills + manifest), graded against the public Tome Standard and kept current as the models change by TomeVault",
+    "files": [
+      "redhat-cop--babylon/formats/AGENTS.md",
+      "redhat-cop--babylon/formats/GEMINI.md",
+      "redhat-cop--babylon/formats/CLAUDE.md",
+      "redhat-cop--babylon/formats/project-config.md",
+      "redhat-cop--babylon/formats/copilot-instructions.md",
+      "redhat-cop--babylon/formats/project-config.mdc"
+    ]
+  }
+]

@@ -1,0 +1,5 @@
+# Guidance for the AskUserQuestion auto-answerer (eval harness).
+instruction: >
+  If asked what design to create a handoff spec for, say you do not have
+  one yet. Do not provide a design description -- the point of this test
+  is to verify the skill asks for input before proceeding.

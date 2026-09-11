@@ -2,11 +2,12 @@
 
 [![License](https://img.shields.io/github/license/rh-uxd/ai-helpers)](./LICENSE)
 [![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen.svg)](./CONTRIBUTING.md)
-[![Plugins](https://img.shields.io/badge/plugins-8-blueviolet)](./PLUGINS.md)
-[![Skills](https://img.shields.io/badge/skills-46-blue)](./PLUGINS.md)
+[![Plugins](https://img.shields.io/badge/plugins-12-blueviolet)](./PLUGINS.md)
+[![Skills](https://img.shields.io/badge/skills-53-blue)](./PLUGINS.md)
+[![Agents](https://img.shields.io/badge/agents-7-teal)](./PLUGINS.md)
 [![skillsaw grade](https://img.shields.io/endpoint?url=https%3A%2F%2Fraw.githubusercontent.com%2Frh-uxd%2Fai-helpers%2Fmain%2F.skillsaw-badge.json)](https://github.com/rh-uxd/ai-helpers/blob/main/.skillsaw-baseline.json)
 
-AI skills for PatternFly and UXD teams — component development, design, accessibility, and migration. Skills work in both **Claude Code** and **Cursor**; the `patternfly` meta-plugin is Claude Code-only.
+AI skills for PatternFly and UXD teams — component development, design, accessibility, and migration. Skills work in both **Claude Code** and **Cursor**; the `patternfly` meta-plugin is Claude Code-only. All consumer-facing skills include eval suites with discriminating judges.
 
 <p align="center">
   <img src="assets/install-plugins-terminal.gif" alt="Browsing and installing plugins interactively in Claude Code" width="600">
@@ -77,7 +78,11 @@ For MCP server access (component docs and design tokens), also install `pf-mcp`.
 <table>
 <tr><th>Plugin</th><th>Description</th></tr>
 <tr><td nowrap><b>patternfly</b></td><td>Everything you need for PatternFly development — React components, design guidance, migration, and MCP docs</td></tr>
+<tr><td nowrap><b>pf-assist</b></td><td>PatternFly skill routing — maps project signals to the right PF sub-skills for compliance, migration, and design audits</td></tr>
+<tr><td nowrap><b>uxd-assist</b></td><td>UXD skill routing — discover the right skills for research, design review, and prototyping workflows</td></tr>
+<tr><td nowrap><b>uxd-prototype</b></td><td>Create UX prototypes from Jira tickets, Figma designs, or feature descriptions</td></tr>
 <tr><td nowrap><b>uxd-workshop</b></td><td>UXD team tools and skill incubator — prototyping, research, design review, team workflows</td></tr>
+<tr><td nowrap><b>pf-a11y</b></td><td>Accessibility auditing, reporting, and documentation</td></tr>
 <tr><td nowrap><b>pf-code-review</b></td><td>Code review and quality — adversarial review, security patterns</td></tr>
 <tr><td nowrap><b>pf-design-audit</b></td><td>Design audit — validate existing code and designs against PatternFly standards</td></tr>
 <tr><td nowrap><b>pf-design-guide</b></td><td>Design guide — component selection, interaction patterns, AI experience patterns, Figma design creation</td></tr>
@@ -101,7 +106,10 @@ See [PLUGINS.md](PLUGINS.md) for the full list of skills, agents, and usage deta
 ├── .claude-plugin/         # Claude Code marketplace config
 ├── .cursor-plugin/         # Cursor marketplace config
 ├── plugins/
-│   ├── uxd-workshop/       # UXD team tools (skills + uxd-assist agent)
+│   ├── uxd-prototype/      # Create UX prototypes from Jira, Figma, or feature descriptions
+│   │   └── skills/
+│   │       └── uxd-prototype-create/  # Create or refine a prototype from a ticket, design, or idea
+│   ├── uxd-workshop/       # UXD incubator — research, design review, remaining prototype skills + uxd-assist
 │   └── patternfly/         # PatternFly meta-plugin + sub-plugins
 │       ├── agents/            # pf-assist routing agent
 │       ├── pf-code-review/    # Code review and quality — security patterns
@@ -131,6 +139,10 @@ Every pull request runs through automated quality gates:
 | Gate | What it checks |
 |------|---------------|
 | **Validate** | Manifest consistency, generated docs freshness, skill frontmatter integrity |
+| **Skillsaw** | Skill content quality — structure, clarity, completeness |
+| **Eval lint** | Eval config correctness — schema validation, judge quality |
+| **Eval required** | Consumer-facing skills must include an eval suite |
+| **AI Guardian** | Security scanning for prompt injection, unsafe patterns |
 | **Secret scan** | Internal URLs and potential credentials in tracked files |
 | **Link check** | Broken internal markdown links |
 | **Boundary check** | PF skills don't reference UXD internals and vice versa |

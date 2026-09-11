@@ -1,0 +1,100 @@
+name: pf-deploy-eval
+description: Evaluate pf-deploy's use of pfcli deploy and prerequisite checking
+
+# A/B delta: Without the skill, baseline Claude would suggest manual gh-pages
+# setup, GitHub Actions, or npm gh-pages package. The skill uniquely contributes:
+# pfcli deploy as the primary mechanism (not manual alternatives), prerequisite
+# verification (pfcli, gh auth, git remote), correct flag usage (--no-build, -d),
+# and troubleshooting guidance specific to pfcli.
+
+skill: pf-react:pf-deploy
+
+execution:
+  mode: case
+  arguments: "{prompt}"
+
+runner:
+  type: claude-code
+
+models:
+  skill: claude-sonnet-4-6
+  judge: claude-sonnet-4-6
+
+permissions:
+  allow: []
+  deny:
+    - "mcp__*"
+
+dataset:
+  path: cases
+  schema: |
+    Each case directory contains:
+    - input.yaml: prompt requesting a GitHub Pages deployment
+    - annotations.yaml: expect_pfcli (true/false), has_prerequisites (true/false), expect_flags (true/false)
+
+outputs:
+  - path: artifacts
+    schema: |
+      The skill guides the user through deploying via pfcli deploy, checking
+      prerequisites, and sharing the resulting GitHub Pages URL.
+
+traces:
+  stdout: true
+  stderr: true
+  events: true
+  metrics: true
+
+judges:
+  - name: uses_pfcli_deploy
+    description: Uses pfcli deploy as the deployment mechanism
+    if: "annotations.get('expect_pfcli') == True"
+    check: |
+      import re
+      text = outputs.get("conversation", "")
+      for path, content in outputs.get("files", {}).items():
+          text += "\n" + content
+      pfcli = re.search(r'pfcli\s+deploy', text)
+      if not pfcli:
+          return False, "Did not use pfcli deploy — may have suggested manual gh-pages or GitHub Actions instead"
+      return True, "Uses pfcli deploy as deployment mechanism"
+
+  - name: checks_prerequisites
+    description: Verifies prerequisites before deploying
+    if: "annotations.get('has_prerequisites') == False"
+    check: |
+      import re
+      text = outputs.get("conversation", "")
+      for path, content in outputs.get("files", {}).items():
+          text += "\n" + content
+      checks = {
+          "pfcli": r'(?i)(pfcli.{0,20}(install|version|missing|not found)|install.{0,30}pfcli|patternfly.cli)',
+          "gh_auth": r'(?i)(gh\s+auth|github\s+cli.{0,20}(auth|login|status))',
+      }
+      found = [k for k, p in checks.items() if re.search(p, text)]
+      if not found:
+          return False, "Did not check prerequisites (pfcli installation, gh auth) when user indicated they may be missing"
+      return True, f"Checks prerequisites: {found}"
+
+  - name: uses_correct_flags
+    description: Uses --no-build and -d flags for prebuilt output
+    if: "annotations.get('expect_flags') == True"
+    check: |
+      import re
+      text = outputs.get("conversation", "")
+      for path, content in outputs.get("files", {}).items():
+          text += "\n" + content
+      no_build = re.search(r'--no-build', text)
+      dist_dir = re.search(r'(?:-d|--dist-dir)\s+build', text)
+      if not no_build:
+          return False, "Did not use --no-build flag for prebuilt output"
+      if not dist_dir:
+          return False, "Did not use -d build flag to specify the build/ directory"
+      return True, "Uses --no-build and -d build flags correctly"
+
+thresholds:
+  uses_pfcli_deploy:
+    min_pass_rate: 1.0
+  checks_prerequisites:
+    min_pass_rate: 0.67
+  uses_correct_flags:
+    min_pass_rate: 1.0

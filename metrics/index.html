@@ -1,0 +1,466 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>UXD AI — Adoption Dashboard</title>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.5.1" integrity="sha384-jb8JQMbMoBUzgWatfe6COACi2ljcDdZQ2OxczGA3bGNeWe+6DChMTBJemed7ZnvJ" crossorigin="anonymous"></script>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    :root, [data-theme="dark"] {
+      --bg: #0d1117; --surface: #161b22; --border: #30363d;
+      --text: #e6edf3; --text-muted: #8b949e; --text-dim: #484f58;
+      --blue: #58a6ff; --green: #3fb950; --purple: #bc8cff;
+      --orange: #d29922; --red: #f85149; --cyan: #76d9e6;
+      --grid: #21262d; --code-bg: #0d1117; --pending-border: rgba(255,255,255,0.12);
+    }
+    [data-theme="light"] {
+      --bg: #ffffff; --surface: #f6f8fa; --border: #d0d7de;
+      --text: #1f2328; --text-muted: #656d76; --text-dim: #8b949e;
+      --blue: #0969da; --green: #1a7f37; --purple: #8250df;
+      --orange: #9a6700; --red: #cf222e; --cyan: #0a7d8c;
+      --grid: #eaeef2; --code-bg: #eef1f5; --pending-border: rgba(0,0,0,0.15);
+    }
+    [data-theme="sunset"] {
+      --bg: #1c1410; --surface: #261e16; --border: #3d3226;
+      --text: #e8dcc8; --text-muted: #a89880; --text-dim: #6d5e4a;
+      --blue: #e8a849; --green: #8fb86a; --purple: #d4899e;
+      --orange: #cc7a3a; --red: #d4735e; --cyan: #c9a84c;
+      --grid: #332a20; --code-bg: #1c1410; --pending-border: rgba(200,160,100,0.2);
+    }
+    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: var(--bg); color: var(--text); padding: 32px; max-width: 1200px; margin: 0 auto; transition: background 0.3s, color 0.3s; }
+    h1 { font-size: 1.5rem; font-weight: 600; }
+    .header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 28px; }
+    .theme-toggle { background: var(--surface); border: 1px solid var(--border); border-radius: 20px; padding: 6px 14px; color: var(--text-muted); font-size: 0.75rem; cursor: pointer; transition: border-color 0.15s, background 0.3s; display: flex; align-items: center; gap: 6px; line-height: 1; }
+    .theme-toggle:hover { border-color: var(--blue); }
+    .theme-dot { width: 8px; height: 8px; border-radius: 50%; display: inline-block; }
+    .section-label { font-size: 0.7rem; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.1em; margin-bottom: 10px; font-weight: 600; }
+    .stats { display: flex; gap: 12px; flex-wrap: wrap; margin-bottom: 28px; }
+    .stat { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 14px 20px; min-width: 120px; flex: 1; transition: background 0.3s, border-color 0.3s; }
+    .stat[style*="cursor"]:hover { border-color: var(--blue); }
+    .stat-value { font-size: 1.5rem; font-weight: 700; }
+    .stat-label { font-size: 0.7rem; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.05em; margin-top: 2px; }
+    .stat-hint { font-size: 0.65rem; color: var(--text-dim); margin-top: 4px; }
+    .stat-subtitle { font-size: 0.65rem; color: var(--text-muted); margin-top: 4px; }
+    .stat-delta { font-size: 0.7rem; margin-top: 4px; }
+    .stat-delta.positive { color: var(--green); }
+    .stat-delta.negative { color: var(--red); }
+    .stat-delta.neutral { color: var(--text-dim); }
+    .charts { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 28px; }
+    .chart-card { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 20px; transition: background 0.3s, border-color 0.3s; }
+    .chart-card h2 { font-size: 0.8rem; color: var(--text-muted); margin-bottom: 12px; text-transform: uppercase; letter-spacing: 0.05em; font-weight: 600; }
+    .chart-card.full-width { grid-column: 1 / -1; }
+    canvas { width: 100% !important; }
+    .footer { color: var(--text-dim); font-size: 0.75rem; text-align: center; margin-top: 28px; }
+    .public-link { display: inline-block; margin-top: 8px; font-size: 0.75rem; color: var(--blue); text-decoration: none; }
+    .public-link:hover { text-decoration: underline; }
+    .empty-state { text-align: center; padding: 80px 24px; color: var(--text-muted); }
+    .empty-state h2 { margin-bottom: 8px; color: var(--text); }
+
+    .refs-section a { color: var(--blue); text-decoration: none; }
+    .refs-section a:hover { text-decoration: underline; }
+    .refs-section .empty-hint { color: var(--text-muted); font-size: 0.75rem; }
+    .refs-summary { font-size: 0.8rem; color: var(--text-muted); margin-bottom: 12px; }
+    .refs-summary strong { color: var(--text); }
+    .refs-table { width: 100%; border-collapse: collapse; }
+    .refs-table td { padding: 7px 0; font-size: 0.8rem; color: var(--text-muted); vertical-align: middle; border-bottom: 1px solid var(--border); }
+    .refs-table tr:last-child td { border-bottom: none; }
+    .refs-table td:first-child { font-weight: 500; white-space: nowrap; padding-right: 16px; }
+    .refs-table td:last-child { white-space: nowrap; text-align: right; padding-left: 16px; }
+    .refs-table a { color: var(--blue); text-decoration: none; }
+    .refs-table a:hover { text-decoration: underline; }
+    .surface-pill { font-size: 0.55rem; padding: 2px 6px; border-radius: 8px; font-weight: 700; letter-spacing: 0.04em; display: inline-block; margin-left: 3px; }
+    .surface-pill:first-child { margin-left: 0; }
+    .surface-pill.m { background: rgba(88,166,255,0.15); color: var(--blue); }
+    .surface-pill.s { background: rgba(118,217,230,0.15); color: var(--cyan); }
+    .refs-pending { font-size: 0.8rem; color: var(--text-muted); margin-top: 10px; padding-top: 10px; border-top: 1px dashed var(--pending-border); }
+    .refs-pending a { color: var(--blue); text-decoration: none; }
+    .refs-pending a:hover { text-decoration: underline; }
+    .refs-filter { display: flex; gap: 6px; margin-bottom: 12px; flex-wrap: wrap; }
+    .filter-pill { font-size: 0.65rem; padding: 4px 10px; border-radius: 10px; font-weight: 700; letter-spacing: 0.04em; cursor: pointer; transition: opacity 0.15s, background 0.15s; border: 1px solid transparent; user-select: none; opacity: 0.4; }
+    .filter-pill:hover { opacity: 0.7; }
+    .filter-pill.active { opacity: 1; }
+    .filter-pill.m { background: rgba(88,166,255,0.15); color: var(--blue); border-color: transparent; }
+    .filter-pill.m.active { background: rgba(88,166,255,0.25); }
+    .filter-pill.s { background: rgba(118,217,230,0.15); color: var(--cyan); border-color: transparent; }
+    .filter-pill.s.active { background: rgba(118,217,230,0.25); }
+    @media (max-width: 768px) {
+      .stats { flex-direction: column; }
+      .charts { grid-template-columns: 1fr; }
+    }
+  </style>
+</head>
+<body>
+  <div class="header">
+    <h1>UXD AI Adoption Dashboard</h1>
+    <button class="theme-toggle" onclick="cycleTheme()" aria-label="Toggle theme"><span id="theme-dot" class="theme-dot"></span> <span id="theme-label"></span></button>
+  </div>
+
+  <div id="content" style="display:none">
+    <p class="section-label"><a href="https://github.com/rh-uxd/ai-helpers" target="_blank" rel="noopener noreferrer" style="color:var(--blue);text-decoration:none">rh-uxd/ai-helpers</a></p>
+    <div class="stats" id="marketplace-stats"></div>
+
+    <p class="section-label" id="mcp-label" style="display:none"><a href="https://github.com/patternfly/patternfly-mcp" target="_blank" rel="noopener noreferrer" style="color:var(--cyan);text-decoration:none">patternfly/patternfly-mcp</a></p>
+    <div id="mcp-stats" class="stats" style="display:none"></div>
+
+    <p class="section-label" id="traffic-label" style="display:none"></p>
+    <div id="traffic-sources" class="charts" style="margin-bottom:28px"></div>
+
+    <div id="refs-card" class="chart-card" style="margin-bottom:28px;border-top:3px solid var(--purple)">
+      <h2 style="font-size:1rem">Repo References</h2>
+      <div id="refs-detail" class="refs-section"></div>
+    </div>
+
+    <a class="public-link" href="https://uxd.pages.redhat.com/internal-ai-helpers/" target="_blank" rel="noopener noreferrer">Internal dashboard — includes GitLab activity (Red Hat VPN required) &rarr;</a>
+
+    <p class="footer">Updated <span id="last-updated"></span> · Data collected weekly by GitHub Actions</p>
+  </div>
+
+  <div id="empty-state" class="empty-state" style="display:none">
+    <h2>No data yet</h2>
+    <p>Metrics will appear after the first weekly collection run.</p>
+  </div>
+
+  <script>
+    const THEMES = [
+      { key: 'dark', label: 'Dark', dot: '#8b949e' },
+      { key: 'light', label: 'Light', dot: '#0969da' },
+      { key: 'sunset', label: 'Sunset', dot: '#e8a849' },
+    ];
+    function applyTheme(key) {
+      document.documentElement.setAttribute('data-theme', key);
+      const t = THEMES.find(t => t.key === key) || THEMES[0];
+      document.getElementById('theme-dot').style.backgroundColor = t.dot;
+      document.getElementById('theme-label').textContent = t.label;
+      try { localStorage.setItem('dashboard-theme', key); } catch {}
+    }
+    function cycleTheme() {
+      const current = document.documentElement.getAttribute('data-theme') || 'dark';
+      const idx = THEMES.findIndex(t => t.key === current);
+      applyTheme(THEMES[(idx + 1) % THEMES.length].key);
+    }
+    applyTheme((() => { try { return localStorage.getItem('dashboard-theme') || 'dark'; } catch { return 'dark'; } })());
+
+    const CSV_PATH = 'adoption-metrics.csv';
+    const MIN_TREND_POINTS = 3;
+
+    async function loadCSV() {
+      const resp = await fetch(CSV_PATH);
+      if (!resp.ok) return null;
+      const text = await resp.text();
+      const lines = text.trim().split('\n');
+      if (lines.length < 2) return null;
+      const headers = lines[0].split(',');
+      const rows = lines.slice(1).map(line => {
+        const vals = line.split(',');
+        const obj = {};
+        headers.forEach((h, i) => { obj[h.trim()] = vals[i]?.trim(); });
+        return obj;
+      });
+      return [...new Map(rows.map(r => [r.date, r])).values()];
+    }
+
+    function deltaText(current, previous) {
+      const diff = current - previous;
+      if (diff > 0) return { text: `+${diff} from last week`, cls: 'positive' };
+      if (diff < 0) return { text: `${diff} from last week`, cls: 'negative' };
+      return null;
+    }
+
+    function stat(container, m) {
+      const div = document.createElement('div');
+      div.className = 'stat';
+      if (m.link) {
+        div.style.cursor = 'pointer';
+        div.onclick = () => window.open(m.link, '_blank');
+      }
+      if (m.subtitle) { div.title = m.subtitle; div.style.flex = '1.5'; }
+      let deltaHtml = '';
+      if (m.showDelta) {
+        const d = deltaText(parseInt(m.value), parseInt(m.prev));
+        if (d) deltaHtml = `<div class="stat-delta ${d.cls}">${d.text}</div>`;
+      }
+      const indicator = m.link ? ' ↗' : '';
+      div.innerHTML = `
+        <div class="stat-value">${parseInt(m.value).toLocaleString()}</div>
+        <div class="stat-label">${m.label}${indicator}</div>
+        ${m.subtitle ? `<div class="stat-subtitle">${m.subtitle}</div>` : ''}
+        ${m.hint ? `<div class="stat-hint">${m.hint}</div>` : ''}
+        ${deltaHtml}`;
+      container.appendChild(div);
+    }
+
+    function themeColor(varName) { return getComputedStyle(document.documentElement).getPropertyValue(varName).trim(); }
+    function chartOpts(overrides) {
+      const muted = themeColor('--text-muted'), dim = themeColor('--text-dim'), grid = themeColor('--grid');
+      return Object.assign({
+        responsive: true,
+        plugins: {
+          legend: { position: 'bottom', labels: { color: muted, boxWidth: 10, padding: 16, font: { size: 11 } } },
+        },
+        scales: {
+          x: { ticks: { color: dim, font: { size: 10 } }, grid: { color: grid } },
+          y: { beginAtZero: true, ticks: { color: dim, font: { size: 10 } }, grid: { color: grid } },
+        },
+      }, overrides || {});
+    }
+
+    function renderStats(rows) {
+      const latest = rows[rows.length - 1];
+      const prev = rows.length > 1 ? rows[rows.length - 2] : null;
+      const showDelta = prev !== null;
+
+      document.getElementById('last-updated').textContent = latest.date;
+
+      const container = document.getElementById('marketplace-stats');
+      const REPO_BASE = 'https://github.com/rh-uxd/ai-helpers';
+      const workshopSkills = 26;
+      const consumerSkills = latest.skills - workshopSkills;
+      const prevConsumer = prev ? prev.skills - workshopSkills : null;
+      [
+        { label: 'Consumer Skills', value: consumerSkills, prev: prevConsumer, showDelta, subtitle: 'Production-ready, eval-gated', link: `${REPO_BASE}/search?q=path%3A**/SKILL.md+NOT+path%3A*workshop/**/SKILL.md` },
+        { label: 'Workshop Skills', value: workshopSkills, showDelta: false, subtitle: 'Internal tools & skill incubation', link: `${REPO_BASE}/search?q=path%3A*workshop/**/SKILL.md` },
+        { label: 'Agents', value: latest.agents, prev: prev?.agents, showDelta, link: `${REPO_BASE}/search?q=path%3A**/agents/*.md` },
+        { label: 'Plugins', value: latest.plugins, prev: prev?.plugins, showDelta, link: `${REPO_BASE}/blob/main/PLUGINS.md` },
+        { label: 'Unique Visitors', value: latest.unique_visitors_14d, prev: prev?.unique_visitors_14d, hint: '14-day window', showDelta },
+        { label: 'Page Views', value: latest.total_views_14d, prev: prev?.total_views_14d, hint: '14-day window', showDelta },
+      ].forEach(m => stat(container, m));
+
+    }
+
+    function esc(s) { const d = document.createElement('div'); d.textContent = s; return d.innerHTML; }
+    function safeUrl(url) { try { const u = new URL(url); return ['http:', 'https:'].includes(u.protocol) ? u.href : '#'; } catch { return '#'; } }
+
+    const activeFilters = new Set();
+
+    function toggleFilter(surface) {
+      if (activeFilters.has(surface)) {
+        activeFilters.delete(surface);
+      } else {
+        activeFilters.add(surface);
+      }
+      applyFilters();
+    }
+
+    function applyFilters() {
+      const showAll = activeFilters.size === 0;
+      document.querySelectorAll('.filter-pill').forEach(pill => {
+        pill.classList.toggle('active', showAll || activeFilters.has(pill.dataset.surface));
+      });
+      document.querySelectorAll('#refs-table tr, #refs-pending tr').forEach(row => {
+        const surfaces = row.dataset.surfaces.split(',');
+        const show = showAll || surfaces.some(s => activeFilters.has(s));
+        row.style.display = show ? '' : 'none';
+      });
+      const mainRows = [...document.querySelectorAll('#refs-table tr')];
+      mainRows.forEach(r => r.querySelectorAll('td').forEach(td => td.style.borderBottom = ''));
+      const lastVisible = mainRows.filter(r => r.style.display !== 'none').pop();
+      if (lastVisible) lastVisible.querySelectorAll('td').forEach(td => td.style.borderBottom = 'none');
+      const pending = document.getElementById('refs-pending');
+      if (pending) {
+        const anyPendingVisible = [...pending.querySelectorAll('tr')].some(r => r.style.display !== 'none');
+        pending.style.display = anyPendingVisible ? '' : 'none';
+      }
+    }
+
+    async function renderRepoRefs() {
+      const panel = document.getElementById('refs-detail');
+      try {
+        const fetchJson = async (path) => { try { const r = await fetch(path); return r?.ok ? await r.json() : []; } catch { return []; } };
+        const [repoRefs, pendingRefs, mcpRefs, mcpPending] = await Promise.all([
+          fetchJson('repo-references.json'),
+          fetchJson('pending-integrations.json'),
+          fetchJson('mcp-references.json'),
+          fetchJson('mcp-pending.json'),
+        ]);
+
+        const repoMap = new Map();
+        const addToMap = (list, surface) => {
+          list.forEach(r => {
+            const existing = repoMap.get(r.name);
+            if (existing) {
+              existing.surfaces.add(surface);
+            } else {
+              repoMap.set(r.name, { name: r.name, url: r.url || '', description: r.description || '', surfaces: new Set([surface]) });
+            }
+          });
+        };
+        addToMap(repoRefs, 'm');
+        addToMap(mcpRefs, 's');
+
+        const repos = [...repoMap.values()].sort((a, b) => b.surfaces.size - a.surfaces.size || a.name.localeCompare(b.name));
+
+        if (!repos.length) { panel.innerHTML = '<p class="empty-hint">No references found yet.</p>'; return; }
+
+        const surfaceMeta = {
+          m: { label: 'ai-helpers', url: 'https://github.com/rh-uxd/ai-helpers', color: 'var(--blue)' },
+          s: { label: 'patternfly-mcp', url: 'https://github.com/patternfly/patternfly-mcp', color: 'var(--cyan)' },
+        };
+        const surfaceLabels = { m: 'ai-helpers', s: 'patternfly-mcp' };
+        const pillsHtml = (surfaces) => [...surfaces].map(s => `<span class="surface-pill ${s}">${surfaceLabels[s]}</span>`).join(' ');
+
+        const presentSurfaces = new Set();
+        const surfaceCounts = { m: 0, s: 0 };
+        repos.forEach(r => r.surfaces.forEach(s => { presentSurfaces.add(s); surfaceCounts[s]++; }));
+
+        const orderedSurfaces = ['m', 's'].filter(s => presentSurfaces.has(s));
+
+        let html = '<div class="refs-filter">';
+        orderedSurfaces.forEach(s => {
+          const meta = surfaceMeta[s];
+          html += `<span class="filter-pill ${s} active" data-surface="${s}" onclick="toggleFilter('${s}')">${meta.label} (${surfaceCounts[s]})</span>`;
+        });
+        html += '</div>';
+
+        html += '<table class="refs-table" id="refs-table">';
+        repos.forEach(r => {
+          const surfaceStr = [...r.surfaces].join(',');
+          const link = r.url ? `<a href="${safeUrl(r.url)}" target="_blank" rel="noopener noreferrer">${esc(r.name)}</a>` : esc(r.name);
+          html += `<tr data-surfaces="${surfaceStr}"><td>${link}</td><td>${esc(r.description)}</td><td>${pillsHtml(r.surfaces)}</td></tr>`;
+        });
+        html += '</table>';
+
+        const allPending = [
+          ...pendingRefs.map(p => ({ ...p, surface: 'm' })),
+          ...mcpPending.map(p => ({ ...p, surface: 's' })),
+        ];
+        if (allPending.length) {
+          html += `<div class="refs-pending" id="refs-pending"><div class="refs-summary" style="margin-bottom:6px">Pending</div>`;
+          html += '<table class="refs-table">';
+          allPending.forEach(p => {
+            html += `<tr data-surfaces="${p.surface}"><td><a href="${safeUrl(p.url)}" target="_blank" rel="noopener noreferrer">${esc(p.name)}</a></td><td>${esc(p.description || '')}</td><td><span class="surface-pill ${p.surface}">${surfaceLabels[p.surface]}</span></td></tr>`;
+          });
+          html += '</table></div>';
+        }
+
+        panel.innerHTML = html;
+      } catch (e) {
+        panel.innerHTML = '<p class="empty-hint">References data not available yet.</p>';
+      }
+    }
+
+    async function loadTrafficCSV() {
+      try {
+        const resp = await fetch('traffic-discovery.csv');
+        if (!resp.ok) return [];
+        const text = await resp.text().then(t => t.trim());
+        if (!text) return [];
+        return text.split('\n').map(line => {
+          const [date, type, name, count, uniques] = line.split(',').map(v => v.replace(/^"|"$/g, ''));
+          return { date, type, name, count: parseInt(count) || 0, uniques: parseInt(uniques) || 0 };
+        });
+      } catch { return []; }
+    }
+
+    function renderTrafficSources(trafficRows) {
+      const container = document.getElementById('traffic-sources');
+      if (!trafficRows.length) return;
+
+      document.getElementById('traffic-label').style.display = '';
+
+      const latest = trafficRows.map(r => r.date).sort().pop();
+      const latestRows = trafficRows.filter(r => r.date === latest);
+      const referrers = latestRows.filter(r => r.type === 'referrer').sort((a, b) => b.count - a.count);
+      const paths = latestRows.filter(r => r.type === 'path').sort((a, b) => b.count - a.count);
+
+      if (referrers.length) {
+        const card = document.createElement('div');
+        card.className = 'chart-card';
+        card.innerHTML = `<h2>Top Referrers</h2><canvas id="referrers-chart"></canvas>`;
+        container.appendChild(card);
+        new Chart(document.getElementById('referrers-chart'), {
+          type: 'bar',
+          data: {
+            labels: referrers.map(r => r.name),
+            datasets: [
+              { label: 'Views', data: referrers.map(r => r.count), backgroundColor: themeColor('--blue') },
+              { label: 'Unique', data: referrers.map(r => r.uniques), backgroundColor: themeColor('--purple') },
+            ],
+          },
+          options: chartOpts({ indexAxis: 'y', plugins: { legend: { position: 'bottom', labels: { color: themeColor('--text-muted'), boxWidth: 10, padding: 16, font: { size: 11 } } } } }),
+        });
+      }
+
+      if (paths.length) {
+        const card = document.createElement('div');
+        card.className = 'chart-card';
+        card.innerHTML = `<h2>Popular Paths</h2><canvas id="paths-chart"></canvas>`;
+        container.appendChild(card);
+        new Chart(document.getElementById('paths-chart'), {
+          type: 'bar',
+          data: {
+            labels: paths.map(r => r.name),
+            datasets: [
+              { label: 'Views', data: paths.map(r => r.count), backgroundColor: themeColor('--green') },
+              { label: 'Unique', data: paths.map(r => r.uniques), backgroundColor: themeColor('--cyan') },
+            ],
+          },
+          options: chartOpts({ indexAxis: 'y', plugins: { legend: { position: 'bottom', labels: { color: themeColor('--text-muted'), boxWidth: 10, padding: 16, font: { size: 11 } } } } }),
+        });
+      }
+    }
+
+    async function loadMCPMetrics() {
+      try {
+        const resp = await fetch('mcp-metrics.json');
+        if (!resp.ok) return null;
+        const data = await resp.json();
+        return data.snapshots && data.snapshots.length > 0 ? data : null;
+      } catch { return null; }
+    }
+
+    function renderMCPSection(data) {
+      const snapshots = data.snapshots;
+      const latest = snapshots[snapshots.length - 1];
+      const prev = snapshots.length > 1 ? snapshots[snapshots.length - 2] : null;
+      const showDelta = prev !== null;
+
+      document.getElementById('mcp-label').style.display = '';
+      const container = document.getElementById('mcp-stats');
+      container.style.display = '';
+
+      stat(container, { label: 'Weekly Installs', value: latest.npm_weekly_downloads, prev: prev?.npm_weekly_downloads, hint: 'npm, last 7 days', showDelta });
+
+      if (latest.npm_latest_version && latest.npm_latest_version !== 'unknown') {
+        const vDiv = document.createElement('div');
+        vDiv.className = 'stat';
+        const publishHint = latest.npm_last_publish && latest.npm_last_publish !== 'unknown' ? `Published ${latest.npm_last_publish}` : '';
+        vDiv.innerHTML = `<div class="stat-value" style="font-size:1.2rem">${esc(latest.npm_latest_version)}</div><div class="stat-label">Latest Version</div>${publishHint ? `<div class="stat-hint">${publishHint}</div>` : ''}`;
+        container.appendChild(vDiv);
+      }
+
+      const findLatest = (key) => {
+        for (let i = snapshots.length - 1; i >= 0; i--) if (snapshots[i][key] != null) return { value: snapshots[i][key], idx: i };
+        return null;
+      };
+      const visitors = findLatest('github_unique_visitors_14d');
+      const views = findLatest('github_views_14d');
+      const prevFor = (key, idx) => { for (let i = idx - 1; i >= 0; i--) if (snapshots[i][key] != null) return snapshots[i][key]; return undefined; };
+      [
+        visitors && { label: 'Unique Visitors', value: visitors.value, prev: prevFor('github_unique_visitors_14d', visitors.idx), hint: '14-day window', showDelta },
+        views && { label: 'Page Views', value: views.value, prev: prevFor('github_views_14d', views.idx), hint: '14-day window', showDelta },
+      ].filter(Boolean).forEach(m => stat(container, m));
+    }
+
+    (async () => {
+      try {
+        const rows = await loadCSV();
+        if (!rows || rows.length === 0) {
+          document.getElementById('empty-state').style.display = 'block';
+          return;
+        }
+        document.getElementById('content').style.display = 'block';
+        renderStats(rows);
+        renderRepoRefs();
+        const mcpData = await loadMCPMetrics();
+        if (mcpData) renderMCPSection(mcpData);
+
+        const trafficRows = await loadTrafficCSV();
+        renderTrafficSources(trafficRows);
+      } catch {
+        document.getElementById('empty-state').style.display = 'block';
+      }
+    })();
+  </script>
+</body>
+</html>

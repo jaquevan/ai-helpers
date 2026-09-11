@@ -1,0 +1,4 @@
+prompt: >-
+  Using the uxd-discovery skill: create a discovery brief for the Jira issue
+  described in fixture-jira.md in this case directory. Do not call network or MCP.
+fixture: fixture-jira.md

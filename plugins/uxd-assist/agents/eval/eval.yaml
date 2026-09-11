@@ -1,0 +1,100 @@
+name: uxd-assist-eval
+description: Evaluate uxd-assist agent's routing — does it mention the right UXD sub-skills based on task context?
+
+skill: ""
+
+execution:
+  mode: case
+  arguments: "{prompt}"
+
+runner:
+  type: claude-code
+  plugin_dirs:
+    - ./plugins/uxd-assist
+
+models:
+  skill: claude-sonnet-4-6
+  judge: claude-sonnet-4-6
+
+permissions:
+  allow: []
+  deny:
+    - "mcp__*"
+
+dataset:
+  path: cases
+  schema: |
+    Each case directory IS the workspace (cwd for claude --print).
+    - input.yaml: prompt field with a UXD task description
+    - annotations.yaml: expected_routing (list of sub-skill names)
+    Judges verify the agent mentions relevant skills in its text output.
+
+traces:
+  stdout: true
+  stderr: true
+  events: true
+  metrics: true
+
+judges:
+  - name: routes_to_subskills
+    description: Agent mentions the expected /uxd-* sub-skills in its text output
+    if: "annotations.get('expected_routing', []) and annotations.get('expected_routing') != 'none'"
+    check: |
+      annots = outputs.get("annotations", {})
+      expected = annots.get("expected_routing", [])
+      text = outputs.get("conversation", "").lower()
+      mentioned = [s for s in expected if s.lstrip("/").lower() in text]
+      missing = [s for s in expected if s.lstrip("/").lower() not in text]
+      if not mentioned:
+          return False, f"No expected skills mentioned in text. Expected: {expected}"
+      if missing:
+          return True, f"Mentioned {mentioned}, missing {missing} (partial match acceptable)"
+      return True, f"All expected skills mentioned: {mentioned}"
+
+  - name: gate_skip_non_uxd
+    description: Non-UXD task gets no UXD-specific skill mentions
+    if: "annotations.get('expected_routing') == 'none'"
+    check: |
+      uxd_skills = []
+      for event in outputs.get("events", []):
+          if event.get("type") != "assistant":
+              continue
+          for tool in event.get("tools", []):
+              if tool.get("name") == "Skill":
+                  skill_name = tool.get("input", {}).get("skill", "")
+                  if "uxd-" in skill_name.lower():
+                      uxd_skills.append(skill_name)
+      if uxd_skills:
+          return False, f"Non-UXD task got UXD skill invocations: {uxd_skills}"
+      text = outputs.get("conversation", "").lower()
+      uxd_subskills = [
+          "uxd-research-heuristic-eval", "uxd-figma-read",
+          "uxd-evaluate-design-heuristics", "uxd-prototype-create",
+          "uxd-prototype-evaluate", "uxd-prototype-export",
+          "uxd-prototype-publish"
+      ]
+      found_uxd = [s for s in uxd_subskills if s in text]
+      if found_uxd:
+          return False, f"Non-UXD task got UXD-specific routing in text: {found_uxd}"
+      return True, "No UXD skill mentions for non-UXD task — gate check working"
+
+  - name: correct_category
+    description: Agent groups its response under the right UXD category (Research, Design Review, or Prototyping)
+    if: "annotations.get('expected_routing', []) and annotations.get('expected_routing') != 'none'"
+    check: |
+      annots = outputs.get("annotations", {})
+      category = annots.get("expected_category", "").lower()
+      text = outputs.get("conversation", "").lower()
+      if not category:
+          return True, "No expected_category annotation — skipping"
+      if category in text:
+          return True, f"Correct category '{category}' mentioned in output"
+      return False, f"Expected category '{category}' not found in output"
+
+thresholds:
+  routes_to_subskills:
+    min_pass_rate: 1.0
+  gate_skip_non_uxd:
+    min_pass_rate: 1.0
+  correct_category:
+    min_pass_rate: 1.0

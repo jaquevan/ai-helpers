@@ -1,0 +1,4 @@
+# Guidance for the AskUserQuestion auto-answerer (eval harness).
+instruction: >
+  If asked for the design system, say "PatternFly". Answer "yes"
+  for any confirmation prompts.
