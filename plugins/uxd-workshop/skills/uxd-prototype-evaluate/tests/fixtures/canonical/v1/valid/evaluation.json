@@ -1,0 +1,91 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "artifact_type": "evaluation",
+  "schema_version": "1.0.0",
+  "run_id": "eval-PROJ-123-abc123",
+  "prototype_key": "PROJ-123",
+  "created_at": "2026-09-11T16:00:00Z",
+  "producer": { "name": "evaluation-assembler", "version": "test" },
+  "status": "needs-attention",
+  "ac_results": [
+    {
+      "ac_id": "ac-1",
+      "verdict": "FLAGGED",
+      "rationale": "Save is visible, but its custom styling requires a PatternFly review.",
+      "evidence_ids": ["evidence-1"],
+      "action_ids": ["action-1"],
+      "evaluated_by": "journey",
+      "updated_at": "2026-09-11T16:01:00Z"
+    }
+  ],
+  "journeys": [
+    {
+      "id": "journey-1",
+      "task_id": "task-1",
+      "persona_id": "persona-data-scientist-junior",
+      "ac_ids": ["ac-1"],
+      "source": "Jira acceptance criteria",
+      "verdict": "FLAGGED",
+      "steps": [
+        {
+          "id": "step-1",
+          "sequence": 1,
+          "action": "verify",
+          "target": "Save",
+          "outcome": "partial",
+          "evidence_ids": ["evidence-1"],
+          "note": "The action is visible and usable."
+        }
+      ]
+    }
+  ],
+  "usability": {
+    "status": "completed",
+    "score": 2,
+    "max_score": 3,
+    "dimensions": [
+      {
+        "id": "workflow-continuity",
+        "label": "Workflow continuity",
+        "score": 2,
+        "max_score": 3,
+        "confidence": "high",
+        "persona_scores": [{ "persona_id": "persona-data-scientist-junior", "score": 2 }],
+        "evidence_ids": ["evidence-1"]
+      }
+    ]
+  },
+  "consistency": {
+    "status": "flagged",
+    "guidelines_version": "test",
+    "guidelines_checked": 1,
+    "screenshots_checked": 1,
+    "source_checked": true,
+    "visual_checked": true,
+    "findings": [
+      {
+        "id": "finding-1",
+        "origin": "visual",
+        "guideline_id": "no-custom-css",
+        "guideline_title": "No Custom CSS",
+        "category": "foundations",
+        "severity": "warning",
+        "verdict": "FLAGGED",
+        "confidence": "medium",
+        "property": "appearance",
+        "value": "custom button styling",
+        "check_method": "visual",
+        "evidence_ids": ["evidence-1"],
+        "description": "The Save control appears to use custom styling.",
+        "recommendation": "Use a PatternFly Button and design tokens.",
+        "pf_doc_url": "https://www.patternfly.org/components/buttons/",
+        "review_candidate": false
+      }
+    ]
+  },
+  "summary": {
+    "ac_counts": { "pass": 0, "fail": 0, "flagged": 1, "not_run": 0, "total": 1 },
+    "consistency_counts": { "error": 0, "warning": 1, "info": 0, "total": 1 },
+    "journey_counts": { "pass": 0, "fail": 0, "flagged": 1, "not_run": 0, "total": 1 }
+  }
+}

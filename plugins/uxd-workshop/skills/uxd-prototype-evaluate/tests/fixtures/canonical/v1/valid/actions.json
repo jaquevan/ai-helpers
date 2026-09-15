@@ -1,0 +1,23 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "artifact_type": "actions",
+  "schema_version": "1.0.0",
+  "run_id": "eval-PROJ-123-abc123",
+  "prototype_key": "PROJ-123",
+  "created_at": "2026-09-11T16:00:00Z",
+  "producer": { "name": "evaluation-assembler", "version": "test" },
+  "actions": [
+    {
+      "id": "action-1",
+      "kind": "fix",
+      "status": "proposed",
+      "priority": "high",
+      "confidence": "high",
+      "source": { "ac_id": "ac-1", "finding_id": "finding-1", "evidence_ids": ["evidence-1"] },
+      "target": { "file": "src/Experiment.tsx", "line": 42 },
+      "recommendation": "Replace custom CSS with the PatternFly component or token.",
+      "result": { "changed_files": [] },
+      "handoff": { "requires_user_invocation": false, "skill": "", "payload": {} }
+    }
+  ]
+}

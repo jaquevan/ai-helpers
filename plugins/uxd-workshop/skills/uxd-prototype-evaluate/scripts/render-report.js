@@ -14,9 +14,11 @@ if (!artifactsDir) {
 
 const { resolveProjectRoot, resolveKeyFromArtifactsDir } = require('./resolve-root');
 const { loadOverlay } = require('./overlay-get');
+const { loadReportInputs } = require('./report-inputs');
 const absArtifacts = path.resolve(artifactsDir);
 const projectRoot = resolveProjectRoot();
 const templatePath = path.join(__dirname, '..', 'templates', 'evaluation-report.html');
+const reportInputs = loadReportInputs(absArtifacts);
 
 // ---------------------------------------------------------------------------
 // Inline SVG icons (used in action cards and evidence flags)
@@ -307,6 +309,10 @@ function resolvePersonaName(nameMap, rawId) {
 }
 
 function readFileOr(filePath, fallback) {
+  if (path.dirname(path.resolve(filePath)) === absArtifacts) {
+    const virtual = reportInputs.virtualFiles.get(path.basename(filePath));
+    if (virtual !== undefined) return virtual;
+  }
   try { return fs.readFileSync(filePath, 'utf8'); } catch { return fallback; }
 }
 
@@ -713,12 +719,22 @@ function loadScreenshots(screenshotsDir) {
   const map = {};
   const fileToHash = {};
   const hashToFirstFile = {};
-  if (!fs.existsSync(screenshotsDir)) return { map, fileToHash, hashToFirstFile };
-  const files = fs.readdirSync(screenshotsDir).filter(f => f.endsWith('.png')).sort((a, b) => {
-    const stepA = parseInt((a.match(/step-(\d+)/) || [])[1] || '0', 10);
-    const stepB = parseInt((b.match(/step-(\d+)/) || [])[1] || '0', 10);
+  const legacyFiles = fs.existsSync(screenshotsDir)
+    ? fs.readdirSync(screenshotsDir).filter(f => f.endsWith('.png')).map(file => ({ file, filePath: path.join(screenshotsDir, file) }))
+    : [];
+  const canonicalFiles = reportInputs.imagePaths.map(relative => ({
+    file: path.basename(relative),
+    filePath: path.join(absArtifacts, relative),
+  })).filter(item => fs.existsSync(item.filePath));
+  const files = [...legacyFiles, ...canonicalFiles].filter((item, index, all) =>
+    all.findIndex(candidate => candidate.filePath === item.filePath) === index
+  ).sort((a, b) => {
+    const fileA = a.file;
+    const fileB = b.file;
+    const stepA = parseInt((fileA.match(/step-(\d+)/) || [])[1] || '0', 10);
+    const stepB = parseInt((fileB.match(/step-(\d+)/) || [])[1] || '0', 10);
     if (stepA !== stepB) return stepA - stepB;
-    return a.localeCompare(b);
+    return fileA.localeCompare(fileB);
   });
 
   const journeyLogPath = path.join(path.dirname(screenshotsDir), 'journey-log.json');
@@ -729,8 +745,7 @@ function loadScreenshots(screenshotsDir) {
   const hashToDataUri = new Map();
   let dedupSaved = 0;
 
-  for (const file of files) {
-    const filePath = path.join(screenshotsDir, file);
+  for (const { file, filePath } of files) {
     if (journeyLogMtime > 0) {
       const ssMtime = fs.statSync(filePath).mtimeMs;
       if (ssMtime > journeyLogMtime + 60000) {
@@ -2354,11 +2369,15 @@ function buildConsistencyHtml() {
   if (!summary.total_guidelines_checked && summary.violations != null) {
     summary.total_guidelines_checked = (summary.violations || 0) + (summary.warnings || 0) + (summary.passes || 0);
   }
-  const violations = (srcMode && Array.isArray(srcMode.violations) && srcMode.violations.length > 0)
+  const sourceFindings = (srcMode && Array.isArray(srcMode.violations) && srcMode.violations.length > 0)
     ? srcMode.violations
     : (srcMode && Array.isArray(srcMode.findings))
       ? srcMode.findings.filter(f => f.severity === 'error' || f.severity === 'violation')
       : (Array.isArray(report.findings) ? report.findings : []);
+  const visualFindings = report.visual_mode && Array.isArray(report.visual_mode.findings)
+    ? report.visual_mode.findings
+    : [];
+  const violations = [...sourceFindings, ...visualFindings];
   let html = '';
 
   // Summary stats
@@ -2380,7 +2399,7 @@ function buildConsistencyHtml() {
     const k = v.guideline_id;
     if (!byGuideline[k]) byGuideline[k] = { ...v, count: 0, files: new Set() };
     byGuideline[k].count++;
-    byGuideline[k].files.add(v.file);
+    byGuideline[k].files.add(v.file || v.screenshot || 'visual evidence');
   }
 
   const allQuickFixes = Object.values(byGuideline)
@@ -4292,7 +4311,9 @@ function main() {
     if (normalized.usability_dimensions) {
       normalizeUsabilityDimensions(normalized.usability_dimensions);
     }
-    fs.writeFileSync(jlPath, JSON.stringify(normalized, null, 2), 'utf8');
+    if (reportInputs.mode === 'legacy') {
+      fs.writeFileSync(jlPath, JSON.stringify(normalized, null, 2), 'utf8');
+    }
   }
 
   const tokens = buildTokens();
@@ -4306,6 +4327,7 @@ function main() {
 
   const renderMetrics = {
     phase: 'render-report.js',
+    input_mode: reportInputs.mode,
     duration_ms: Date.now() - renderStartMs,
     output_bytes: outputBytes,
     llm_cost_usd: 0,

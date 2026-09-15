@@ -9,6 +9,11 @@ const path = require('path');
 const { chromium } = require('@playwright/test');
 const runner = require('../scripts/openai-browser-persona.js');
 
+function pngSize(file) {
+  const data = fs.readFileSync(file);
+  return { width: data.readUInt32BE(16), height: data.readUInt32BE(20) };
+}
+
 (async () => {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'uxd-persona-'));
   const artifacts = path.join(root, '.artifacts', 'TEST-1', 'eval'); fs.mkdirSync(artifacts, { recursive: true });
@@ -28,6 +33,9 @@ const runner = require('../scripts/openai-browser-persona.js');
   try {
     const result = await runner.runPersonaSession({ page, artifactsDir: artifacts, prototypeUrl: url, persona: { id: 'ml-engineer+junior', profile: 'Junior ML engineer who needs clear labels.' }, task: 'Inspect tool calls', taskIndex: 1, acIds: ['AC-1'], model: 'gpt-5.6-terra', reasoningEffort: 'low', maxTurns: 3, requestFn });
     assert.equal(result.turns, 3); assert.equal(result.usage.total_tokens, 58);
+    assert(result.promptCache.static_prefix_sha256.startsWith('sha256:'));
+    assert(result.promptCache.static_prefix_bytes > 0);
+    assert(result.promptCache.dynamic_input_bytes > 0);
     const names = calls[0].tools.map(tool => tool.name);
     assert.deepEqual(names, ['browser_observe', 'browser_click', 'browser_type', 'browser_navigate', 'browser_press']);
     assert(!names.some(name => /shell|file|grep|search|workspace/.test(name)));
@@ -40,6 +48,12 @@ const runner = require('../scripts/openai-browser-persona.js');
     assert(calls[1].input.at(-1).content.some(item => item.type === 'input_image'));
     assert.equal(calls[2].tool_choice, 'none');
     assert(!JSON.stringify(calls).includes(root));
+    const raw = path.join(artifacts, 'screenshots', 'persona-ml-engineer-junior-task-1-step-1.png');
+    const crops = fs.readdirSync(path.join(artifacts, 'evidence', 'crops')).filter(file => file.includes('persona-ml-engineer-junior-task-1'));
+    assert(crops.length >= 1);
+    const rawSize = pngSize(raw);
+    const cropSize = pngSize(path.join(artifacts, 'evidence', 'crops', crops[0]));
+    assert(cropSize.width < rawSize.width || cropSize.height < rawSize.height);
 
     const failedPage = await browser.newPage(); let failedCalls = 0;
     try {

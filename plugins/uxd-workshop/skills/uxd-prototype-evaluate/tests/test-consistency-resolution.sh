@@ -25,8 +25,15 @@ fi
 ARTIFACTS_DIR="$(mktemp -d -t uxd-consistency-eval.XXXXXX)"
 trap 'rm -rf "${ARTIFACTS_DIR}"' EXIT
 
+set +e
 python3 "${ACTUAL_DIR}/scripts/analyze.py" \
   --src "${ACTUAL_DIR}/tests/fixtures/ground-truth" \
   --guideline no-custom-css \
   --json-output > "${ARTIFACTS_DIR}/consistency-report.json"
+ANALYZER_STATUS=$?
+set -e
+if [ "${ANALYZER_STATUS}" -ne 1 ]; then
+  echo "Expected blocking consistency findings"
+  exit 1
+fi
 node "${EVALUATOR_DIR}/scripts/validate-consistency.js" "${ARTIFACTS_DIR}" --json > /dev/null

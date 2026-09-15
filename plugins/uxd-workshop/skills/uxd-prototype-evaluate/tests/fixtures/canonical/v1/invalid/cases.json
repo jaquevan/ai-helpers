@@ -1,0 +1,11 @@
+{
+  "cases": [
+    { "name": "unknown property", "expected_code": "schema_additionalProperties" },
+    { "name": "forbidden reasoning field", "expected_code": "schema_additionalProperties" },
+    { "name": "dangling evidence", "expected_code": "dangling_reference" },
+    { "name": "incorrect derived count", "expected_code": "derived_summary_mismatch" },
+    { "name": "unsafe publish action", "expected_code": "schema_const" },
+    { "name": "crop outside source bounds", "expected_code": "crop_out_of_bounds" },
+    { "name": "cache key mismatch", "expected_code": "compound_key_mismatch" }
+  ]
+}

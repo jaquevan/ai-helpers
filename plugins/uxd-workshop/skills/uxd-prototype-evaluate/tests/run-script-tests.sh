@@ -78,13 +78,14 @@ run_python_test() {
 run_node_test() {
   local script_name="$1"
   local script_path="$SCRIPT_DIR/$script_name"
+  local label="${2:-node contract}"
 
   if node "$script_path" > /dev/null 2>&1; then
-    echo "Test $script_name (live browser persona): "
+    echo "Test $script_name ($label): "
     echo "PASS"
     PASS_COUNT=$((PASS_COUNT + 1))
   else
-    echo "Test $script_name (live browser persona): "
+    echo "Test $script_name ($label): "
     echo "FAIL"
     FAIL_COUNT=$((FAIL_COUNT + 1))
   fi
@@ -106,7 +107,15 @@ run_python_test "test-structured-journey.py"
 run_python_test "test-structured-visual.py"
 run_python_test "test-live-usability-adapter.py"
 run_python_test "test-portable-evidence-capture.py"
-run_node_test "test-browser-persona.js"
+run_python_test "test-model-routing.py"
+run_node_test "test-canonical-artifact-contracts.js" "canonical contracts"
+run_node_test "test-legacy-artifact-adapter.js" "legacy compatibility adapter"
+run_node_test "test-browser-persona.js" "live browser persona"
+run_node_test "test-targeted-evidence.js" "targeted evidence"
+run_node_test "test-canonical-report.js" "canonical report"
+run_node_test "test-xray-cache.js" "xray cache"
+run_node_test "test-phase-a-canonical.js" "deterministic Phase A canonical"
+run_node_test "test-phase-b-canonical.js" "paid-phase canonical synchronization"
 echo ""
 
 # Full validators (require a complete artifact set)

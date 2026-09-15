@@ -1,7 +1,7 @@
 ---
 id: cta-button-icons
 title: CTA Button Icons
-category: components
+category: buttons
 automatable: true
 checkpoints: [local, mr, signoff]
 severity: error

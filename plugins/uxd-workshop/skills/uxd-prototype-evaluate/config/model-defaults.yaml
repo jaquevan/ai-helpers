@@ -13,38 +13,38 @@ platforms:
     phases:
       eval-extract: gpt-5.6-luna
       eval-classify: gpt-5.6-luna
-      eval-journey: gpt-5.6-terra
+      eval-journey: gpt-5.6-luna
       eval-fix: gpt-5.6-sol
       eval-usability: gpt-5.6-terra
-      eval-consistency: gpt-5.6-terra
+      eval-consistency: gpt-5.6-luna
       eval-report: gpt-5.6-luna
   codex:
     provider: openai
     phases:
       eval-extract: gpt-5.6-luna
       eval-classify: gpt-5.6-luna
-      eval-journey: gpt-5.6-terra
+      eval-journey: gpt-5.6-luna
       eval-fix: gpt-5.6-sol
       eval-usability: gpt-5.6-terra
-      eval-consistency: gpt-5.6-terra
+      eval-consistency: gpt-5.6-luna
       eval-report: gpt-5.6-luna
   cursor:
     provider: openai
     phases:
       eval-extract: gpt-5.6-luna
       eval-classify: gpt-5.6-luna
-      eval-journey: gpt-5.6-terra
+      eval-journey: gpt-5.6-luna
       eval-fix: gpt-5.6-sol
       eval-usability: gpt-5.6-terra
-      eval-consistency: gpt-5.6-terra
+      eval-consistency: gpt-5.6-luna
       eval-report: gpt-5.6-luna
   anthropic:
     provider: anthropic
     phases:
       eval-extract: claude-haiku-4-5
       eval-classify: claude-haiku-4-5
-      eval-journey: claude-sonnet-4-6
+      eval-journey: claude-haiku-4-5
       eval-fix: claude-opus-4-6
       eval-usability: claude-sonnet-4-6
-      eval-consistency: claude-sonnet-4-6
+      eval-consistency: claude-haiku-4-5
       eval-report: claude-sonnet-4-6

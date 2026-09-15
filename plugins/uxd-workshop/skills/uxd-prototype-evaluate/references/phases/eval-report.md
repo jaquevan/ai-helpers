@@ -4,6 +4,14 @@ Renders the final HTML report from JSON/CSV artifacts produced by earlier phases
 
 ## Inputs
 
+The renderer prefers a complete schema-valid canonical set (`brief.json`,
+`evaluation.json`, `evidence.json`, `actions.json`, `state.json`). It reads
+nested verdicts and consistency findings through an in-memory normalization
+layer and resolves raw/cropped image paths directly from `evidence.json`.
+When no canonical file exists, the legacy inputs below remain supported. A
+partial or invalid canonical set is an error; do not fall back to stale legacy
+results.
+
 | Input | Description | Required |
 |-------|-------------|----------|
 | `.artifacts/<KEY>/eval/evaluation-report.csv` | AC verdicts (Section 1) + usability dimensions (Section 2) | Yes |

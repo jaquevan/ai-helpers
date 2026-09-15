@@ -69,7 +69,7 @@ class AnalyzeCliTests(unittest.TestCase):
     def test_html_ground_truth_reports_all_expected_custom_css(self):
         result, markdown = self.run_checker("ground-truth", "no-custom-css")
         expected = json.loads((FIXTURES / "ground-truth" / "expected-findings.json").read_text())
-        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.assertEqual(result.returncode, 1, result.stdout + result.stderr)
         self.assertIn(
             f"Violations:** {len(expected['no-custom-css']['expected_findings'])} across 1 guidelines",
             markdown,
@@ -94,12 +94,12 @@ class AnalyzeCliTests(unittest.TestCase):
             text=True,
             check=False,
         )
-        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.assertEqual(result.returncode, 1, result.stdout + result.stderr)
         report = json.loads(result.stdout)
         self.assertEqual(report["summary"], {
             "total_guidelines_checked": 1,
-            "violations": 0,
-            "warnings": 1,
+            "violations": 1,
+            "warnings": 0,
             "passes": 0,
         })
         actual_locations = sorted(
@@ -111,7 +111,7 @@ class AnalyzeCliTests(unittest.TestCase):
             for finding in expected["no-custom-css"]["expected_findings"]
         )
         self.assertEqual(actual_locations, expected_locations)
-        self.assertTrue(all(finding["verdict"] == "FLAGGED" for finding in report["source_mode"]["violations"]))
+        self.assertTrue(all(finding["verdict"] == "VIOLATION" for finding in report["source_mode"]["violations"]))
         self.assertTrue(all(finding["confidence"] == "high" for finding in report["source_mode"]["violations"]))
         self.assertTrue(all(not finding["review_candidate"] for finding in report["source_mode"]["violations"]))
 
@@ -145,6 +145,84 @@ class AnalyzeCliTests(unittest.TestCase):
             self.assertEqual(finding["confidence"], "low")
             self.assertTrue(finding["review_candidate"])
             self.assertEqual(finding["check_method"], "automated_candidate")
+
+    def test_native_react_control_is_blocking_component_violation(self):
+        with tempfile.TemporaryDirectory(prefix="uxd-consistency-component-") as tmp:
+            workspace = Path(tmp)
+            source = workspace / "src" / "Example.tsx"
+            source.parent.mkdir(parents=True)
+            source.write_text("export const Example = () => <button>Save</button>;\n")
+            result = subprocess.run(
+                [
+                    sys.executable,
+                    str(ANALYZER),
+                    "--src",
+                    str(workspace),
+                    "--guideline",
+                    "patternfly-component-usage",
+                    "--json-output",
+                ],
+                capture_output=True,
+                text=True,
+                check=False,
+            )
+            self.assertEqual(result.returncode, 1, result.stdout + result.stderr)
+            report = json.loads(result.stdout)
+            self.assertEqual(report["summary"]["violations"], 1)
+            finding = report["source_mode"]["violations"][0]
+            self.assertEqual(finding["guideline_id"], "patternfly-component-usage")
+            self.assertEqual(finding["severity"], "error")
+            self.assertEqual(finding["verdict"], "VIOLATION")
+            self.assertFalse(finding["review_candidate"])
+
+    def test_patternfly_html_control_passes_component_usage(self):
+        with tempfile.TemporaryDirectory(prefix="uxd-consistency-pf-component-") as tmp:
+            workspace = Path(tmp)
+            source = workspace / "src" / "index.html"
+            source.parent.mkdir(parents=True)
+            source.write_text('<button class="pf-v6-c-button pf-m-primary">Save</button>\n')
+            result = subprocess.run(
+                [
+                    sys.executable,
+                    str(ANALYZER),
+                    "--src",
+                    str(workspace),
+                    "--guideline",
+                    "patternfly-component-usage",
+                    "--json-output",
+                ],
+                capture_output=True,
+                text=True,
+                check=False,
+            )
+            self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+            self.assertEqual(json.loads(result.stdout)["source_mode"]["violations"], [])
+
+    def test_competing_component_library_is_blocking_violation(self):
+        with tempfile.TemporaryDirectory(prefix="uxd-consistency-library-") as tmp:
+            workspace = Path(tmp)
+            source = workspace / "src" / "Example.tsx"
+            source.parent.mkdir(parents=True)
+            source.write_text("import { Button } from '@mui/material';\n")
+            result = subprocess.run(
+                [
+                    sys.executable,
+                    str(ANALYZER),
+                    "--src",
+                    str(workspace),
+                    "--guideline",
+                    "patternfly-component-usage",
+                    "--json-output",
+                ],
+                capture_output=True,
+                text=True,
+                check=False,
+            )
+            self.assertEqual(result.returncode, 1, result.stdout + result.stderr)
+            findings = json.loads(result.stdout)["source_mode"]["violations"]
+            self.assertEqual(len(findings), 1)
+            self.assertIn("@mui", findings[0]["value"])
+            self.assertEqual(findings[0]["severity"], "error")
 
     def test_changed_mode_excludes_unchanged_lines_in_touched_file(self):
         with tempfile.TemporaryDirectory(prefix="uxd-consistency-git-") as tmp:
@@ -190,7 +268,7 @@ class AnalyzeCliTests(unittest.TestCase):
                 text=True,
                 check=False,
             )
-            self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+            self.assertEqual(result.returncode, 1, result.stdout + result.stderr)
             findings = json.loads(result.stdout)["source_mode"]["violations"]
             self.assertEqual(len(findings), 1)
             self.assertEqual(findings[0]["line"], 3)
@@ -242,7 +320,7 @@ class AnalyzeCliTests(unittest.TestCase):
                 text=True,
                 check=False,
             )
-            self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+            self.assertEqual(result.returncode, 1, result.stdout + result.stderr)
             findings = json.loads(result.stdout)["source_mode"]["violations"]
             self.assertEqual(len(findings), 1)
             self.assertEqual(Path(findings[0]["file"]).name, "index.html")
@@ -278,7 +356,7 @@ class AnalyzeCliTests(unittest.TestCase):
                 text=True,
                 check=False,
             )
-            self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+            self.assertEqual(result.returncode, 1, result.stdout + result.stderr)
             findings = json.loads(result.stdout)["source_mode"]["violations"]
             self.assertEqual(len(findings), 1)
             self.assertTrue(findings[0]["file"].endswith("New.tsx"))

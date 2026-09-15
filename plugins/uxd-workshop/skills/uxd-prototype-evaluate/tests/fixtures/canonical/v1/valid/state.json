@@ -1,0 +1,53 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "artifact_type": "state",
+  "schema_version": "1.0.0",
+  "run_id": "eval-PROJ-123-abc123",
+  "prototype_key": "PROJ-123",
+  "created_at": "2026-09-11T16:00:00Z",
+  "producer": { "name": "pipeline-controller", "version": "test" },
+  "lifecycle": {
+    "status": "completed",
+    "current_phase": "report",
+    "iteration": 1,
+    "max_iterations": 3,
+    "exit_reason": "no-fix",
+    "iterations": [
+      {
+        "iteration": 1,
+        "phase": "a",
+        "timestamp": "2026-09-11T16:01:00Z",
+        "ac_results": [{ "ac_id": "ac-1", "verdict": "FLAGGED" }]
+      }
+    ]
+  },
+  "identity": {
+    "intent_key": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "build_key": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+    "evaluator_key": "sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+    "compound_key": "sha256:5bc003acb367427f93d5769c0e01367e3546f53a15005a71a0bfa2f76dccca6e"
+  },
+  "cache": {
+    "decision": "miss",
+    "entry_key": "sha256:5bc003acb367427f93d5769c0e01367e3546f53a15005a71a0bfa2f76dccca6e",
+    "invalidated_by": ["build"],
+    "restored_artifacts": []
+  },
+  "phases": [
+    {
+      "name": "consistency-source",
+      "status": "completed",
+      "model_invoked": false,
+      "provider": "none",
+      "model": "",
+      "started_at": "2026-09-11T16:00:01Z",
+      "ended_at": "2026-09-11T16:00:02Z",
+      "duration_ms": 1000,
+      "input_files": 1,
+      "input_bytes": 1000,
+      "output_bytes": 500,
+      "token_usage": { "input": 0, "cached_input": 0, "output": 0, "reasoning_tokens": 0 },
+      "llm_cost_usd": 0
+    }
+  ]
+}

@@ -12,6 +12,7 @@ from pathlib import Path
 from typing import Any
 
 from jira_context import load_jira_context
+from project_consistency_shadow import write_consistency_shadow
 
 
 SCRIPT_DIR = Path(__file__).resolve().parent
@@ -76,7 +77,7 @@ def run_deterministic_source(
         raise ValueError(f"Workspace directory does not exist: {workspace_path}")
     if not ANALYZER.is_file() or not VALIDATOR.is_file():
         raise ValueError("Local evaluator or consistency-check installation is incomplete")
-    load_jira_context(context_path, key)
+    jira_context = load_jira_context(context_path, key)
     benchmark_path.mkdir(parents=True, exist_ok=True)
 
     artifacts_dir = workspace_path / ".artifacts" / key / "eval"
@@ -95,7 +96,9 @@ def run_deterministic_source(
     if resolved_base:
         command.extend(["--changed", "--base-ref", resolved_base])
 
+    checker_started = time.monotonic()
     checker = _run(command, cwd=workspace_path)
+    checker_duration_ms = round((time.monotonic() - checker_started) * 1000)
     if checker.returncode not in (0, 1) or not report_path.is_file():
         result = {
             "status": "failed",
@@ -126,6 +129,32 @@ def run_deterministic_source(
 
     report = json.loads(report_path.read_text())
     status = "completed" if validation.returncode == 0 and validation_data.get("all_pass") else "failed"
+    shadow: dict[str, Any]
+    if status == "completed":
+        try:
+            shadow = write_consistency_shadow(
+                key=key,
+                workspace=workspace_path,
+                jira_context=jira_context,
+                legacy_report=report,
+                shadow_root=artifacts_dir / "shadow" / "consistency-source",
+                base_ref=resolved_base,
+                duration_ms=checker_duration_ms,
+            )
+        except Exception as error:  # Shadow projection must never fail the legacy source pass.
+            shadow = {
+                "status": "failed",
+                "error": str(error),
+                "model_invoked": False,
+                "llm_cost_usd": 0,
+            }
+    else:
+        shadow = {
+            "status": "skipped",
+            "reason": "primary_validation_failed",
+            "model_invoked": False,
+            "llm_cost_usd": 0,
+        }
     result = {
         "status": status,
         "phase": "eval-consistency-source",
@@ -141,6 +170,7 @@ def run_deterministic_source(
         "validator": validation_data,
         "summary": report.get("summary") or {},
         "finding_count": len((report.get("source_mode") or {}).get("violations") or []),
+        "shadow": shadow,
         "duration_s": round(time.monotonic() - started, 3),
     }
     (benchmark_path / "deterministic-source-result.json").write_text(

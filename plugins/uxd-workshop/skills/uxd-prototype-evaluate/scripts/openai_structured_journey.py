@@ -15,6 +15,7 @@ from pathlib import Path
 from typing import Any, Callable
 
 from openai_api_agent import _cost, _request, _usage
+from prompt_cache import prefix_metrics
 
 
 SCRIPT_DIR = Path(__file__).resolve().parent
@@ -155,11 +156,80 @@ def _acceptance_rows(csv_text: str) -> tuple[list[str], list[dict[str, str]]]:
 
 def _load_inputs(packet: dict[str, Any]) -> dict[str, Any]:
     artifacts_dir = Path(packet["artifacts_dir"]).resolve()
-    extract = json.loads((artifacts_dir / "extract-state.json").read_text())
-    evidence = json.loads((artifacts_dir / "prototype-evidence.json").read_text())
-    csv_text = (artifacts_dir / "evaluation-report.csv").read_text()
-    _lines, rows = _acceptance_rows(csv_text)
-    screenshot_paths = evidence.get("screenshots") or []
+    canonical_mode = all(
+        (artifacts_dir / name).is_file()
+        for name in ("brief.json", "evaluation.json", "evidence.json", "actions.json", "state.json")
+    )
+    if canonical_mode:
+        brief = json.loads((artifacts_dir / "brief.json").read_text())
+        canonical_evidence = json.loads((artifacts_dir / "evidence.json").read_text())
+        canonical_evaluation = json.loads((artifacts_dir / "evaluation.json").read_text())
+        result_by_ac = {item["ac_id"]: item for item in canonical_evaluation["ac_results"]}
+        rows = [
+            {
+                "criterion_id": item["source_id"],
+                "source": item["source"],
+                "tier": item["tier"],
+                "criterion_text": item["text"],
+                "verdict": "" if result_by_ac[item["id"]]["verdict"] == "NOT_RUN" else result_by_ac[item["id"]]["verdict"],
+                "rationale": result_by_ac[item["id"]]["rationale"],
+                "evidence": "",
+                "fix_action": "",
+                "fix_file": "",
+                "human_action": "",
+            }
+            for item in brief["intent"]["acceptance_criteria"]
+        ]
+        ac_by_id = {item["id"]: item for item in brief["intent"]["acceptance_criteria"]}
+        task_by_id = {item["id"]: item for item in brief["intent"]["tasks"]}
+        extract = {
+            "key": brief["prototype_key"],
+            "title": brief["intent"]["title"],
+            "persona_selection": {
+                "method": "canonical-brief",
+                "selected": [item["id"] for item in brief["intent"]["personas"]],
+                "target_audience_text": "",
+                "target_audience_source": (brief["intent"].get("feature_context") or {}).get("source_ticket") or brief["prototype_key"],
+                "reasoning": "Personas selected by deterministic extraction.",
+                "considered_but_rejected": [],
+            },
+            "journey_definitions": [
+                {
+                    "id": item["id"],
+                    "title": task_by_id[item["task_id"]]["title"],
+                    "persona": item["persona_id"],
+                    "source": item["source"],
+                    "ac_ids": [ac_by_id[ac_id]["source_id"] for ac_id in item["ac_ids"]],
+                    "expected_path": [],
+                }
+                for item in canonical_evaluation["journeys"]
+            ],
+            "tasks_to_be_done": [
+                {
+                    "task": item["title"],
+                    "source": item["target_route"],
+                    "covers_acs": [ac_by_id[ac_id]["source_id"] for ac_id in item["ac_ids"]],
+                }
+                for item in brief["intent"]["tasks"]
+            ],
+        }
+        first_capture = canonical_evidence["captures"][0]
+        evidence = {
+            "prototype_url": first_capture["url"],
+            "captured_at": first_capture["captured_at"],
+            "viewport": first_capture["viewport"],
+            "screenshots": [first_capture.get("raw_image", {}).get("path")],
+            "model_screenshots": [item["image"]["path"] for item in canonical_evidence["items"] if item.get("image")],
+            "page": first_capture["page"],
+        }
+        evidence["screenshots"] = [item for item in evidence["screenshots"] if item]
+        csv_text = ""
+    else:
+        extract = json.loads((artifacts_dir / "extract-state.json").read_text())
+        evidence = json.loads((artifacts_dir / "prototype-evidence.json").read_text())
+        csv_text = (artifacts_dir / "evaluation-report.csv").read_text()
+        _lines, rows = _acceptance_rows(csv_text)
+    screenshot_paths = evidence.get("model_screenshots") or evidence.get("screenshots") or []
     if not screenshot_paths:
         raise ValueError("prototype-evidence.json contains no screenshots")
     if len(set(screenshot_paths)) != len(screenshot_paths):
@@ -181,6 +251,7 @@ def _load_inputs(packet: dict[str, Any]) -> dict[str, Any]:
         "screenshot_paths": screenshot_paths,
         "criterion_ids": criterion_ids,
         "persona_ids": persona_ids,
+        "canonical_mode": canonical_mode,
     }
 
 
@@ -212,8 +283,21 @@ def build_journey_prompt(packet: dict[str, Any]) -> str:
         "acceptance_criteria": criteria,
         "prototype_evidence": evidence,
         "allowed_screenshot_paths": inputs["screenshot_paths"],
+        "image_selection": {
+            "mode": "targeted-crops" if evidence.get("model_screenshots") else "legacy-fallback",
+            "raw_screenshots": evidence.get("screenshots") or [],
+            "supplied_screenshots": inputs["screenshot_paths"],
+        },
     }
-    return f"{PROCEDURE_PATH.read_text().strip()}\n\nEVALUATION INPUT\n{json.dumps(context, indent=2)}"
+    return f"EVALUATION INPUT\n{json.dumps(context, indent=2)}"
+
+
+def build_journey_static_prefix() -> str:
+    return (
+        "You are the isolated eval-journey worker. Use only supplied text and "
+        "images. Return data matching the strict schema.\n\n"
+        f"{PROCEDURE_PATH.read_text().strip()}"
+    )
 
 
 def _image_content(artifacts_dir: Path, relative: str) -> dict[str, str]:
@@ -252,10 +336,7 @@ def build_journey_request(
         "input": [
             {
                 "role": "developer",
-                "content": (
-                    "You are the isolated eval-journey worker. Use only the supplied "
-                    "text and images. Return data that exactly matches the strict schema."
-                ),
+                "content": build_journey_static_prefix(),
             },
             {"role": "user", "content": content},
         ],
@@ -421,7 +502,8 @@ def validate_journey_output(output: dict[str, Any], packet: dict[str, Any]) -> N
             raise ValueError(f"{journey['id']} contains duplicate criterion IDs")
         if journey["steps_completed"] > journey["steps_expected"]:
             raise ValueError(f"{journey['id']} completed more steps than expected")
-    _render_updated_csv(inputs["csv_text"], output)
+    if not inputs["canonical_mode"]:
+        _render_updated_csv(inputs["csv_text"], output)
 
 
 def run_structured_journey(
@@ -452,7 +534,7 @@ def run_structured_journey(
     validate_journey_output(output, packet)
 
     inputs = _load_inputs(packet)
-    updated_csv = _render_updated_csv(inputs["csv_text"], output)
+    updated_csv = None if inputs["canonical_mode"] else _render_updated_csv(inputs["csv_text"], output)
     artifacts_dir = inputs["artifacts_dir"]
     journey_path = artifacts_dir / "journey-log.json"
     csv_path = artifacts_dir / "evaluation-report.csv"
@@ -470,9 +552,10 @@ def run_structured_journey(
         ],
     }
     journey_temp.write_text(json.dumps(artifact_output, indent=2) + "\n")
-    csv_temp.write_text(updated_csv)
     journey_temp.replace(journey_path)
-    csv_temp.replace(csv_path)
+    if updated_csv is not None:
+        csv_temp.write_text(updated_csv)
+        csv_temp.replace(csv_path)
 
     return {
         "provider": "openai",
@@ -487,4 +570,5 @@ def run_structured_journey(
         "billing_source": "provider_estimate" if cost is not None else "unavailable",
         "turns_used": 1,
         "turn_limit_reached": False,
+        "prompt_cache": prefix_metrics(build_journey_static_prefix(), build_journey_prompt(packet)),
     }

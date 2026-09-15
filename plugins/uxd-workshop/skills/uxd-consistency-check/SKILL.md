@@ -16,6 +16,13 @@ relative to this skill directory rather than a consumer project's root.
 
 ## Source checks
 
+Treat authored custom CSS and unapproved component substitutions as blocking
+errors. React prototypes must use PatternFly components for interactive
+controls. Static HTML must use the matching `pf-vN-*` classes. Native controls
+without PatternFly treatment and imports from other UI component libraries are
+violations; ambiguous search-only matches remain non-blocking review
+candidates.
+
 Run from this directory or use absolute paths:
 
 ```bash
@@ -62,6 +69,10 @@ callers write artifacts in the consumer project, normally:
 ```text
 .artifacts/{ID}/eval/consistency-report.json
 ```
+
+The evaluator may also project that same source result into a schema-validated
+five-file canonical shadow bundle. The analyzer still runs once, and the legacy
+report remains authoritative until the migration promotes canonical output.
 
 Do not write evaluation artifacts into this installed skill directory.
 

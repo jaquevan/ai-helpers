@@ -4,7 +4,7 @@ title: No Custom CSS in Prototypes
 category: foundations
 automatable: true
 checkpoints: [local, mr, signoff]
-severity: warning
+severity: error
 ---
 
 # No Custom CSS in Prototypes

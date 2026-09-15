@@ -1,7 +1,7 @@
 ---
 id: page-cta-placement
 title: Page-Level CTA Placement
-category: layout
+category: layouts
 automatable: true
 checkpoints: [local, mr, signoff]
 severity: error

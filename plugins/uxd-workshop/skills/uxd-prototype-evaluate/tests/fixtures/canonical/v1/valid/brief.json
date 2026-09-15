@@ -1,0 +1,67 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "artifact_type": "brief",
+  "schema_version": "1.0.0",
+  "run_id": "eval-PROJ-123-abc123",
+  "prototype_key": "PROJ-123",
+  "created_at": "2026-09-11T16:00:00Z",
+  "producer": { "name": "eval-extract", "version": "test" },
+  "intent": {
+    "stage": "complete",
+    "title": "Create experiment",
+    "acceptance_criteria": [
+      {
+        "id": "ac-1",
+        "source_id": "AC-1",
+        "source": "jira",
+        "text": "A user can create an experiment.",
+        "verification_mode": "ui",
+        "tier": "T1",
+        "requires_human_followup": false
+      }
+    ],
+    "tasks": [
+      {
+        "id": "task-1",
+        "title": "Create an experiment",
+        "ac_ids": ["ac-1"],
+        "target_route": "/experiments/create"
+      }
+    ],
+    "personas": [
+      {
+        "id": "persona-data-scientist-junior",
+        "label": "Data scientist",
+        "experience": "junior",
+        "task_ids": ["task-1"]
+      }
+    ],
+    "feature_context": {
+      "background": "Designers need a fast way to demonstrate experiment creation.",
+      "problem_statement": null,
+      "user_stories": [],
+      "ui_enhancements": "Use PatternFly controls for the experiment form.",
+      "source_ticket": "PROJ-123"
+    },
+    "breadcrumb": {
+      "outcome": null,
+      "rfe": null,
+      "strat": {
+        "key": "PROJ-123",
+        "url": "https://example.test/browse/PROJ-123",
+        "validated": true
+      },
+      "prototype": {
+        "path": "src/Experiment.tsx",
+        "commit": "abc123"
+      },
+      "mr": null
+    },
+    "scope": {
+      "prototype_url": "https://example.test/experiments/create",
+      "source_mode": "workspace",
+      "source_ref": "sha256:source",
+      "changed_files": ["src/Experiment.tsx"]
+    }
+  }
+}

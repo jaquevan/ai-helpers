@@ -11,7 +11,7 @@ description: >-
 
 # Evaluate Prototype
 
-Two-phase eval: **Phase A (x-ray)** validates acceptance criteria with source access and can fix FAILs; **Phase B (discovery)** always runs persona Playwright walkthroughs. Writes a self-contained HTML report with screenshots, think-aloud traces, and AC verdicts.
+Two-phase eval: **Phase A (x-ray)** validates acceptance criteria with source access and can fix FAILs; **Phase B (discovery)** always runs persona Playwright walkthroughs. Writes a self-contained HTML report backed by five canonical JSON files.
 
 Family: `uxd-prototype-create` → **evaluate** → `uxd-prototype-publish`. Re-run after changes. Full loop: [references/orchestration.md](references/orchestration.md). Phase procedures: `references/phases/` — follow each file when that phase runs.
 
@@ -36,19 +36,21 @@ Per-key eval files under `${UXD_PROJECT_ROOT}/.artifacts/<KEY>/eval/` (`ARTIFACT
 
 | File | Description |
 |------|-------------|
+| `brief.json` | Immutable criteria, tasks, personas, and source scope |
+| `evaluation.json` | AC, journey, usability, and PatternFly consistency results |
+| `evidence.json` | Portable DOM, viewport, and targeted crop evidence |
+| `actions.json` | Fix proposals and explicit human/publish handoffs |
+| `state.json` | Lifecycle, cache identity, routing, tokens, and cost |
 | `evaluation-report.html` | Final HTML report (both phases) |
-| `evaluation-report.csv` | AC verdicts + usability dimensions |
-| `iteration-log.json` | Per-iteration counts + Phase B usability |
-| `prototype-evidence.json` | Compact DOM evidence + relative baseline screenshot paths |
-| `journey-log.json` | Schema-validated journey findings + usability overlays |
-| `scripts/journey-test.mjs` / `persona-walkthrough.mjs` | Generated Playwright scripts |
-| `evaluation-report-iter-N.csv`, `screenshots-iter-N/` | Phase A archives |
-| `screenshots/persona-<id>-step-N.png` | Phase B screenshots |
-| `usability-thinkaloud-<id>.md` | Phase B traces |
-| `runs/<timestamp>/` | Archived copy of this run |
 | `report-url.txt` | Hosted eval URL after `publish-report.sh` |
 
 Cross-key (`.artifacts/eval/`, not deleted by `--fresh`): `runs/run-log.csv`, `pain-leaderboard.html`.
+
+The canonical contract and temporary downstream adapter are documented in
+[references/canonical-artifacts.md](references/canonical-artifacts.md). OpenAI
+uses canonical inputs and does not require `evaluation-report.csv` after local
+classification. Anthropic-compatible and unmigrated external consumers may use
+explicit disposable legacy projections during rollout.
 
 Create-owned (key root, not deleted by `--fresh`): `.artifacts/<KEY>/prototype-bar.json` — sync with `--artifacts ${KEY_DIR}` after the report. Local Eval browsing: export skill `export-helper.mjs` on port 9417. Static Pages: `copy-eval-for-pages.sh` / `install-prototype-bar.sh --artifacts` into `public/evals/<KEY>/`.
 
@@ -163,12 +165,16 @@ a model. A paid OpenAI run consumes that validated report, deterministically
 extracts and classifies Jira context locally, requires `--no-fix`, and runs
 three isolated model phases. Journey and visual consistency are single,
 tool-free Responses API calls whose `text.format` uses strict `json_schema`
-Structured Outputs and whose image inputs come from relative artifact paths.
+Structured Outputs. Their image inputs prefer bounded component/region paths
+from `evidence.json.items`; the viewport image remains a
+local/report fallback and is sent only when no valid crop exists.
 Visual rules are loaded from the sibling bundled consistency skill. Usability
 remains a live persona walkthrough, but its model can use only packaged browser
 observe/click/type/navigate/keyboard functions; it cannot search files, run a
 shell, inspect source, or call Jira. Fresh DOM and screenshot evidence follows
-every browser action. Every model phase must pass its local validator before the
+every browser action. Persona turns send a focused component crop while
+retaining one viewport image for report provenance. Every model phase must pass
+its local validator before the
 next phase begins. Report validation and rendering then
 run locally. Fix-loop support remains with the interactive skill workflow until
 a separately bounded implementation is available.
@@ -176,6 +182,10 @@ a separately bounded implementation is available.
 **Personas:** `${CLAUDE_PLUGIN_ROOT}/knowledge/personas/catalog.yaml` + overlays. Deep YAML from `.context/usability-testing/`. Internal study URLs: `node ${CLAUDE_SKILL_DIR}/scripts/overlay-get.js --knowledge-persona <id>` when internal-ai-helpers is present.
 
 IDE auto-approve for the bundled scripts is optional and tool-specific — see this skill's README if the user is prompted on every script.
+
+For compound-key cache validation, stable prompt-prefix construction, and
+provider/model selection, read
+[references/caching-and-routing.md](references/caching-and-routing.md).
 
 ## Workflow (two-phase)
 
@@ -201,7 +211,7 @@ PHASE B (Discovery — Per-Persona Usability Walkthroughs) — ALWAYS FIRES:
   Runs on whatever prototype state exists after Phase A exits.
 ```
 
-**Phase A** exits on zero FAIL in `evaluation-report.csv` Section 1, or max iterations. FLAGGED items need human review; the loop only targets FAILs.
+**Phase A** exits on zero FAIL in `evaluation.json.ac_results`, or max iterations. FLAGGED items need human review; the loop only targets FAILs.
 
 **Phase B always fires**, regardless of Phase A outcome (including `--no-fix`). When `exit_reason != all_pass`, usability scores may reflect missing features.
 

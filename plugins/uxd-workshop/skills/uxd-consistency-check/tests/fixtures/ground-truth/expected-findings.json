@@ -1,7 +1,7 @@
 {
   "no-custom-css": {
-    "result": "FLAGGED",
-    "severity": "warning",
+    "result": "VIOLATION",
+    "severity": "error",
     "expected_findings": [
       {
         "file": "src/index.html",
@@ -32,6 +32,6 @@
       "Selected navigation item marked with pf-m-current",
       "Text-only page-level Create model action"
     ],
-    "note": "These examples document RHOAI conventions. The existing legacy RHOAI rules evaluate TSX source, so static HTML only receives automated no-custom-CSS findings today."
+    "note": "These examples document RHOAI conventions. Static HTML receives strict custom-CSS and PatternFly component-usage checks."
   }
 }

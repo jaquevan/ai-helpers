@@ -1,0 +1,35 @@
+{
+  "default_platform": "api",
+  "platform_providers": {
+    "api": "openai",
+    "codex": "openai",
+    "cursor": "openai",
+    "anthropic": "anthropic-compatible"
+  },
+  "phases": {
+    "eval-extract": { "execution": "local" },
+    "eval-classify": { "execution": "local" },
+    "eval-consistency-source": { "execution": "local" },
+    "eval-report": { "execution": "local" },
+    "eval-journey": {
+      "execution": "model",
+      "reasoning_effort": "low",
+      "models": { "openai": "gpt-5.6-luna", "anthropic-compatible": "claude-haiku-4-5" }
+    },
+    "eval-consistency-visual": {
+      "execution": "model",
+      "reasoning_effort": "low",
+      "models": { "openai": "gpt-5.6-luna", "anthropic-compatible": "claude-haiku-4-5" }
+    },
+    "eval-usability": {
+      "execution": "model",
+      "reasoning_effort": "low",
+      "models": { "openai": "gpt-5.6-terra", "anthropic-compatible": "claude-sonnet-4-6" }
+    },
+    "eval-fix": {
+      "execution": "model",
+      "reasoning_effort": "high",
+      "models": { "openai": "gpt-5.6-sol", "anthropic-compatible": "claude-opus-4-6" }
+    }
+  }
+}

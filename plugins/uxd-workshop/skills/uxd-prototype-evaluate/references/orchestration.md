@@ -22,10 +22,11 @@ designer which platform they are using before selecting a model.
 |-------|--------------|-----------|
 | eval-extract | Local script | Deterministic MCP payload extraction. |
 | eval-classify | Local script | Deterministic tier assignment. |
-| eval-journey | `gpt-5.6-terra` | Structured visual judgment and verdicts. |
+| eval-journey | `gpt-5.6-luna` | Bounded crops and strict structured verdicts. |
 | eval-fix | `gpt-5.6-sol` | Highest-reasoning phase; code changes. |
 | eval-usability | `gpt-5.6-terra` | Persona walkthroughs and synthesis. |
-| eval-consistency | `gpt-5.6-terra` | Design audit against guidelines. |
+| eval-consistency-source | Local script | Deterministic PatternFly source policy. |
+| eval-consistency-visual | `gpt-5.6-luna` | Bounded crop audit against a static rule prefix. |
 | eval-report | Local script | Schema validation and template rendering. |
 
 When `--model` is set, ALL phases use that model (useful for comparison runs).
@@ -200,7 +201,9 @@ python3 "${CLAUDE_SKILL_DIR}/scripts/run_evaluator.py" \
   --jira-context "${JIRA_CONTEXT_FILE}" \
   --benchmark-dir "${BENCHMARK_DIR}"
 # Runs ONCE and validates its JSON before model-assisted phases begin.
-# Produces: consistency-report.json and deterministic-source-result.json.
+# Produces: consistency-report.json, deterministic-source-result.json, and a
+# schema-valid five-file bundle under eval/shadow/consistency-source/<run-id>/.
+# The legacy report remains authoritative; shadow failure is non-blocking.
 # Visual-mode deferred to after eval-journey when screenshots exist.
 # Do not ask a model to discover the checker, choose commands, or rerun source mode.
 

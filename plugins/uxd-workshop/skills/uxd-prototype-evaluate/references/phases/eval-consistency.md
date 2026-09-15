@@ -16,7 +16,7 @@ If `CONSISTENCY_DIR` is empty, stop and report an incomplete plugin install. Do 
 
 eval-consistency runs in two modes, invoked separately by the orchestrator:
 
-- **`--mode=source`** (Phase A setup): Runs deterministic source-code checks against changed files. The analyzer pre-filters guideline categories locally; do not spend model tokens pre-reading the corpus. Produces initial `consistency-report.json` and appends to `refinement-suggestions.json`. Called before eval-classify.
+- **`--mode=source`** (Phase A setup): Runs deterministic source-code checks against changed files. The analyzer pre-filters guideline categories locally; do not spend model tokens pre-reading the corpus. Produces initial `consistency-report.json`, then projects the same result into a canonical five-file shadow bundle. Called before eval-classify.
 - **`--mode=visual`** (post-journey): Runs AI-powered visual checks against journey screenshots. Appends visual findings to the existing `consistency-report.json`. Called after eval-journey captures screenshots.
 - **`--mode=both`** (legacy): Runs source then visual sequentially. Use when both inputs are available.
 
@@ -61,6 +61,14 @@ python3 "${EVALUATOR_SKILL_DIR}/scripts/run_evaluator.py" \
 
 If validation fails, stop. Do not synthesize or repair JSON manually.
 
+The analyzer runs exactly once. On a valid primary report, the entrypoint writes
+the canonical shadow bundle under
+`.artifacts/<KEY>/eval/shadow/consistency-source/<run-id>/`, validates it, and
+checks normalized parity through the legacy adapter. Shadow projection failure
+is recorded in `deterministic-source-result.json` but does not invalidate the
+authoritative legacy source report. The source shadow invokes no model and does
+not write visual findings, fixes, or legacy boundary files.
+
 #### 1b: Consume findings
 
 Use the JSON as written. For high-confidence findings entering the fix queue,
@@ -87,12 +95,14 @@ Cross-reference captured screenshots against PatternFly guidelines for visual vi
 Visual analysis is bounded because it is the only model-assisted consistency
 step:
 
-1. Deduplicate screenshot paths by content hash.
+1. Prefer and deduplicate `prototype-evidence.json.model_screenshots` crop paths
+   by content hash. Fall back to legacy screenshots only when no crop exists.
 2. Select at most three representative screens by default: primary, most
    interactive, and alternate/error state.
 3. Check only visual rules not already resolved by deterministic source checks.
 4. Load only each applicable guideline's `## Rule` and manual checklist.
-5. Record screenshot count, applicable guideline count, and input byte count in
+5. Record screenshot count, applicable guideline count, selected input bytes,
+   raw image bytes, and selected pixel ratio in
    `visual_mode.input_metrics` for Langfuse comparison.
 
 **Structured extraction (preferred):** If `${CONSISTENCY_DIR}/scripts/visual_analyze.py` exists, use it to extract DOM structure with bounding boxes from key pages. This gives the LLM structured visual input instead of raw PNGs:

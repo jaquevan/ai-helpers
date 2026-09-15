@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import importlib.util
 import json
+import shutil
 import sys
 import tempfile
 from pathlib import Path
@@ -29,6 +30,9 @@ def fixture(root: Path) -> dict:
     screenshot = artifacts / "screenshots" / "journey-baseline.png"
     screenshot.parent.mkdir(parents=True)
     screenshot.write_bytes(PNG_1X1)
+    crop = artifacts / "evidence" / "crops" / "run-model.png"
+    crop.parent.mkdir(parents=True)
+    crop.write_bytes(PNG_1X1)
     persona_selection = {
         "method": "automatic",
         "selected": ["ml-engineer+junior"],
@@ -54,6 +58,7 @@ def fixture(root: Path) -> dict:
         "capture_method": "deterministic-baseline",
         "prototype_url": "http://localhost:9000/",
         "screenshots": ["screenshots/journey-baseline.png"],
+        "model_screenshots": ["evidence/crops/run-model.png"],
         "page": {
             "title": "Tool calls",
             "body_text": "Tool calls Arguments Result",
@@ -102,7 +107,7 @@ def output_payload() -> dict:
                 "step": 1,
                 "action": "Inspect the playground",
                 "result": "success",
-                "screenshot": "screenshots/journey-baseline.png",
+                "screenshot": "evidence/crops/run-model.png",
                 "narration": "Tool calls, arguments, and result labels are visible.",
             }],
         }],
@@ -111,7 +116,7 @@ def output_payload() -> dict:
             "criterion_id": "AC-1",
             "verdict": "PASS",
             "rationale": "The supplied visual evidence shows tool-call details.",
-            "evidence": "screenshots/journey-baseline.png",
+            "evidence": "evidence/crops/run-model.png",
             "fix_action": "",
             "fix_file": "",
             "human_action": "",
@@ -146,6 +151,8 @@ def main() -> int:
         user_content = request["input"][1]["content"]
         assert [part["type"] for part in user_content] == ["input_text", "input_image"]
         assert user_content[1]["image_url"].startswith("data:image/png;base64,")
+        assert "targeted-crops" in user_content[0]["text"]
+        assert "evidence/crops/run-model.png" in user_content[0]["text"]
         assert "/Users/" not in user_content[0]["text"]
         assert "Kueue" not in user_content[0]["text"]
 
@@ -174,6 +181,9 @@ def main() -> int:
         assert result["status"] == "completed"
         assert result["turns_used"] == 1
         assert result["token_usage"]["cached_input_tokens"] == 20
+        assert result["prompt_cache"]["static_prefix_bytes"] > 0
+        assert result["prompt_cache"]["dynamic_input_bytes"] > 0
+        assert request["input"][0]["content"] == journey.build_journey_static_prefix()
         artifacts = Path(packet["artifacts_dir"])
         assert json.loads((artifacts / "journey-log.json").read_text()) == expected
         csv_text = (artifacts / "evaluation-report.csv").read_text()
@@ -200,6 +210,46 @@ def main() -> int:
             "human_action": "Confirm engineering review",
         })
         journey.validate_journey_output(t4_extra, packet)
+
+    with tempfile.TemporaryDirectory() as temp_dir:
+        root = Path(temp_dir)
+        artifacts = root / "workspace" / ".artifacts" / "PROJ-123" / "eval"
+        artifacts.mkdir(parents=True)
+        canonical = Path(__file__).resolve().parent / "fixtures" / "canonical" / "v1" / "valid"
+        for name in ("brief.json", "evaluation.json", "evidence.json", "actions.json", "state.json"):
+            shutil.copy2(canonical / name, artifacts / name)
+        crop = artifacts / "evidence" / "crops" / "evidence-1.png"
+        crop.parent.mkdir(parents=True)
+        crop.write_bytes(PNG_1X1)
+        packet = {
+            "phase": "eval-journey",
+            "prototype_url": "https://example.test/experiments/create",
+            "workspace": str(root / "workspace"),
+            "artifacts_dir": str(artifacts),
+        }
+        loaded = journey._load_inputs(packet)
+        assert loaded["canonical_mode"] is True
+        assert loaded["criterion_ids"] == ["AC-1"]
+        assert not (artifacts / "evaluation-report.csv").exists()
+        expected = {
+            "depth": "quick",
+            "prototype_url": packet["prototype_url"],
+            "evaluated_at": "2026-09-11T20:00:00Z",
+            "persona_selection": loaded["extract"]["persona_selection"],
+            "journeys": [{
+                "id": "journey-1", "title": "Create experiment",
+                "persona": "persona-data-scientist-junior", "source": "Jira acceptance criteria",
+                "steps_expected": 1, "steps_completed": 1, "verdict": "PASS",
+                "verdict_detail": "The form is visible.", "ac_ids": ["AC-1"],
+                "steps": [{"step": 1, "action": "Observe form", "result": "success", "screenshot": "evidence/crops/evidence-1.png", "narration": "Form controls are visible."}],
+            }],
+            "exploration": [],
+            "criterion_results": [{"criterion_id": "AC-1", "verdict": "PASS", "rationale": "The form is visible.", "evidence": "evidence/crops/evidence-1.png", "fix_action": "", "fix_file": "", "human_action": ""}],
+        }
+        response = {"status": "completed", "output_text": json.dumps(expected), "usage": {"input_tokens": 1, "output_tokens": 1, "total_tokens": 2}}
+        journey.run_structured_journey(packet, model="gpt-5.6-luna", request_fn=lambda _request: response)
+        assert json.loads((artifacts / "journey-log.json").read_text()) == expected
+        assert not (artifacts / "evaluation-report.csv").exists()
 
     print("PASS")
     return 0

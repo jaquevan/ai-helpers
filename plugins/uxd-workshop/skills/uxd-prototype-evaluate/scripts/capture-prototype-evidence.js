@@ -13,6 +13,7 @@
 
 const fs = require('fs');
 const path = require('path');
+const { captureTargetedEvidence, DEFAULT_VIEWPORT } = require('./targeted-evidence');
 let chromium;
 try {
   ({ chromium } = require('@playwright/test'));
@@ -49,17 +50,15 @@ async function main() {
   const url = assertSupportedUrl(prototypeUrl);
   const screenshotsDir = path.join(artifactsDir, 'screenshots');
   const screenshotRelative = 'screenshots/journey-baseline.png';
-  const screenshotPath = path.join(artifactsDir, screenshotRelative);
   const evidencePath = path.join(artifactsDir, 'prototype-evidence.json');
 
   fs.mkdirSync(screenshotsDir, { recursive: true });
 
   const browser = await chromium.launch({ headless: true });
   try {
-    const page = await browser.newPage({ viewport: { width: 1440, height: 900 } });
+    const page = await browser.newPage({ viewport: DEFAULT_VIEWPORT, deviceScaleFactor: 1 });
     await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 30000 });
     await page.waitForLoadState('networkidle', { timeout: 5000 }).catch(() => null);
-    await page.screenshot({ path: screenshotPath, fullPage: false });
 
     const pageEvidence = await page.evaluate(() => {
       const clean = value => String(value || '').replace(/\s+/g, ' ').trim();
@@ -107,13 +106,26 @@ async function main() {
       };
     });
 
+    const targeted = await captureTargetedEvidence(page, {
+      artifactsDir,
+      prefix: 'journey-baseline',
+      rawRelative: screenshotRelative,
+      purpose: 'journey',
+      maxCrops: 6,
+      padding: 16,
+    });
+
     const evidence = {
       schema_version: 1,
       capture_method: 'deterministic-baseline',
       prototype_url: page.url(),
       captured_at: new Date().toISOString(),
-      viewport: { width: 1440, height: 900 },
+      viewport: DEFAULT_VIEWPORT,
       screenshots: [screenshotRelative],
+      model_screenshots: targeted.model_screenshots,
+      capture: targeted.capture,
+      crops: targeted.crops,
+      input_metrics: targeted.input_metrics,
       page: pageEvidence,
     };
     fs.writeFileSync(evidencePath, `${JSON.stringify(evidence, null, 2)}\n`);
@@ -125,6 +137,10 @@ async function main() {
       evidence_file: evidencePath,
       screenshot_count: evidence.screenshots.length,
       screenshot_paths: evidence.screenshots,
+      model_screenshot_count: evidence.model_screenshots.length,
+      model_screenshot_paths: evidence.model_screenshots,
+      crop_count: evidence.crops.length,
+      selected_pixel_ratio: evidence.input_metrics.pixel_ratio,
       heading_count: evidence.page.headings.length,
       control_count: evidence.page.controls.length,
     };

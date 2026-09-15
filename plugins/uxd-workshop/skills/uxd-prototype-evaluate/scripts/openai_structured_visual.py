@@ -12,6 +12,7 @@ from typing import Any, Callable
 
 from openai_api_agent import _cost, _request, _usage
 from openai_structured_journey import _image_content, _object, _output_text, _validate
+from prompt_cache import prefix_metrics
 
 
 SCRIPT_DIR = Path(__file__).resolve().parent
@@ -64,7 +65,7 @@ def _load_inputs(packet: dict[str, Any]) -> dict[str, Any]:
     journey = json.loads((artifacts / "journey-log.json").read_text())
     evidence_path = artifacts / "prototype-evidence.json"
     evidence = json.loads(evidence_path.read_text()) if evidence_path.is_file() else {}
-    paths = list(evidence.get("screenshots") or [])
+    paths = list(evidence.get("model_screenshots") or evidence.get("screenshots") or [])
     for item in journey.get("journeys") or []:
         paths.extend(step.get("screenshot") for step in item.get("steps") or [])
     screenshots = list(dict.fromkeys(path for path in paths if path))
@@ -106,13 +107,21 @@ def build_visual_prompt(packet: dict[str, Any]) -> str:
     inputs = _load_inputs(packet)
     context = {
         "prototype_url": packet["prototype_url"],
-        "reference_specs": inputs["specs"],
         "screenshots": inputs["screenshots"],
         "page_evidence": inputs["evidence"].get("page", {}),
         "journeys": inputs["journey"].get("journeys", []),
         "existing_source_findings": (inputs["report"].get("source_mode") or {}).get("violations", []),
     }
-    return f"{PROCEDURE_PATH.read_text().strip()}\n\nVISUAL INPUT\n{json.dumps(context, indent=2)}"
+    return f"VISUAL INPUT\n{json.dumps(context, indent=2)}"
+
+
+def build_visual_static_prefix() -> str:
+    return (
+        "Compare only supplied screenshot crops against the supplied reference "
+        "rules. Return only strict schema data.\n\n"
+        f"{PROCEDURE_PATH.read_text().strip()}\n\n"
+        f"REFERENCE RULES\n{json.dumps(load_guideline_specs(), separators=(',', ':'))}"
+    )
 
 
 def build_visual_request(packet: dict[str, Any], *, model: str, reasoning_effort: str = "low") -> dict[str, Any]:
@@ -122,7 +131,7 @@ def build_visual_request(packet: dict[str, Any], *, model: str, reasoning_effort
     return {
         "model": model,
         "input": [
-            {"role": "developer", "content": "Compare only the supplied screenshots against the supplied reference rules. Return only strict schema data."},
+            {"role": "developer", "content": build_visual_static_prefix()},
             {"role": "user", "content": content},
         ],
         "reasoning": {"effort": reasoning_effort},
@@ -163,6 +172,8 @@ def _merge_report(inputs: dict[str, Any], output: dict[str, Any]) -> dict[str, A
             "screenshots_analyzed": len(inputs["screenshots"]),
             "guidelines_analyzed": len(inputs["specs"]),
             "input_bytes": input_bytes,
+            "raw_image_bytes": int((inputs["evidence"].get("input_metrics") or {}).get("raw_image_bytes", input_bytes)),
+            "selected_pixel_ratio": float((inputs["evidence"].get("input_metrics") or {}).get("pixel_ratio", 1)),
         },
         "findings": output["findings"],
     }
@@ -192,4 +203,4 @@ def run_structured_visual(packet: dict[str, Any], *, model: str, reasoning_effor
     target = inputs["artifacts"] / "consistency-report.json"
     temp = target.with_suffix(".json.tmp"); temp.write_text(json.dumps(report, indent=2) + "\n"); temp.replace(target)
     usage = _usage(response); cost = _cost(model, usage)
-    return {"provider": "openai", "model": model, "agent": "responses-api-structured-visual", "duration_s": round(time.monotonic() - started, 3), "exit_code": 0, "status": "completed", "output_text": output_text, "token_usage": usage, "cost_usd": cost, "billing_source": "provider_estimate" if cost is not None else "unavailable", "turns_used": 1, "turn_limit_reached": False}
+    return {"provider": "openai", "model": model, "agent": "responses-api-structured-visual", "duration_s": round(time.monotonic() - started, 3), "exit_code": 0, "status": "completed", "output_text": output_text, "token_usage": usage, "cost_usd": cost, "billing_source": "provider_estimate" if cost is not None else "unavailable", "turns_used": 1, "turn_limit_reached": False, "prompt_cache": prefix_metrics(build_visual_static_prefix(), build_visual_prompt(packet))}

@@ -45,11 +45,13 @@ OPENAI_PHASES = (
         "procedure": "api-phases/eval-journey.md",
         "arguments": "Judge one x-ray pass from local screenshot and DOM evidence.",
         "required": (
-            "extract-state.json",
-            "evaluation-report.csv",
-            "prototype-evidence.json",
+            "brief.json",
+            "evaluation.json",
+            "evidence.json",
+            "actions.json",
+            "state.json",
         ),
-        "outputs": ("journey-log.json", "evaluation-report.csv"),
+        "outputs": ("journey-log.json",),
         "runner": "structured",
         "turn_limit": 1,
     },
@@ -68,8 +70,8 @@ OPENAI_PHASES = (
         "model_phase": "eval-usability",
         "procedure": "eval-usability.md",
         "arguments": "Run Phase B once using the extracted personas and captured journey.",
-        "required": ("extract-state.json", "journey-log.json", "evaluation-report.csv"),
-        "outputs": ("persona-results.json", "journey-log.json", "evaluation-report.csv"),
+        "required": ("extract-state.json", "journey-log.json"),
+        "outputs": ("persona-results.json", "journey-log.json"),
         "runner": "live_browser",
         "turn_limit": 10,
     },
@@ -340,6 +342,48 @@ def run_evidence_capture(
     return result
 
 
+def run_phase_b_canonical_sync(
+    artifacts_dir: Path,
+    *,
+    provider: str,
+    model: str,
+    benchmark_output: Path,
+) -> dict[str, Any]:
+    """Validate and atomically merge paid phase outputs into canonical JSON."""
+    started = time.monotonic()
+    canonical_provider = "openai" if provider == "openai" else "anthropic-compatible"
+    command = [
+        "node",
+        str(SCRIPT_DIR / "sync-phase-b-canonical.js"),
+        str(artifacts_dir),
+        "--provider",
+        canonical_provider,
+        "--model",
+        model,
+        "--json",
+    ]
+    completed = subprocess.run(
+        command,
+        cwd=str(artifacts_dir),
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    if completed.returncode != 0:
+        detail = (completed.stdout + completed.stderr).strip()[-2000:]
+        raise ValueError(f"sync-phase-b-canonical.js failed: {detail}")
+    try:
+        result = json.loads(completed.stdout)
+    except json.JSONDecodeError as error:
+        raise ValueError(
+            f"sync-phase-b-canonical.js returned invalid JSON: {error}"
+        ) from error
+    result["duration_s"] = round(time.monotonic() - started, 3)
+    result["script"] = str((SCRIPT_DIR / "sync-phase-b-canonical.js").resolve())
+    benchmark_output.write_text(json.dumps(result, indent=2) + "\n")
+    return result
+
+
 def run_openai_phases(
     *,
     key: str,
@@ -475,6 +519,9 @@ def run_openai_phases(
             "llm_cost_usd": float(result.get("cost_usd") or 0),
             "validation": validation_detail,
         }
+        prompt_cache = result.get("prompt_cache") or {}
+        if prompt_cache:
+            phase_entry["prompt_cache"] = prompt_cache
         telemetry_phases.append(phase_entry)
         phase_results.append({**phase_entry, "output_text": result.get("output_text", "")})
         if phase_tracer:
@@ -667,20 +714,31 @@ def main() -> int:
         return 2
 
     url = normalize_prototype_url(args.url)
-    deterministic_evidence = None
-    if provider == "openai" or args.phase_plan_only:
-        try:
-            deterministic_evidence = run_evidence_capture(
-                url,
-                artifacts_dir,
-                benchmark_output=(
-                    Path(local_inputs["benchmark_dir"])
-                    / "deterministic-evidence-result.json"
-                ),
-            )
-        except ValueError as error:
-            print(f"Deterministic prototype evidence capture failed: {error}", file=sys.stderr)
-            return 2
+    try:
+        deterministic_evidence = run_evidence_capture(
+            url,
+            artifacts_dir,
+            benchmark_output=(
+                Path(local_inputs["benchmark_dir"])
+                / "deterministic-evidence-result.json"
+            ),
+        )
+    except ValueError as error:
+        print(f"Deterministic prototype evidence capture failed: {error}", file=sys.stderr)
+        return 2
+
+    try:
+        canonical_phase_a = run_local_json_script(
+            "assemble-phase-a-canonical.js",
+            artifacts_dir,
+            benchmark_output=(
+                Path(local_inputs["benchmark_dir"])
+                / "deterministic-phase-a-canonical-result.json"
+            ),
+        )
+    except ValueError as error:
+        print(f"Canonical Phase A gate failed before model execution: {error}", file=sys.stderr)
+        return 2
 
     if args.phase_plan_only:
         plan = write_phase_plan(
@@ -698,18 +756,24 @@ def main() -> int:
             "model_invoked": False,
             "shared_turn_limit": args.max_turns,
             "deterministic_evidence": deterministic_evidence,
+            "canonical_phase_a": canonical_phase_a,
             "phases": plan,
         }, indent=2))
         return 0
 
-    if provider == "openai" and "--no-fix" not in args.iterate_flags.split():
+    if provider == "openai":
+        # The canonical five are now the OpenAI runtime contract. The CSV is a
+        # temporary Anthropic/external-consumer compatibility view only.
+        (artifacts_dir / "evaluation-report.csv").unlink(missing_ok=True)
+
+    if provider == "openai" and not canonical_phase_a.get("skip_paid_phases") and "--no-fix" not in args.iterate_flags.split():
         print(
             "The bounded OpenAI runner currently requires --no-fix. "
             "Pass --iterate-flags='--no-fix --max-iterations=1'.",
             file=sys.stderr,
         )
         return 2
-    if provider == "openai" and not os.environ.get("OPENAI_API_KEY"):
+    if provider == "openai" and not canonical_phase_a.get("skip_paid_phases") and not os.environ.get("OPENAI_API_KEY"):
         print(
             "OPENAI_API_KEY is not set. Export a replacement key in this shell "
             "before running the OpenAI pipeline.",
@@ -743,43 +807,79 @@ def main() -> int:
         "deterministic_extract": deterministic_extract,
         "deterministic_classification": deterministic_classification,
         "deterministic_evidence": deterministic_evidence,
+        "canonical_phase_a": canonical_phase_a,
     }
     with langfuse_trace.LivePipelineTrace(initial_payload) as live_trace:
         started = time.monotonic()
-        try:
-            if provider == "openai":
-                result = run_openai_phases(
-                    key=args.key,
-                    url=url,
-                    workspace=workspace,
-                    jira_context_file=local_inputs["jira_context_file"],
-                    benchmark_dir=local_inputs["benchmark_dir"],
-                    platform=platform,
-                    model_override=model_override,
-                    reasoning_effort=args.reasoning_effort,
-                    max_turns=args.max_turns,
-                    trace_dir=trace_dir,
-                    phase_tracer=live_trace,
-                )
-            else:
-                result = run_anthropic(prompt, model, workspace, trace_path)
-        except (RuntimeError, ValueError) as error:
+        if canonical_phase_a.get("skip_paid_phases"):
             result = {
                 "provider": provider,
-                "model": model,
-                "agent": "responses-api" if provider == "openai" else "claude-cli",
-                "duration_s": round(time.monotonic() - started, 1),
-                "exit_code": 2,
-                "output_text": langfuse_trace.redact_text(str(error), 1000),
-                "token_usage": {
-                    "input_tokens": 0,
-                    "output_tokens": 0,
-                    "total_tokens": 0,
-                },
+                "model": "cache",
+                "agent": "xray-cache",
+                "duration_s": 0,
+                "exit_code": 0,
+                "output_text": "Restored validated canonical evaluation from X-Ray cache.",
+                "token_usage": {"input_tokens": 0, "output_tokens": 0, "total_tokens": 0},
                 "cost_usd": 0,
-                "billing_source": "unavailable",
-                "status": "failed",
+                "billing_source": "cache",
+                "status": "completed",
+                "cache_hit": True,
+                "phases": [],
+                "phase_results": [],
             }
+        else:
+            try:
+                if provider == "openai":
+                    result = run_openai_phases(
+                        key=args.key,
+                        url=url,
+                        workspace=workspace,
+                        jira_context_file=local_inputs["jira_context_file"],
+                        benchmark_dir=local_inputs["benchmark_dir"],
+                        platform=platform,
+                        model_override=model_override,
+                        reasoning_effort=args.reasoning_effort,
+                        max_turns=args.max_turns,
+                        trace_dir=trace_dir,
+                        phase_tracer=live_trace,
+                    )
+                else:
+                    result = run_anthropic(prompt, model, workspace, trace_path)
+            except (RuntimeError, ValueError) as error:
+                result = {
+                    "provider": provider,
+                    "model": model,
+                    "agent": "responses-api" if provider == "openai" else "claude-cli",
+                    "duration_s": round(time.monotonic() - started, 1),
+                    "exit_code": 2,
+                    "output_text": langfuse_trace.redact_text(str(error), 1000),
+                    "token_usage": {
+                        "input_tokens": 0,
+                        "output_tokens": 0,
+                        "total_tokens": 0,
+                    },
+                    "cost_usd": 0,
+                    "billing_source": "unavailable",
+                    "status": "failed",
+                }
+
+        canonical_phase_b = None
+        if result.get("exit_code") == 0 and not result.get("cache_hit"):
+            try:
+                canonical_phase_b = run_phase_b_canonical_sync(
+                    artifacts_dir,
+                    provider=provider,
+                    model=model,
+                    benchmark_output=(
+                        Path(local_inputs["benchmark_dir"])
+                        / "canonical-phase-b-result.json"
+                    ),
+                )
+                result["canonical_phase_b"] = canonical_phase_b
+            except ValueError as error:
+                result["exit_code"] = 2
+                result["status"] = "failed"
+                result["output_text"] = f"Canonical Phase B synchronization failed: {error}"
 
         deterministic_report = None
         if result.get("exit_code") == 0:

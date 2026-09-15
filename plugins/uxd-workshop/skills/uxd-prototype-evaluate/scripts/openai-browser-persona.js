@@ -5,8 +5,10 @@
 
 const fs = require('fs');
 const path = require('path');
+const crypto = require('crypto');
 const { chromium } = require('@playwright/test');
 const { escapeCSVField } = require('./csv-utils');
+const { captureTargetedEvidence } = require('./targeted-evidence');
 
 const DIMENSIONS = [
   ['workflow_continuity', 'Workflow Continuity & Integrity'],
@@ -176,19 +178,39 @@ function validatePersonaResult(result, { personaId, taskIndex, acIds, screenshot
 async function runPersonaSession({ page, artifactsDir, prototypeUrl, persona, task, taskIndex, acIds, model, reasoningEffort, maxTurns, requestFn = requestOpenAI, traceStream }) {
   const slug = persona.id.replace(/[^a-z0-9_-]/gi, '-');
   const screenshots = new Set(); let shot = 0; let actions = 0;
-  const capture = async () => {
+  const capture = async (focus = '') => {
     shot += 1; const relative = `screenshots/persona-${slug}-task-${taskIndex}-step-${shot}.png`;
-    const target = path.join(artifactsDir, relative); fs.mkdirSync(path.dirname(target), { recursive: true });
-    await page.screenshot({ path: target, fullPage: true }); screenshots.add(relative);
-    return { relative, target, state: await pageState(page) };
+    const targeted = await captureTargetedEvidence(page, {
+      artifactsDir,
+      prefix: `persona-${slug}-task-${taskIndex}-step-${shot}`,
+      rawRelative: relative,
+      purpose: 'usability',
+      focus,
+      maxCrops: focus ? 1 : 3,
+      padding: 16,
+    });
+    screenshots.add(relative);
+    targeted.model_screenshots.forEach(item => screenshots.add(item));
+    return {
+      relative,
+      target: path.join(artifactsDir, targeted.model_screenshots[0]),
+      modelTargets: targeted.model_screenshots.map(item => path.join(artifactsDir, item)),
+      state: await pageState(page),
+    };
   };
   await page.goto(prototypeUrl, { waitUntil: 'networkidle' });
   const origin = new URL(prototypeUrl).origin; let current = await capture();
   const system = `Act as this usability-test participant, not as a developer or evaluator.\n\nPERSONA\n${persona.profile}\n\nGOAL\n${task}\n\nUse only the browser functions. Judge only what the rendered interface reveals. Do not infer or request source code, files, shell access, Jira, or implementation details. Think and act from the persona's experience level. Use at most ${Math.max(1, maxTurns - 1)} browser actions. After the last allowed browser action, return the strict result immediately. If the UI still does not expose needed information after inspecting the most relevant control, record the task as blocked or abandoned with rendered evidence; do not repeat toggles or keep searching.`;
+  let dynamicInputBytes = Buffer.byteLength(JSON.stringify(current.state));
+  const promptCache = {
+    static_prefix_sha256: `sha256:${crypto.createHash('sha256').update(system).digest('hex')}`,
+    static_prefix_bytes: Buffer.byteLength(system),
+    dynamic_input_bytes: 0,
+  };
   const schema = personaSchema(persona.id, taskIndex, acIds);
   let payload = {
     model, instructions: system,
-    input: [{ role: 'user', content: [{ type: 'input_text', text: `Acceptance criteria relevant to this task: ${JSON.stringify(acIds)}\nInitial rendered UI: ${JSON.stringify(current.state)}` }, imageContent(current.target)] }],
+    input: [{ role: 'user', content: [{ type: 'input_text', text: `Acceptance criteria relevant to this task: ${JSON.stringify(acIds)}\nInitial rendered UI: ${JSON.stringify(current.state)}` }, ...current.modelTargets.map(imageContent)] }],
     tools: browserTools(), tool_choice: 'required', parallel_tool_calls: false,
     reasoning: { effort: reasoningEffort }, text: { format: { type: 'json_schema', name: 'uxd_live_persona_result', strict: true, schema }, verbosity: 'low' },
     max_output_tokens: 5000, store: false, include: ['reasoning.encrypted_content'],
@@ -204,17 +226,19 @@ async function runPersonaSession({ page, artifactsDir, prototypeUrl, persona, ta
         if (!actions) throw new Error('Persona returned a result without interacting with the browser');
         const text = outputText(response); if (!text) throw new Error('Persona response contained neither browser calls nor structured output');
         const result = JSON.parse(text); validatePersonaResult(result, { personaId: persona.id, taskIndex, acIds, screenshots });
-        return { result, usage: total, turns: turn, outputText: text };
+        return { result, usage: total, turns: turn, outputText: text, promptCache: { ...promptCache, dynamic_input_bytes: dynamicInputBytes } };
       }
       if (turn >= maxTurns) throw new Error('Persona used reserved final-result turn for browser actions');
       const outputs = [...(response.output || [])];
       for (const call of calls) {
         let result;
-        try { await executeBrowserTool(page, call, origin); actions += 1; await page.waitForTimeout(150); current = await capture(); result = { ok: true, screenshot: current.relative, page: current.state }; }
-        catch (error) { current = await capture(); result = { ok: false, error: String(error.message || error), screenshot: current.relative, page: current.state }; }
+        let focus = '';
+        try { focus = String(JSON.parse(call.arguments || '{}').target || ''); } catch { focus = ''; }
+        try { await executeBrowserTool(page, call, origin); actions += 1; await page.waitForTimeout(150); current = await capture(focus); dynamicInputBytes += Buffer.byteLength(JSON.stringify(current.state)); result = { ok: true, screenshot: current.relative, page: current.state }; }
+        catch (error) { current = await capture(focus); dynamicInputBytes += Buffer.byteLength(JSON.stringify(current.state)); result = { ok: false, error: String(error.message || error), screenshot: current.relative, page: current.state }; }
         outputs.push({ type: 'function_call_output', call_id: call.call_id, output: JSON.stringify(result) });
       }
-      outputs.push({ role: 'user', content: [{ type: 'input_text', text: `Current rendered UI after browser action: ${JSON.stringify(current.state)}` }, imageContent(current.target)] });
+      outputs.push({ role: 'user', content: [{ type: 'input_text', text: `Current rendered UI after browser action: ${JSON.stringify(current.state)}` }, ...current.modelTargets.map(imageContent)] });
       payload = { model, instructions: system, input: outputs, tools: browserTools(), tool_choice: turn >= maxTurns - 1 ? 'none' : 'auto', parallel_tool_calls: false, reasoning: { effort: reasoningEffort }, text: { format: { type: 'json_schema', name: 'uxd_live_persona_result', strict: true, schema }, verbosity: 'low' }, max_output_tokens: 5000, store: false, include: ['reasoning.encrypted_content'] };
     } catch (error) {
       if (error instanceof LiveUsabilityError) throw error;
@@ -252,11 +276,13 @@ function aggregateArtifacts(artifactsDir, results) {
     persona_overlays: results.map(r => ({ persona: r.persona, persona_name: r.persona_name, task_index: r.task_index, patience_start: r.patience_start, patience_end: r.patience_end, abandoned: r.abandoned, confusion_events: r.confusion_events, cli_escapes: 0 })),
     think_aloud: { traces: results.flatMap(r => r.trace.map(t => ({ persona: r.persona, task_index: r.task_index, ...t }))) },
   };
+  const writes = [[path.join(artifactsDir, 'persona-results.json'), JSON.stringify(results, null, 2) + '\n'], [journeyPath, JSON.stringify(journey, null, 2) + '\n']];
   const csvPath = path.join(artifactsDir, 'evaluation-report.csv');
-  const original = fs.readFileSync(csvPath, 'utf8').split(/\n# USABILITY DIMENSIONS\n/)[0].trimEnd();
-  const rows = dimensions.map(d => [d.id, d.name, d.composite_score, d.confidence, d.evidence, Object.entries(d.scores).map(([p, s]) => `${p}:${s.score}`).join(';')].map(escapeCSVField).join(','));
-  const csv = `${original}\n\n# USABILITY DIMENSIONS\ndimension_id,dimension_name,score,confidence,evidence,persona_scores\n${rows.join('\n')}\n`;
-  const writes = [[path.join(artifactsDir, 'persona-results.json'), JSON.stringify(results, null, 2) + '\n'], [journeyPath, JSON.stringify(journey, null, 2) + '\n'], [csvPath, csv]];
+  if (fs.existsSync(csvPath)) {
+    const original = fs.readFileSync(csvPath, 'utf8').split(/\n# USABILITY DIMENSIONS\n/)[0].trimEnd();
+    const rows = dimensions.map(d => [d.id, d.name, d.composite_score, d.confidence, d.evidence, Object.entries(d.scores).map(([p, s]) => `${p}:${s.score}`).join(';')].map(escapeCSVField).join(','));
+    writes.push([csvPath, `${original}\n\n# USABILITY DIMENSIONS\ndimension_id,dimension_name,score,confidence,evidence,persona_scores\n${rows.join('\n')}\n`]);
+  }
   for (const [target, text] of writes) fs.writeFileSync(`${target}.tmp`, text);
   for (const [target] of writes) fs.renameSync(`${target}.tmp`, target);
 }
@@ -267,6 +293,7 @@ async function runLiveUsability({ artifactsDir, prototypeUrl, skillDir, model, r
   const tasks = extract.tasks_to_be_done || [];
   if (!selected.length || !tasks.length) throw new Error('Usability requires selected personas and tasks');
   const browser = await chromium.launch({ headless: true }); const results = [];
+  const promptPrefixes = [];
   const total = { input_tokens: 0, output_tokens: 0, total_tokens: 0, cached_input_tokens: 0, reasoning_tokens: 0 };
   let turns = 0;
   try {
@@ -279,7 +306,7 @@ async function runLiveUsability({ artifactsDir, prototypeUrl, skillDir, model, r
       const acIds = typeof tasks[index] === 'object' ? (tasks[index].covers_acs || []) : [];
       try {
         const session = await runPersonaSession({ page, artifactsDir, prototypeUrl, persona: loadPersona(skillDir, personaId), task, taskIndex: index + 1, acIds, model, reasoningEffort, maxTurns: Math.min(6, remainingTurns - ((remainingSessions - 1) * 2)), requestFn, traceStream });
-        turns += session.turns; addUsage(total, session.usage); results.push(session.result);
+        turns += session.turns; addUsage(total, session.usage); results.push(session.result); promptPrefixes.push(session.promptCache);
       } catch (error) {
         if (error instanceof LiveUsabilityError) {
           turns += error.turns || 0; addUsage(total, error.usage || {});
@@ -290,7 +317,7 @@ async function runLiveUsability({ artifactsDir, prototypeUrl, skillDir, model, r
     }
   } finally { await browser.close(); }
   aggregateArtifacts(artifactsDir, results);
-  return { results, token_usage: total, turns_used: turns };
+  return { results, token_usage: total, turns_used: turns, prompt_cache: { prefixes: promptPrefixes } };
 }
 
 async function main() {
@@ -298,7 +325,7 @@ async function main() {
   const artifactsDir = path.resolve(get('--artifacts-dir')); const started = Date.now();
   try {
     const result = await runLiveUsability({ artifactsDir, prototypeUrl: get('--url'), skillDir: path.resolve(__dirname, '..'), model: get('--model'), reasoningEffort: get('--reasoning-effort') || 'low', maxTurns: Number(get('--max-turns') || 12), traceStream: get('--trace') });
-    process.stdout.write(JSON.stringify({ provider: 'openai', model: get('--model'), agent: 'responses-api-live-browser-personas', duration_s: Math.round((Date.now() - started) / 10) / 100, exit_code: 0, status: 'completed', output_text: JSON.stringify({ persona_runs: result.results }), token_usage: result.token_usage, cost_usd: null, billing_source: 'aggregated_by_pipeline', turns_used: result.turns_used, turn_limit_reached: false }));
+    process.stdout.write(JSON.stringify({ provider: 'openai', model: get('--model'), agent: 'responses-api-live-browser-personas', duration_s: Math.round((Date.now() - started) / 10) / 100, exit_code: 0, status: 'completed', output_text: JSON.stringify({ persona_runs: result.results }), token_usage: result.token_usage, cost_usd: null, billing_source: 'aggregated_by_pipeline', turns_used: result.turns_used, turn_limit_reached: false, prompt_cache: result.prompt_cache }));
   } catch (error) {
     process.stdout.write(JSON.stringify({ provider: 'openai', model: get('--model'), agent: 'responses-api-live-browser-personas', duration_s: Math.round((Date.now() - started) / 10) / 100, exit_code: 2, status: 'failed', output_text: String(error.message || error), token_usage: error.usage || {}, cost_usd: null, billing_source: 'aggregated_by_pipeline', turns_used: error.turns || 0, turn_limit_reached: false }));
     process.exitCode = 2;

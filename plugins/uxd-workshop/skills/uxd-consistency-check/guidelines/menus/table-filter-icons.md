@@ -1,7 +1,7 @@
 ---
 id: table-filter-icons
 title: Table Filter Dropdown Icons
-category: tables
+category: menus
 automatable: true
 checkpoints: [local, mr, signoff]
 severity: error

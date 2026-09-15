@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import importlib.util
 import json
+import shutil
 import tempfile
 from pathlib import Path
 
@@ -67,26 +68,36 @@ def main() -> int:
         assert sum(packet["turn_limit"] for packet in plan) == 12
         assert plan[0]["required_inputs"] == [
             {
-                "name": "extract-state.json",
-                "path": str((artifacts / "extract-state.json").resolve()),
+                "name": "brief.json",
+                "path": str((artifacts / "brief.json").resolve()),
             },
             {
-                "name": "evaluation-report.csv",
-                "path": str((artifacts / "evaluation-report.csv").resolve()),
+                "name": "evaluation.json",
+                "path": str((artifacts / "evaluation.json").resolve()),
             },
             {
-                "name": "prototype-evidence.json",
-                "path": str((artifacts / "prototype-evidence.json").resolve()),
+                "name": "evidence.json",
+                "path": str((artifacts / "evidence.json").resolve()),
             },
+            {"name": "actions.json", "path": str((artifacts / "actions.json").resolve())},
+            {"name": "state.json", "path": str((artifacts / "state.json").resolve())},
         ]
         journey_prompt = pipeline.build_phase_prompt(pipeline.OPENAI_PHASES[0], plan[0])
-        assert "Structured journey evaluation" in journey_prompt
+        assert "EVALUATION INPUT" in journey_prompt
+        assert "Structured journey evaluation" not in journey_prompt
         assert "Kueue" not in journey_prompt
         usability_prompt = pipeline.build_phase_prompt(pipeline.OPENAI_PHASES[2], plan[2])
         assert "ml-engineer+junior" in usability_prompt
         assert "browser_click" in usability_prompt
         assert "filesystem" in usability_prompt
         assert str(root) not in usability_prompt
+
+        canonical = Path(__file__).resolve().parent / "fixtures" / "canonical" / "v1" / "valid"
+        for name in ("brief.json", "evaluation.json", "evidence.json", "actions.json", "state.json"):
+            shutil.copy2(canonical / name, artifacts / name)
+        canonical_crop = artifacts / "evidence" / "crops" / "evidence-1.png"
+        canonical_crop.parent.mkdir(parents=True)
+        canonical_crop.write_bytes(b"png")
 
         def fake_structured(packet, **_kwargs):
             (Path(packet["artifacts_dir"]) / "journey-log.json").write_text("{}")

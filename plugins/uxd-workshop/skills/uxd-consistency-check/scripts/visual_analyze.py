@@ -46,7 +46,7 @@ def extract_page_data(
             screenshot_bytes = None
             if capture_screenshot:
                 print("Capturing screenshot...")
-                screenshot_bytes = page.screenshot(full_page=True, type='png')
+                screenshot_bytes = page.screenshot(full_page=False, type='png')
 
             # Extract page structure with bounding boxes
             print("Extracting DOM elements with positions...")
