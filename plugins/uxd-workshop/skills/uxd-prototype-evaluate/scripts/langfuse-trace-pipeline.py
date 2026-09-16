@@ -115,6 +115,11 @@ def parse_args():
     parser.add_argument("--all-files", action="store_true")
     parser.add_argument("--iterate-flags", default="")
     parser.add_argument("--experiment-label", default="eval-iterate")
+    parser.add_argument("--benchmark-name", default=None)
+    parser.add_argument("--condition", choices=["legacy", "optimized"], default=None)
+    parser.add_argument("--screenshot-mode", default=None)
+    parser.add_argument("--artifact-mode", default=None)
+    parser.add_argument("--csv-used", choices=["true", "false"], default=None)
     parser.add_argument("--reasoning-effort", default="low", choices=["none", "low", "medium", "high", "xhigh", "max"])
     parser.add_argument(
         "--max-turns",
@@ -149,7 +154,7 @@ def build_prompt(
         "Use only those exact local paths. Do not discover, install, or inspect skills in "
         "home directories, .claude, .cursor plugin caches, or marketplace caches. "
         "Do not look up credentials or call Jira; the validated MCP context is authoritative. "
-        "Source consistency is already complete and must not be rerun. Write artifacts under "
+        "Write artifacts under "
         f".artifacts/{key}/eval/, and finish with a concise summary of results."
         f"{extra}"
     )
@@ -278,6 +283,47 @@ def validate_phase_outputs(packet: dict[str, Any]) -> tuple[bool, str]:
         if (consistency.get("visual_mode") or {}).get("ran") is not True:
             return False, "consistency-report.json says visual_mode.ran is false"
     return True, "declared outputs passed phase validation"
+
+
+def phase_outcome_metrics(phase: str, artifacts_dir: Path) -> dict[str, Any]:
+    """Extract compact outcome metrics; never include finding text or reasoning."""
+    metrics: dict[str, Any] = {
+        "retries": 0,
+        "fallbacks": 0,
+        "recovery_actions": [],
+        "confidence_available": False,
+    }
+    try:
+        if phase == "eval-extract":
+            extract = json.loads((artifacts_dir / "extract-state.json").read_text())
+            metrics["phase_decisions"] = {
+                "acceptance_criteria": len(extract.get("ac_list") or []),
+                "persona_selection_method": (extract.get("persona_selection") or {}).get("method"),
+                "decision_context_present": bool((extract.get("decision_context") or {}).get("has_decisions")),
+            }
+        elif phase in {"eval-consistency-visual", "eval-consistency-source"}:
+            report = json.loads((artifacts_dir / "consistency-report.json").read_text())
+            section = report.get("visual_mode" if phase.endswith("visual") else "source_mode") or {}
+            findings = section.get("findings") or section.get("violations") or []
+            verdict_counts: dict[str, int] = {}
+            severity_counts: dict[str, int] = {}
+            for finding in findings:
+                for key, target in (("verdict", verdict_counts), ("severity", severity_counts)):
+                    value = finding.get(key)
+                    if value:
+                        target[value] = target.get(value, 0) + 1
+            metrics["finding_count"] = len(findings)
+            metrics["decision_counts"] = {
+                "verdict": verdict_counts,
+                "severity": severity_counts,
+            }
+            input_metrics = report.get("visual_mode", {}).get("input_metrics") or {}
+            if input_metrics:
+                metrics["screenshot_count"] = int(input_metrics.get("screenshots_analyzed", 0) or 0)
+                metrics["screenshot_bytes"] = int(input_metrics.get("input_bytes", 0) or 0)
+    except (OSError, TypeError, ValueError, json.JSONDecodeError):
+        pass
+    return metrics
 
 
 def run_local_json_script(
@@ -518,7 +564,12 @@ def run_openai_phases(
             "cache_read_tokens": int(usage.get("cached_input_tokens", 0) or 0),
             "llm_cost_usd": float(result.get("cost_usd") or 0),
             "validation": validation_detail,
+            **phase_outcome_metrics(spec["name"], Path(packet["artifacts_dir"])),
         }
+        if phase_status != "completed":
+            phase_entry["error_category"] = langfuse_trace.error_category(
+                result.get("output_text") or validation_detail
+            )
         prompt_cache = result.get("prompt_cache") or {}
         if prompt_cache:
             phase_entry["prompt_cache"] = prompt_cache
@@ -809,6 +860,23 @@ def main() -> int:
         "deterministic_evidence": deterministic_evidence,
         "canonical_phase_a": canonical_phase_a,
     }
+    identity = {}
+    try:
+        identity = json.loads((artifacts_dir / "state.json").read_text()).get("identity", {})
+    except (OSError, json.JSONDecodeError):
+        pass
+    initial_payload["benchmark"] = {
+        "benchmark_name": args.benchmark_name,
+        "condition": args.condition,
+        "prototype_key": args.key,
+        "build_key": identity.get("build_key"),
+        "evaluator_key": identity.get("evaluator_key"),
+        "provider_model": f"{provider}/{model}",
+        "cache_decision": (canonical_phase_a.get("cache") or "unknown"),
+        "screenshot_mode": args.screenshot_mode,
+        "artifact_mode": args.artifact_mode,
+        "csv_used": None if args.csv_used is None else args.csv_used == "true",
+    }
     with langfuse_trace.LivePipelineTrace(initial_payload) as live_trace:
         started = time.monotonic()
         if canonical_phase_a.get("skip_paid_phases"):
@@ -1017,7 +1085,24 @@ def main() -> int:
             "run_result": result,
             "deterministic_report": deterministic_report,
             "phases": phases,
+            "metrics": {
+                "turns_used": int(result.get("turns_used", 0) or 0),
+                "retries": sum(int(phase.get("retries", 0) or 0) for phase in phases),
+                "fallbacks": sum(int(phase.get("fallbacks", 0) or 0) for phase in phases),
+                "recovery_actions": [
+                    action
+                    for phase in phases
+                    for action in (phase.get("recovery_actions") or [])
+                ],
+                "confidence_available": any(
+                    phase.get("confidence_available") is True for phase in phases
+                ),
+            },
         }
+        if result.get("exit_code"):
+            payload["metrics"]["error_category"] = langfuse_trace.error_category(
+                result.get("output_text")
+            )
         live_trace.finish(payload)
     summary = live_trace.summary
     print(json.dumps({**result, "eval_run_id": eval_run_id, **summary}, indent=2))

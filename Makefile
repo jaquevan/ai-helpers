@@ -3,6 +3,7 @@
 	mlflow-standby mlflow-resume \
 	langfuse-env langfuse-local-env langfuse-local-up langfuse-local-down langfuse-smoke \
 	langfuse-deps langfuse-eval langfuse-compare langfuse-pipeline langfuse-benchmark \
+	eval-onboard \
 	langfuse-verify \
 	test-subskills test-subskills-mlflow \
 	run-phase0 run-phase1-verify run-golden-baseline run-run-mode-matrix run-model-experiments \
@@ -65,6 +66,7 @@ LANGFUSE_LOCAL_PORT ?= 3100
 LANGFUSE_LOCAL_URI = http://localhost:$(LANGFUSE_LOCAL_PORT)
 LANGFUSE_LOCAL_ENV = docker/langfuse/.env
 PYTHON_RUN = $(if $(wildcard .venv/bin/python),.venv/bin/python,$(if $(shell command -v uv 2>/dev/null),uv run python3,python3))
+EVAL_RUN = bash scripts/eval-run.sh
 
 mlflow-poc7: ## Deprecated compatibility target; MLflow is not used
 	@echo 'MLflow is retained for research only and is not used by the active pipeline.'
@@ -77,13 +79,14 @@ SKILLS ?=
 EVAL_PROVIDER ?=
 EVAL_PLATFORM ?=
 MAX_TURNS ?=
+EVAL_ONBOARD_ARGS ?=
 
 langfuse-eval: ## Score eval artifacts locally and log quality to Langfuse
 	@if [ -z "$(KEY)" ]; then echo "Usage: make langfuse-eval KEY=RHAISTRAT-1492"; exit 1; fi
 	@if [ -d .artifacts/$(KEY)/eval ]; then ARTIFACTS=.artifacts/$(KEY)/eval; \
 	elif [ -d .artifacts/$(KEY) ]; then ARTIFACTS=.artifacts/$(KEY); \
 	else echo "Missing .artifacts/$(KEY) or .artifacts/$(KEY)/eval"; exit 1; fi; \
-	$(PYTHON_RUN) $(EVAL_SCRIPTS)/langfuse-eval.py \
+	$(EVAL_RUN) $(PYTHON_RUN) $(EVAL_SCRIPTS)/langfuse-eval.py \
 		$$ARTIFACTS \
 		--model $(if $(MODEL),$(MODEL),unknown) \
 		--prototype-key $(KEY) \
@@ -97,7 +100,7 @@ mlflow-smoke-all: ## All scorers: make mlflow-smoke-all KEY=RHAISTRAT-1492
 
 langfuse-compare: ## Compare direct-API models on subskills
 	@if [ -z "$(KEY)" ]; then echo "Usage: make langfuse-compare KEY=RHAISTRAT-1492 URL=<prototype-url>"; exit 1; fi
-	$(PYTHON_RUN) $(EVAL_SCRIPTS)/langfuse-compare-models.py \
+	$(EVAL_RUN) $(PYTHON_RUN) $(EVAL_SCRIPTS)/langfuse-compare-models.py \
 		--key $(KEY) \
 		--url $(URL) \
 		--skills $(if $(SKILLS),$(SKILLS),eval-extract eval-classify eval-consistency eval-report) \
@@ -109,7 +112,7 @@ mlflow-compare: ## Deprecated compatibility alias for langfuse-compare
 langfuse-pipeline: ## MCP-staged direct API pipeline with Langfuse
 	@if [ -z "$(KEY)" ] || [ -z "$(URL)" ] || [ -z "$(WORKSPACE)" ] || [ -z "$(JIRA_CONTEXT)" ]; then \
 		echo "Usage: make langfuse-pipeline KEY=RHAISTRAT-1492 URL=http://127.0.0.1:3000 WORKSPACE=/path/to/prototype JIRA_CONTEXT=tmp/benchmarks/RHAISTRAT-1492/jira-context.json"; exit 1; fi
-	$(PYTHON_RUN) $(EVAL_SCRIPTS)/langfuse-trace-pipeline.py \
+	$(EVAL_RUN) $(PYTHON_RUN) $(EVAL_SCRIPTS)/langfuse-trace-pipeline.py \
 		--key $(KEY) --url $(URL) --workspace $(WORKSPACE) --jira-context $(JIRA_CONTEXT) \
 		$(if $(BENCHMARK_DIR),--benchmark-dir $(BENCHMARK_DIR),) \
 		$(if $(PREFLIGHT_ONLY),--preflight-only,) \
@@ -159,6 +162,9 @@ langfuse-deps: ## Install Python deps for Langfuse SDK (creates .venv)
 	@.venv/bin/pip install -q langfuse
 	@echo "Use: source .venv/bin/activate  (or make langfuse-smoke uses .venv automatically)"
 
+eval-onboard: ## Read-only first-run setup check for prototype evaluation
+	@bash scripts/eval-onboard.sh $(EVAL_ONBOARD_ARGS)
+
 langfuse-benchmark: ## Phase 3 Langfuse matrix benchmark (4 cells → local Langfuse UI)
 	@bash scripts/run-langfuse-benchmark.sh $(URL)
 
@@ -169,10 +175,10 @@ mlflow-resume: ## Restore cluster MLflow+Postgres after standby
 	@bash scripts/mlflow-resume.sh
 
 langfuse-smoke: ## Langfuse SDK smoke trace (dry-run if keys unset)
-	$(PYTHON_RUN) $(EVAL_SCRIPTS)/langfuse_trace.py smoke
+	$(EVAL_RUN) $(PYTHON_RUN) $(EVAL_SCRIPTS)/langfuse_trace.py smoke
 
 langfuse-verify: ## Verify Langfuse health/auth and emit a metadata-only smoke trace
-	$(PYTHON_RUN) $(EVAL_SCRIPTS)/verify-langfuse.py
+	$(EVAL_RUN) $(PYTHON_RUN) $(EVAL_SCRIPTS)/verify-langfuse.py
 
 ledger-smoke: ## Append test row to cost ledger from existing artifacts
 	@if [ -z "$(KEY)" ]; then echo "Usage: make ledger-smoke KEY=RHAISTRAT-1492"; exit 1; fi

@@ -140,6 +140,31 @@ def main() -> int:
     }) == "blocked"
     assert langfuse_trace.pipeline_run_status({"exit_code": 2}) == "failed"
 
+    benchmark_values = langfuse_trace._trace_values({
+        "prototype_key": "PROJ-123",
+        "eval_run_id": "eval-PROJ-123-benchmark",
+        "provider": "openai",
+        "model": "gpt-5.6-luna",
+        "benchmark": {
+            "benchmark_name": "prototype-evaluator-architecture",
+            "condition": "optimized",
+            "build_key": "sha256:" + "a" * 64,
+            "evaluator_key": "sha256:" + "b" * 64,
+            "provider_model": "openai/gpt-5.6-luna",
+            "cache_decision": "miss",
+            "screenshot_mode": "targeted-crops",
+            "artifact_mode": "canonical-json",
+            "csv_used": False,
+        },
+    })
+    assert benchmark_values["metadata"]["condition"] == "optimized"
+    assert "benchmark_name=prototype-evaluator-architecture" in benchmark_values["tags"]
+    assert "csv_used=False" in benchmark_values["tags"]
+    assert langfuse_trace.error_category("OpenAI Responses API error 429") == "provider_transport"
+    assert langfuse_trace.error_category("missing required input: journey-log.json") == "missing_input"
+    assert langfuse_trace.error_category("OpenAI agent reached max_turns=12") == "turn_budget"
+    assert langfuse_trace.error_category("schema validation failed") == "validation"
+
     fake_client = FakeClient()
     initial_payload = {
         "prototype_key": "RHOAIUX-3239",

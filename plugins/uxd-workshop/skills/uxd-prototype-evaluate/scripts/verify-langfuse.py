@@ -57,6 +57,11 @@ def check_auth(host: str, public_key: str, secret_key: str) -> None:
 
 
 def main() -> int:
+    read_only = "--read-only" in sys.argv[1:]
+    unexpected = [arg for arg in sys.argv[1:] if arg != "--read-only"]
+    if unexpected:
+        print(f"Unknown arguments: {' '.join(unexpected)}", file=sys.stderr)
+        return 2
     required = ("LANGFUSE_HOST", "LANGFUSE_PUBLIC_KEY", "LANGFUSE_SECRET_KEY")
     missing = [name for name in required if not os.environ.get(name)]
     if missing:
@@ -78,6 +83,10 @@ def main() -> int:
     except RuntimeError as error:
         print(f"Credentials: FAIL — {error}", file=sys.stderr)
         return 1
+
+    if read_only:
+        print("Read-only verification: PASS")
+        return 0
 
     if not langfuse_trace.is_enabled():
         print("Langfuse SDK/auth configuration is disabled", file=sys.stderr)

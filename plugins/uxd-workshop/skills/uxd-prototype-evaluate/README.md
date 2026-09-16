@@ -17,6 +17,47 @@ Evaluate a running prototype against a Jira ticket's acceptance criteria, option
 bash scripts/preflight-check.sh
 ```
 
+## First-time designer setup
+
+From any Git worktree, run the terminal onboarding flow before a paid or
+browser evaluation:
+
+```bash
+make eval-onboard
+```
+
+In a terminal, it asks brief, safe questions and lets the designer recheck a
+fixed setting without restarting. It never accepts or displays secret values.
+For one non-interactive check (for example, CI), use:
+
+```bash
+make eval-onboard EVAL_ONBOARD_ARGS=--check
+```
+
+Keep one gitignored `.env.local` in the repository's primary worktree. The
+command automatically reuses it from sibling worktrees, so designers never
+copy secrets into generated worktrees. The only required value is
+`OPENAI_API_KEY`. `LANGFUSE_HOST`, `LANGFUSE_PUBLIC_KEY`, and
+`LANGFUSE_SECRET_KEY` are optional and only enable cost-benchmarking traces;
+the pipeline runs without them (set `LANGFUSE_ENABLED=0` to force tracing off).
+To use a different secure location, set `UXD_EVAL_ENV_FILE` to that file before
+running the command.
+
+OpenAI key workflow: generate it at https://platform.openai.com/api-keys,
+store it in a password manager, then add it to `.env.local`. Never paste the
+key into chat or a tracked file.
+
+The onboarding flow checks Playwright Chromium, Atlassian MCP, and the
+provider/model routing. It verifies Langfuse health only when Langfuse keys are
+present, and never blocks the run on a Langfuse failure. Codex confirms
+Atlassian authorization when it stages the requested Jira context.
+
+```bash
+codex mcp login Atlassian
+```
+
+It never sends a model request, opens a prototype, or fetches Jira data.
+
 ```bash
 cd plugins/uxd-workshop/skills/uxd-prototype-evaluate
 npm install

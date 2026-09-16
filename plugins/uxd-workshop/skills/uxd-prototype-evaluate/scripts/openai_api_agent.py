@@ -175,6 +175,7 @@ def _run_shell(
             cwd=cwd,
             capture_output=True,
             text=True,
+            errors="replace",
             timeout=timeout,
             env=environment,
         )
@@ -271,6 +272,9 @@ def run_agent(
     response_id = None
     turns_used = 0
     hit_turn_limit = False
+    tool_calls_used = 0
+    tool_failures = 0
+    tool_error_categories: set[str] = set()
     started = time.monotonic()
     trace_file = Path(trace_path) if trace_path else None
     if trace_file:
@@ -315,6 +319,21 @@ def run_agent(
                 allowed_roots=allowed_roots,
                 environment=environment,
             )
+            tool_calls_used += 1
+            if output.startswith("Scope denied:"):
+                tool_failures += 1
+                tool_error_categories.add("scope_denied")
+            elif output.startswith("Command timed out"):
+                tool_failures += 1
+                tool_error_categories.add("timeout")
+            elif output.startswith("Command failed to start"):
+                tool_failures += 1
+                tool_error_categories.add("tool_start")
+            else:
+                match = re.match(r"exit_code=(\d+)", output)
+                if match and int(match.group(1)) != 0:
+                    tool_failures += 1
+                    tool_error_categories.add("tool_nonzero_exit")
             tool_outputs.append({
                 "type": "function_call_output",
                 "call_id": call.get("call_id"),
@@ -328,6 +347,9 @@ def run_agent(
         ).lstrip()
 
     cost = _cost(model, total_usage)
+    recovery_actions = (
+        ["continued_after_tool_failure"] if tool_failures and not hit_turn_limit else []
+    )
     return {
         "provider": "openai",
         "model": model,
@@ -341,4 +363,8 @@ def run_agent(
         "billing_source": "provider_estimate" if cost is not None else "unavailable",
         "turns_used": turns_used,
         "turn_limit_reached": hit_turn_limit,
+        "tool_calls": tool_calls_used,
+        "tool_failures": tool_failures,
+        "error_categories": sorted(tool_error_categories),
+        "recovery_actions": recovery_actions,
     }

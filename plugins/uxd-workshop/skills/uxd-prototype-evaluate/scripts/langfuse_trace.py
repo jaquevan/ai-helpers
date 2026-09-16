@@ -48,8 +48,6 @@ NON_LLM_PHASES = frozenset({
     "playwright-run",
     "source-reader",
     "uxd-consistency-check",
-    "uxd-prototype-create",
-    "prototype-iteration",
 })
 
 PHASE_METADATA_FIELDS = frozenset({
@@ -79,7 +77,55 @@ PHASE_METADATA_FIELDS = frozenset({
     "input_bytes",
     "violation_groups",
     "warning_groups",
+    # Compact decision and reliability metrics. These are intentionally
+    # allowlisted so phase telemetry cannot accidentally include raw output.
+    "phase_decision",
+    "phase_decisions",
+    "decision_count",
+    "decision_counts",
+    "error_category",
+    "error_categories",
+    "recovery_action",
+    "recovery_actions",
+    "retries",
+    "fallbacks",
+    "turns_used",
+    "confidence_available",
+    "confidence_count",
+    "confidence_mean",
+    "confidence_min",
+    "confidence_max",
+    "verdict_counts",
+    "finding_count",
+    "skipped",
+    "skip_reason",
+    "parity",
+    "semantic_parity",
+    "screenshot_count",
+    "screenshot_dimensions",
+    "screenshot_bytes",
+    "crop_pixel_reduction",
+    "crop_byte_reduction",
+    "artifact_count",
+    "artifact_bytes",
+    "artifact_manifest",
+    "expected_outputs_present",
+    "tool_calls",
+    "tool_failures",
 })
+
+BENCHMARK_FIELDS = (
+    "benchmark_name",
+    "condition",
+    "prototype_key",
+    "build_key",
+    "evaluator_key",
+    "provider_model",
+    "cache_decision",
+    "screenshot_mode",
+    "artifact_mode",
+    "csv_used",
+)
 
 
 def _utc_now() -> str:
@@ -135,6 +181,28 @@ def complete_redacted_text(text: str | None) -> str | None:
     if text is None:
         return None
     return redact_text(text, max_chars=max(len(str(text)), MAX_TEXT_CHARS))
+
+
+def error_category(detail: str | None) -> str:
+    """Map failures to a small privacy-safe category without logging detail."""
+    value = str(detail or "").lower()
+    if any(token in value for token in ("missing required", "missing required input", "no screenshots", "does not exist")):
+        return "missing_input"
+    if any(token in value for token in ("max_turns", "turn budget", "turn_limit", "turn limit")):
+        return "turn_budget"
+    if any(token in value for token in ("timed out", "timeout", "time limit")):
+        return "timeout"
+    if any(token in value for token in ("401", "403", "api key", "authentication", "unauthorized")):
+        return "provider_auth"
+    if any(token in value for token in ("responses api", "http ", "connection", "urlopen")):
+        return "provider_transport"
+    if any(token in value for token in ("schema", "invalid json", "validation", "validator")):
+        return "validation"
+    if any(token in value for token in ("playwright", "browser", "screenshot")):
+        return "browser_capture"
+    if any(token in value for token in ("cache", "compound key")):
+        return "cache"
+    return "runtime"
 
 
 def content_sha256(text: str | None) -> str:
@@ -628,12 +696,28 @@ def _trace_values(payload: dict[str, Any]) -> dict[str, Any]:
         metadata["depth_tier"] = payload["depth_tier"]
     if payload.get("experiment"):
         metadata["experiment"] = payload["experiment"]
+    metrics = payload.get("metrics") or {}
+    for field in PHASE_METADATA_FIELDS:
+        value = metrics.get(field)
+        if value is not None and value != "":
+            metadata[field] = value
+    benchmark = payload.get("benchmark") or {}
+    for field in BENCHMARK_FIELDS:
+        value = benchmark.get(field)
+        if value is not None and value != "":
+            metadata[field] = value
+    benchmark_tags = [
+        f"{field}={metadata[field]}"
+        for field in BENCHMARK_FIELDS
+        if field in metadata
+    ]
     return {
         "prototype_key": prototype_key,
         "eval_run_id": eval_run_id,
         "provider": provider,
         "model": model,
         "metadata": metadata,
+        "tags": benchmark_tags,
         "trace_id": langfuse_trace_id(eval_run_id),
     }
 
@@ -785,6 +869,7 @@ class LivePipelineTrace:
                 "team:uxd",
                 "pipeline:prototype-evaluator",
                 f"provider:{self.values['provider']}",
+                *self.values["tags"],
             ],
         )
         self._attributes_context.__enter__()
@@ -948,6 +1033,7 @@ def log_pipeline_run(payload: dict[str, Any]) -> dict[str, Any]:
                     "team:uxd",
                     "pipeline:prototype-evaluator",
                     f"provider:{values['provider']}",
+                    *values["tags"],
                 ],
             ):
                 _record_pipeline_content(client, root, payload, values)

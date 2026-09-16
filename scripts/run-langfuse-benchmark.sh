@@ -5,6 +5,7 @@ URL="${1:-http://localhost:9000}"
 KEY="${KEY:-RHAISTRAT-1492}"
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$ROOT"
+source "$ROOT/scripts/eval-env.sh"
 export PATH="$ROOT/.local/node/bin:$PATH"
 export AGENT_EVAL_HARNESS_PATH="${AGENT_EVAL_HARNESS_PATH:-$ROOT/workspace/agent-eval-harness}"
 
