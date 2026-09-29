@@ -1,0 +1,36 @@
+node_modules/
+package-lock.json
+
+# Stray Playwright scripts from eval runs
+scripts/journey-test-*.mjs
+scripts/persona-walkthrough-*.mjs
+
+# Test results (generated, not source)
+test-results/
+
+# Temporary golden fixtures (copied from live eval runs, not committed)
+tests/fixtures/.golden-*/
+
+# Team-specific overlay (not committed)
+config/product-overlay.local.yaml
+
+# Python bytecode + local env (regenerable, bloats a copied/installed skill)
+__pycache__/
+*.pyc
+.venv/
+
+# Local benchmark + eval run outputs (default: tmp/benchmarks/<key>, .artifacts/<KEY>/eval/)
+tmp/
+.artifacts/
+
+# Test/tool caches
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+coverage/
+
+# macOS
+.DS_Store
+
+.gitlab-pages

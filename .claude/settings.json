@@ -1,9 +1,0 @@
-{
-  "env": {
-    "AI_HELPERS_PLATFORM": "anthropic",
-    "EVAL_PROVIDER": "anthropic",
-    "LANGFUSE_HOST": "https://langfuse-ux-eval.apps.rosa.uxdpoc7.9hji.p3.openshiftapps.com",
-    "LANGFUSE_ENABLED": "1",
-    "LANGFUSE_OBS_COST_PER_RUN": "0.05"
-  }
-}

@@ -15,6 +15,11 @@ import re
 import json
 import subprocess
 import argparse
+import importlib.util
+import uuid
+import urllib.error
+import urllib.parse
+import urllib.request
 from datetime import datetime
 from pathlib import Path
 from typing import Dict, List, Optional, Set, Tuple
@@ -31,6 +36,164 @@ class Colors:
     BOLD = '\033[1m'
 
 BASE_URL = 'http://localhost:4010'
+SCRIPT_PATH = Path(__file__).resolve()
+EVALUATOR_VERIFY_PATH = (
+    SCRIPT_PATH.parents[2] / 'uxd-prototype-evaluate' / 'scripts' / 'verify-langfuse.py'
+)
+
+
+def evaluator_verifier():
+    """Load the evaluator's dotenv and read-only Langfuse preflight helpers."""
+    spec = importlib.util.spec_from_file_location('consistency_langfuse_verifier', EVALUATOR_VERIFY_PATH)
+    if not spec or not spec.loader:
+        raise RuntimeError('shared Langfuse verifier could not be loaded')
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+def validated_url(value, flag):
+    if not value:
+        return None
+    parsed = urllib.parse.urlparse(value)
+    if parsed.scheme not in {'http', 'https'} or not parsed.netloc:
+        raise RuntimeError(f'{flag} must be an http(s) URL')
+    return value
+
+
+def normalized_gitlab_project(value):
+    """Normalize HTTPS and GitLab SCP-style remotes to host/path identity."""
+    parsed = urllib.parse.urlparse(value)
+    if parsed.scheme in {'http', 'https', 'ssh'} and parsed.hostname:
+        host, path = parsed.hostname, parsed.path
+    else:
+        match = re.fullmatch(r'(?:[^@]+@)?([^:]+):(.+)', value)
+        if not match:
+            return None
+        host, path = match.groups()
+    return f"{host.lower()}/{path.strip('/').removesuffix('.git')}"
+
+
+def validate_trace_context(args, workspace):
+    """Validate that real-case URLs identify the checkout and live prototype."""
+    args.jira_url = validated_url(args.jira_url, '--jira-url')
+    args.gitlab_url = validated_url(args.gitlab_url, '--gitlab-url')
+    args.prototype_url = validated_url(args.prototype_url, '--prototype-url')
+    if args.jira_url and args.trace_key and not args.jira_url.rstrip('/').endswith('/' + args.trace_key):
+        raise RuntimeError('--jira-url does not match --trace-key')
+    if args.gitlab_url:
+        remote = subprocess.run(
+            ['git', '-C', str(workspace), 'remote', 'get-url', 'origin'],
+            capture_output=True, text=True, check=False,
+        )
+        if (
+            remote.returncode
+            or normalized_gitlab_project(remote.stdout.strip())
+            != normalized_gitlab_project(args.gitlab_url)
+        ):
+            raise RuntimeError('workspace origin does not match --gitlab-url')
+    if args.source_revision:
+        revision = subprocess.run(
+            ['git', '-C', str(workspace), 'rev-parse', 'HEAD'],
+            capture_output=True, text=True, check=False,
+        )
+        if revision.returncode or revision.stdout.strip() != args.source_revision:
+            raise RuntimeError('workspace revision does not match --source-revision')
+    if args.prototype_url:
+        try:
+            with urllib.request.urlopen(args.prototype_url, timeout=10) as response:
+                if not 200 <= response.status < 400:
+                    raise RuntimeError(f'prototype URL returned HTTP {response.status}')
+        except urllib.error.HTTPError as error:
+            raise RuntimeError(f'prototype URL returned HTTP {error.code}') from error
+        except urllib.error.URLError as error:
+            raise RuntimeError(f'cannot reach prototype URL: {error.reason}') from error
+
+
+def export_source_trace(args, report):
+    """Export a summary-only source span, nested in OpenCode when context is injected."""
+    if not args.env_file and not args.trace_phase:
+        return None
+    trace_id = os.environ.get('LANGFUSE_TRACE_ID', '')
+    parent_span_id = os.environ.get('LANGFUSE_PARENT_SPAN_ID', '')
+    bridge_context = None
+    if re.fullmatch(r'[0-9a-f]{32}', trace_id) and re.fullmatch(r'[0-9a-f]{16}', parent_span_id):
+        bridge_context = {'trace_id': trace_id, 'parent_span_id': parent_span_id}
+    verifier = evaluator_verifier()
+    if args.trace_phase:
+        if not bridge_context:
+            raise RuntimeError('launcher did not inject a valid OpenCode trace context for the source phase')
+        if args.env_file:
+            raise RuntimeError('do not load a separate Langfuse env file inside a traced OpenCode session')
+        if os.environ.get('UXD_TRACE_COMPONENT') != 'consistency':
+            raise RuntimeError('source trace is not running under the consistency OpenCode component')
+        required = ('LANGFUSE_BASE_URL', 'LANGFUSE_PUBLIC_KEY', 'LANGFUSE_SECRET_KEY', 'LANGFUSE_PROJECT_ID')
+        missing = [name for name in required if not os.environ.get(name)]
+        if missing:
+            raise RuntimeError(f"missing launcher-injected Langfuse settings: {', '.join(missing)}")
+    else:
+        if bridge_context:
+            raise RuntimeError('do not load a separate Langfuse env file inside an OpenCode trace')
+        env_path = verifier.load_env_file(Path(args.env_file))
+        if env_path is None:
+            raise RuntimeError(f'Langfuse environment file does not exist: {args.env_file}')
+        required = ('LANGFUSE_HOST', 'LANGFUSE_PUBLIC_KEY', 'LANGFUSE_SECRET_KEY')
+        missing = [name for name in required if not os.environ.get(name)]
+        if missing:
+            raise RuntimeError(f"missing required environment variables: {', '.join(missing)}")
+        host = os.environ['LANGFUSE_HOST']
+        verifier.check_health(host)
+        verifier.check_auth(host, os.environ['LANGFUSE_PUBLIC_KEY'], os.environ['LANGFUSE_SECRET_KEY'])
+
+    program_run_id = (
+        f"consistency-{args.trace_key}-{datetime.now().strftime('%Y%m%d-%H%M%S')}-"
+        f"{uuid.uuid4().hex[:6]}"
+    )
+    summary = report['summary']
+    sanitized_output = {
+        'status': 'completed',
+        'mode': 'source',
+        'total_guidelines_checked': summary['total_guidelines_checked'],
+        'violation_groups': summary['violations'],
+        'warning_groups': summary['warnings'],
+        'passes': summary['passes'],
+        'model_invoked': False,
+    }
+    result = verifier.langfuse_trace.log_metadata_trace(
+        root_name=f'consistency-check/{args.trace_key}',
+        run_id=program_run_id,
+        metadata={
+            'component': 'consistency',
+            'prototype_key': args.trace_key,
+            'program_run_id': program_run_id,
+            'privacy_mode': 'metadata_only',
+            'benchmark_name': args.benchmark_name,
+            'model_invoked': False,
+            'jira_url': args.jira_url,
+            'gitlab_url': args.gitlab_url,
+            'prototype_url': args.prototype_url,
+            'source_revision': args.source_revision,
+        },
+        events=[{
+            'phase': 'consistency-source',
+            'status': 'completed',
+            'source_mode': True,
+            'guideline_count': summary['total_guidelines_checked'],
+            'violation_groups': summary['violations'],
+            'warning_groups': summary['warnings'],
+            'llm_cost_usd': 0,
+            'model_invoked': False,
+            'jira_url': args.jira_url,
+            'gitlab_url': args.gitlab_url,
+            'prototype_url': args.prototype_url,
+            'source_revision': args.source_revision,
+            'output': sanitized_output,
+        }],
+        output=sanitized_output,
+    )
+    if not result.get('logged'):
+        raise RuntimeError('Langfuse did not confirm the metadata-only consistency trace')
+    return result
 
 # Route mappings for PROTOTYPE codebase (src/app/ structure)
 FILE_TO_ROUTE_PROTOTYPE = {
@@ -274,7 +437,140 @@ def extract_check_commands(content: str) -> List[Dict[str, str]]:
 
     return commands
 
-def get_changed_files(base_ref: str, cwd: str, verbose: bool) -> Optional[set]:
+
+FELT_BACKGROUND_ASSETS = {
+    'felt-bkg-generic-light.svg',
+    'felt-bkg-generic-dark.svg',
+}
+DEFAULT_BACKGROUND_ASSETS = {
+    'pf-bkg-generic-light.svg',
+    'pf-bkg-generic-dark.svg',
+}
+PROJECT_SCAN_EXCLUDED_DIRS = {
+    '.git', '.artifacts', '.next', 'build', 'coverage', 'dist',
+    'node_modules', 'out', 'vendor',
+}
+PROJECT_SOURCE_SUFFIXES = {
+    '.css', '.htm', '.html', '.js', '.jsx', '.scss', '.ts', '.tsx',
+}
+
+
+def project_files(project_root: Path, suffixes: Set[str]) -> List[Path]:
+    """List project source files without generated or dependency trees."""
+    files = []
+    try:
+        candidates = project_root.rglob('*')
+        for path in candidates:
+            if not path.is_file() or path.suffix.lower() not in suffixes:
+                continue
+            try:
+                relative_parts = path.relative_to(project_root).parts
+            except ValueError:
+                continue
+            if any(part in PROJECT_SCAN_EXCLUDED_DIRS for part in relative_parts):
+                continue
+            files.append(path)
+    except OSError:
+        return []
+    return sorted(files)
+
+
+def _line_for_offset(content: str, offset: int) -> int:
+    return content.count('\n', 0, offset) + 1
+
+
+def project_felt_source_findings(project_root: Path) -> List[str]:
+    """Check app entry HTML for Felt and scan authored source for theme mixing."""
+    html_files = project_files(project_root, {'.html', '.htm'})
+    entry_html = [path for path in html_files if path.name.lower() == 'index.html']
+    roots = entry_html or html_files
+    findings: List[str] = []
+    felt_root_found = False
+
+    if not roots:
+        findings.append('./index.html:1: no root HTML document found; cannot verify pf-v6-theme-felt')
+    for path in roots:
+        try:
+            content = path.read_text(encoding='utf-8', errors='ignore')
+        except OSError:
+            continue
+        relative = './' + path.relative_to(project_root).as_posix()
+        tag = re.search(r'<html\b[^>]*>', content, flags=re.IGNORECASE | re.DOTALL)
+        if not tag:
+            findings.append(f'{relative}:1: root HTML document has no <html> element')
+            continue
+        class_attr = re.search(r'\bclass\s*=\s*(["\'])(.*?)\1', tag.group(0), flags=re.IGNORECASE | re.DOTALL)
+        has_felt = bool(class_attr and re.search(r'(?<![\w-])pf-v6-theme-felt(?![\w-])', class_attr.group(2)))
+        if has_felt:
+            felt_root_found = True
+        else:
+            findings.append(
+                f'{relative}:{_line_for_offset(content, tag.start())}: '
+                'root <html> must include class pf-v6-theme-felt'
+            )
+
+    source_files = project_files(project_root, PROJECT_SOURCE_SUFFIXES)
+    felt_asset_referenced = False
+    default_asset_refs: List[str] = []
+    for path in source_files:
+        try:
+            content = path.read_text(encoding='utf-8', errors='ignore')
+        except OSError:
+            continue
+        relative = './' + path.relative_to(project_root).as_posix()
+        for asset in FELT_BACKGROUND_ASSETS:
+            if re.search(re.escape(asset), content, flags=re.IGNORECASE):
+                felt_asset_referenced = True
+        for asset in DEFAULT_BACKGROUND_ASSETS:
+            match = re.search(re.escape(asset), content, flags=re.IGNORECASE)
+            if match:
+                default_asset_refs.append(
+                    f'{relative}:{_line_for_offset(content, match.start())}: '
+                    f'Project Felt app explicitly references default PatternFly asset {match.group(0)}'
+                )
+        default_theme = re.search(
+            r'pf-v6-theme-default|patternfly-theme-default', content, flags=re.IGNORECASE
+        )
+        if default_theme:
+            default_asset_refs.append(
+                f'{relative}:{_line_for_offset(content, default_theme.start())}: '
+                f'Project Felt app explicitly references the default theme marker {default_theme.group(0)}'
+            )
+
+    asset_files = set()
+    for current, directories, filenames in os.walk(project_root):
+        directories[:] = [name for name in directories if name not in PROJECT_SCAN_EXCLUDED_DIRS]
+        asset_files.update(name.lower() for name in filenames)
+    # PatternFly distributes these assets inside its packages. Check those known
+    # locations directly without traversing the full node_modules tree.
+    for package_asset_dir in (
+        project_root / 'node_modules/@patternfly/patternfly/assets/images',
+        project_root / 'node_modules/@patternfly/react-core/dist/styles/assets/images',
+    ):
+        if package_asset_dir.is_dir():
+            try:
+                asset_files.update(path.name.lower() for path in package_asset_dir.iterdir() if path.is_file())
+            except OSError:
+                pass
+    if not any(asset in asset_files for asset in FELT_BACKGROUND_ASSETS) and not felt_asset_referenced:
+        witness = roots[0] if roots else project_root
+        relative = './' + witness.relative_to(project_root).as_posix() if witness != project_root else './index.html'
+        findings.append(
+            f'{relative}:1: Felt background asset is missing; include '
+            'Felt-Bkg-Generic-Light.svg or Felt-Bkg-Generic-Dark.svg'
+        )
+
+    if felt_root_found:
+        findings.extend(default_asset_refs)
+    return findings
+
+def get_changed_files(
+    base_ref: str,
+    cwd: str,
+    verbose: bool,
+    include_untracked: bool = True,
+    merge_base: bool = False,
+) -> Optional[set]:
     """Get list of changed files compared to base ref.
 
     Returns a set of relative file paths that have changed compared to base_ref.
@@ -295,9 +591,11 @@ def get_changed_files(base_ref: str, cwd: str, verbose: bool) -> Optional[set]:
                 print(f"{Colors.YELLOW}Not in a git repository, cannot use --changed mode{Colors.RESET}")
             return None
 
-        # Get changed files (both staged and unstaged)
+        # MR reviews compare the merge-base tree to HEAD. Local checks compare
+        # the requested base directly to the worktree, including staged edits.
+        revision = f'{base_ref}...HEAD' if merge_base else base_ref
         result = subprocess.run(
-            ['git', 'diff', '--name-only', base_ref],
+            ['git', 'diff', '--name-only', revision],
             cwd=cwd,
             capture_output=True,
             text=True,
@@ -311,17 +609,18 @@ def get_changed_files(base_ref: str, cwd: str, verbose: bool) -> Optional[set]:
 
         changed_files = set(line.strip() for line in result.stdout.split('\n') if line.strip())
 
-        untracked = subprocess.run(
-            ['git', 'ls-files', '--others', '--exclude-standard'],
-            cwd=cwd,
-            capture_output=True,
-            text=True,
-            timeout=10,
-        )
-        if untracked.returncode == 0:
-            changed_files.update(
-                line.strip() for line in untracked.stdout.splitlines() if line.strip()
+        if include_untracked:
+            untracked = subprocess.run(
+                ['git', 'ls-files', '--others', '--exclude-standard'],
+                cwd=cwd,
+                capture_output=True,
+                text=True,
+                timeout=10,
             )
+            if untracked.returncode == 0:
+                changed_files.update(
+                    line.strip() for line in untracked.stdout.splitlines() if line.strip()
+                )
 
         if verbose and changed_files:
             print(f"{Colors.CYAN}Found {len(changed_files)} changed file(s) compared to {base_ref}{Colors.RESET}")
@@ -334,11 +633,18 @@ def get_changed_files(base_ref: str, cwd: str, verbose: bool) -> Optional[set]:
         return None
 
 
-def get_changed_lines(base_ref: str, cwd: str, verbose: bool) -> Optional[Dict[str, Set[int]]]:
+def get_changed_lines(
+    base_ref: str,
+    cwd: str,
+    verbose: bool,
+    include_untracked: bool = True,
+    merge_base: bool = False,
+) -> Optional[Dict[str, Set[int]]]:
     """Return added/modified line numbers by file for a zero-context Git diff."""
     try:
+        revision = f'{base_ref}...HEAD' if merge_base else base_ref
         result = subprocess.run(
-            ['git', 'diff', '--unified=0', '--no-color', base_ref, '--'],
+            ['git', 'diff', '--unified=0', '--no-color', revision, '--'],
             cwd=cwd,
             capture_output=True,
             text=True,
@@ -370,20 +676,21 @@ def get_changed_lines(base_ref: str, cwd: str, verbose: bool) -> Optional[Dict[s
                 count = int(match.group(2) or '1')
                 changed_lines[current_file].update(range(start, start + count))
 
-        untracked = subprocess.run(
-            ['git', 'ls-files', '--others', '--exclude-standard'],
-            cwd=cwd,
-            capture_output=True,
-            text=True,
-            timeout=10,
-        )
-        if untracked.returncode == 0:
-            for relative_path in untracked.stdout.splitlines():
-                source_path = Path(cwd) / relative_path
-                if not source_path.is_file():
-                    continue
-                line_count = len(source_path.read_text(errors='ignore').splitlines())
-                changed_lines[relative_path] = set(range(1, line_count + 1))
+        if include_untracked:
+            untracked = subprocess.run(
+                ['git', 'ls-files', '--others', '--exclude-standard'],
+                cwd=cwd,
+                capture_output=True,
+                text=True,
+                timeout=10,
+            )
+            if untracked.returncode == 0:
+                for relative_path in untracked.stdout.splitlines():
+                    source_path = Path(cwd) / relative_path
+                    if not source_path.is_file():
+                        continue
+                    line_count = len(source_path.read_text(errors='ignore').splitlines())
+                    changed_lines[relative_path] = set(range(1, line_count + 1))
 
         return changed_lines
     except Exception as e:
@@ -610,6 +917,8 @@ def check_guideline(
     """Check a single guideline file, optionally filtered to changed files."""
     guidelines_dir = Path(__file__).parent.parent / 'guidelines'
     filepath = guidelines_dir / category / filename
+    if not filepath.is_file():
+        filepath = guidelines_dir / filename
 
     try:
         content = filepath.read_text(encoding='utf-8')
@@ -628,6 +937,23 @@ def check_guideline(
         if verbose:
             print(f"{Colors.GRAY}Skipping {frontmatter.get('title', filename)}: Not automatable{Colors.RESET}")
         return None
+
+    if frontmatter.get('id') == 'project-felt-adoption':
+        matches = project_felt_source_findings(Path(project_root))
+        return {
+            'id': frontmatter.get('id'),
+            'title': frontmatter.get('title'),
+            'rule': extract_rule_text(content),
+            'category': category,
+            'filepath': f"{category}/{filename}",
+            'severity': frontmatter.get('severity', 'warning'),
+            'automation_result': frontmatter.get('automation_result', 'finding'),
+            'violations': ([{
+                'command': 'built-in Project Felt source check',
+                'description': 'Verify the root theme marker, Felt background asset, and absence of explicit default-theme assets.',
+                'matches': matches,
+            }] if matches else None),
+        }
 
     commands = extract_check_commands(content)
     if not commands:
@@ -1330,13 +1656,32 @@ def main():
                         help='Directory to save analysis reports (default: reports)')
     parser.add_argument('--changed', action='store_true',
                         help='Only check files changed compared to base branch')
+    parser.add_argument('--tracked-only', action='store_true',
+                        help='With --changed, ignore untracked files in a worktree')
+    parser.add_argument('--merge-base', action='store_true',
+                        help='With --changed, compare the merge-base tree to HEAD (for MR branches)')
     parser.add_argument('--base-ref', default='main',
                         help='Base git ref for comparison (default: main)')
     parser.add_argument('--json-output', action='store_true',
                         help='Write the evaluator consistency-report JSON to stdout')
     parser.add_argument('--json-file',
                         help='Write the evaluator consistency-report JSON to this path')
+    parser.add_argument('--env-file', help='Gitignored Langfuse dotenv file for metadata-only export')
+    parser.add_argument('--trace-phase', action='store_true',
+                        help='Attach the summary-only source phase to the active consistency trace')
+    parser.add_argument('--trace-key', help='Prototype/run ID used in consistency-check/{ID}')
+    parser.add_argument('--benchmark-name', default='consistency-source-mode')
+    parser.add_argument('--jira-url', help='Jira issue URL recorded as real-case trace metadata')
+    parser.add_argument('--gitlab-url', help='GitLab repository URL checked against workspace origin')
+    parser.add_argument('--prototype-url', help='Live prototype URL checked before tracing')
+    parser.add_argument('--source-revision', help='Full Git revision required for a real-case workspace')
     args = parser.parse_args()
+    if args.env_file and not args.trace_key:
+        parser.error('--env-file requires --trace-key')
+    if args.trace_phase and not args.trace_key:
+        parser.error('--trace-phase requires --trace-key')
+    if args.trace_phase and args.env_file:
+        parser.error('--trace-phase uses launcher-injected credentials; omit --env-file')
     evaluator_output = args.json_output or bool(args.json_file)
 
     if evaluator_output:
@@ -1361,6 +1706,11 @@ def main():
     # If project_root points to a 'src' directory, use its parent since
     # grep commands in guidelines reference 'src/' explicitly
     check_cwd = project_root.parent if project_root.name == 'src' else project_root
+    try:
+        validate_trace_context(args, check_cwd)
+    except RuntimeError as error:
+        print(f"{Colors.RED}Trace context failed: {error}{Colors.RESET}", file=sys.stderr)
+        sys.exit(2)
 
     # Guidelines are always in consistency-checker/guidelines/
     design_checker_root = Path(__file__).parent.parent.resolve()
@@ -1377,7 +1727,13 @@ def main():
     changed_files = None
     changed_lines = None
     if args.changed:
-        changed_files = get_changed_files(args.base_ref, str(check_cwd), args.verbose)
+        changed_files = get_changed_files(
+            args.base_ref,
+            str(check_cwd),
+            args.verbose,
+            include_untracked=not args.tracked_only and not args.merge_base,
+            merge_base=args.merge_base,
+        )
         if changed_files is None:
             print(f"{Colors.RED}Error: Cannot use --changed mode (not in git repo or git command failed){Colors.RESET}", file=sys.stderr)
             sys.exit(1)
@@ -1396,7 +1752,13 @@ def main():
             sys.exit(0)
         if not evaluator_output:
             print(f"{Colors.CYAN}Analyzing {len(changed_files)} changed file(s) compared to {args.base_ref}{Colors.RESET}\n")
-        changed_lines = get_changed_lines(args.base_ref, str(check_cwd), args.verbose)
+        changed_lines = get_changed_lines(
+            args.base_ref,
+            str(check_cwd),
+            args.verbose,
+            include_untracked=not args.tracked_only and not args.merge_base,
+            merge_base=args.merge_base,
+        )
         if changed_lines is None:
             print(f"{Colors.RED}Error: Cannot resolve changed lines compared to {args.base_ref}{Colors.RESET}", file=sys.stderr)
             sys.exit(1)
@@ -1438,6 +1800,28 @@ def main():
             if result:
                 results.append(result)
 
+        # Root-level guidelines declare their category in frontmatter. Keeping
+        # them discoverable supports the documented guidelines/<name>.md form.
+        for md_file in guidelines_dir.glob('*.md'):
+            if args.guideline and args.guideline not in md_file.name:
+                continue
+            try:
+                frontmatter = parse_frontmatter(md_file.read_text(encoding='utf-8')) or {}
+            except OSError:
+                continue
+            if frontmatter.get('category') != category:
+                continue
+            result = check_guideline(
+                category,
+                md_file.name,
+                str(check_cwd),
+                args.verbose,
+                changed_files,
+                changed_lines,
+            )
+            if result:
+                results.append(result)
+
     # Calculate summary statistics
     total_violations = 0
     guidelines_with_violations = 0
@@ -1462,8 +1846,21 @@ def main():
                 by_file = parse_matches_to_by_file(violation['matches'])
                 all_affected_files.update(by_file.keys())
 
+    evaluator_report = build_evaluator_report(results)
+    try:
+        trace_result = export_source_trace(args, evaluator_report)
+    except RuntimeError as error:
+        print(f'Langfuse trace failed: {error}', file=sys.stderr)
+        sys.exit(2)
+    if trace_result:
+        print(
+            f"Langfuse trace: {trace_result['langfuse_trace_url']} "
+            f"(trace_id={trace_result['trace_id']})",
+            file=sys.stderr,
+        )
+
     if evaluator_output:
-        report_json = json.dumps(build_evaluator_report(results), indent=2)
+        report_json = json.dumps(evaluator_report, indent=2)
         if args.json_file:
             output_path = Path(args.json_file)
             output_path.parent.mkdir(parents=True, exist_ok=True)

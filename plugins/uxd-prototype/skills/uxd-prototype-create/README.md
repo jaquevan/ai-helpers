@@ -13,6 +13,18 @@ Create a UX prototype from a Jira ticket, Figma file, feature description, or ro
 
 `--workspace` is the codebase to build in. `--target` is only where the MR/PR lands.
 
+Measured OpenAI phases use `config/model-routing.json` (`gpt-6-sol`, with
+`gpt-6-luna` as the judge) and `scripts/creator-phase-runner.py`. Estimate each
+phase first; paid execution requires explicit approval and uses the separate
+creator `$15` ledger. See [pipeline mode](references/pipeline-mode.md) for the
+estimate/approve commands.
+
+Run creator bridge and bounded-phase tests with:
+
+```bash
+bash tests/run-tests.sh
+```
+
 ## Related
 
 - **uxd-prototype-export** — static HTML / component tree / PF spec; Prototype Bar

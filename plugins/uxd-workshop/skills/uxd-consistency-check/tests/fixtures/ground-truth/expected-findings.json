@@ -33,5 +33,18 @@
       "Text-only page-level Create model action"
     ],
     "note": "These examples document RHOAI conventions. Static HTML receives strict custom-CSS and PatternFly component-usage checks."
+  },
+  "project-felt-correct": {
+    "result": "PASS",
+    "expected_findings": []
+  },
+  "project-felt-mixed": {
+    "result": "VIOLATION",
+    "expected_findings": [
+      {
+        "file": "theme.css",
+        "kind": "default PatternFly background asset mixed into Felt"
+      }
+    ]
   }
 }

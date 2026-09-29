@@ -23,6 +23,72 @@ without PatternFly treatment and imports from other UI component libraries are
 violations; ambiguous search-only matches remain non-blocking review
 candidates.
 
+The `project-felt-adoption` guideline checks app entry HTML for the
+`pf-v6-theme-felt` root class, checks for Felt background assets, and flags
+explicit default PatternFly background assets mixed into Felt. Use it for
+Red Hat portfolio prototypes:
+
+```bash
+python3 scripts/analyze.py --src=/path/to/prototype \
+  --guideline=project-felt-adoption --json-output
+```
+
+### Supplemental non-deterministic source review
+
+When requested, add a model-assisted review after the deterministic analyzer.
+It supplements the source result and must never replace, reclassify, or silently
+deduplicate deterministic findings. Review only the scoped MR files and the
+applicable bundled rules' `## Rule` and `## Manual Review Checklist` sections.
+Focus on semantic or contextual issues a pattern matcher cannot determine.
+Do not edit prototype source.
+
+Write the model response as JSON with this contract, then validate it before
+including it in the run report:
+
+```json
+{
+  "status": "completed",
+  "mode": "source",
+  "model": "openai/gpt-6-luna",
+  "non_deterministic": true,
+  "findings": [
+    {
+      "guideline_id": "patternfly-component-usage",
+      "file": "src/path/to/file.tsx",
+      "line_start": 12,
+      "line_end": 14,
+      "evidence": "exact source excerpt from those lines",
+      "rationale": "Why the excerpt conflicts with the rule in context.",
+      "suggestion": "A concrete PatternFly-aligned correction.",
+      "confidence": "high"
+    }
+  ]
+}
+```
+
+Use `findings: []` when no issues are supported by source evidence. Findings
+must cite exact file/line evidence; the validator resolves title/category and
+severity from the bundled corpus, rejects unknown guideline IDs and ungrounded
+quotes, and downgrades uncertain/candidate findings to warnings. Save this
+supplement separately from `source_mode.violations`, for example as
+`consistency-source-ai.json`; do not include deterministic counts as if they
+were model judgments.
+
+### Traced runs
+
+For a consented traced session, start with the component's Langfuse session
+launcher and pin the requested model with `--model openai/gpt-6-luna`. The
+launcher verifies the consistency-checker project before the run starts. Run
+the deterministic analyzer with `--trace-phase` and without `--env-file`: it
+uses the launcher's injected Langfuse credentials and parent context to record
+`consistency-source` under the active session trace. The AI-review validator records only model,
+phase, and finding counts in `consistency-source-ai` or
+`consistency-visual-ai`; the session trace records the model generation and
+tool calls. If the injected context is missing, the traced phase must fail
+rather than create an unparented trace or route to another project.
+Use the launcher's `UXD_TRACE_PYTHON` for traced analyzer and validator calls so
+the Langfuse SDK is available in the child process.
+
 Run from this directory or use absolute paths:
 
 ```bash
@@ -33,11 +99,41 @@ python3 scripts/analyze.py --src=/path/to/prototype \
   --changed --base-ref=main
 python3 scripts/analyze.py --src=/path/to/prototype \
   --changed --base-ref=main --json-file=/path/to/consistency-report.json
+python3 scripts/analyze.py --src=/path/to/git-worktree \
+  --changed --merge-base --base-ref=main
+```
+
+To export a metadata-only source trace, pass the gitignored Langfuse env file,
+a prototype key, and an optional benchmark label. This runs a read-only
+health/auth preflight before exporting and never sends findings or source text.
+
+```bash
+python3 scripts/analyze.py --src=/path/to/prototype \
+  --json-file=/path/to/consistency-report.json \
+  --env-file=/path/to/.env.consistency-check \
+  --trace-key=PROJ-123 --benchmark-name=consistency-source-mode
+```
+
+For a real shared test case, add its Jira, GitLab, live prototype, and pinned
+source revision. The checker verifies the GitLab origin, checked-out revision,
+Jira key, and prototype HTTP response before exporting the trace.
+
+```bash
+python3 scripts/analyze.py --src=/path/to/git-checkout \
+  --json-file=/path/to/consistency-report.json \
+  --env-file=/path/to/.env.consistency-check --trace-key=PROJ-123 \
+  --jira-url=https://jira.example.com/browse/PROJ-123 \
+  --gitlab-url=https://gitlab.example.com/group/project.git \
+  --prototype-url=http://127.0.0.1:8080/ \
+  --source-revision=FULL_GIT_SHA --benchmark-name=real-PROJ-123
 ```
 
 Use `--changed` only when the source path is a Git worktree. The checker scopes
 numbered findings to added and modified lines, preventing legacy findings in a
-touched file from overwhelming an MR review.
+touched file from overwhelming an MR review. Use `--tracked-only` for MR
+worktrees that contain unrelated local scratch files; `--merge-base` checks
+committed changes on the topic branch rather than local worktree edits. Normal
+prototype worktrees still include untracked prototype files by default.
 
 ### Start here: local ground truth
 
@@ -58,8 +154,57 @@ expected findings.
 
 ## Visual checks
 
-Use `scripts/visual_analyze.py` when a visual pass has screenshots or a running
-prototype. Visual findings supplement source checks; they do not replace them.
+Use `scripts/visual_analyze.py` to capture DOM evidence from a running
+prototype, and capture screenshots for the actual visual judgment. When a
+non-deterministic visual review is requested, use the selected vision-capable
+model to inspect a bounded set of representative screenshots against relevant
+bundled rules. Keep visual findings separate from the deterministic source
+report and validate them with `scripts/validate_ai_review.py --mode visual`.
+Visual findings supplement source checks; they do not replace them.
+
+URL-based visual extraction also reports deterministic Project Felt DOM checks
+for the root theme class, pill-shaped visible controls, and a Red Hat red
+primary-control background. Use `--require-project-felt` to fail the command if
+these checks fail. Screenshot-only extraction has no DOM measurements and
+reports the checks as unavailable.
+
+Use this JSON contract for the visual model response. `screenshot` and each
+`seen_on` value must exactly match a screenshot path supplied to the validator:
+
+```json
+{
+  "status": "completed",
+  "mode": "visual",
+  "model": "openai/gpt-6-luna",
+  "non_deterministic": true,
+  "findings": [
+    {
+      "guideline_id": "icon-style-consistency",
+      "screenshot": "screenshots/primary.png",
+      "seen_on": ["screenshots/primary.png"],
+      "rationale": "The repeated action uses inconsistent icon styles.",
+      "suggestion": "Use one PatternFly icon style for this action.",
+      "confidence": "high"
+    }
+  ]
+}
+```
+
+Validate and trace a review from within the active consistency session:
+
+```bash
+python3 scripts/validate_ai_review.py \
+  --mode=source --input=<raw-source-review.json> \
+  --output=<consistency-source-ai.json> --source-root=<prototype-worktree> \
+  --model=openai/gpt-6-luna --ticket=<JIRA_KEY> \
+  --prototype-url=<live-url> --trace-phase
+
+python3 scripts/validate_ai_review.py \
+  --mode=visual --input=<raw-visual-review.json> \
+  --output=<consistency-visual-ai.json> --source-root=<prototype-worktree> \
+  --model=openai/gpt-6-luna --ticket=<JIRA_KEY> \
+  --prototype-url=<live-url> --screenshot=screenshots/primary.png --trace-phase
+```
 
 ## Outputs
 

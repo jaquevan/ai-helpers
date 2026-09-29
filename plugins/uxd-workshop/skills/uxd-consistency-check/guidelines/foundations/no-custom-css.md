@@ -31,14 +31,14 @@ grep -rnE "style[[:space:]]*=" --include="*.html" --include="*.htm" src/
 grep -rnE "<style([[:space:]>])" --include="*.html" --include="*.htm" src/
 
 # Stylesheet links must be official PatternFly assets
-grep -rn "rel=\"stylesheet\"" --include="*.html" --include="*.htm" src/ | grep -vi "patternfly"
+grep -rn "rel=\"stylesheet\"" --include="*.html" --include="*.htm" src/ | grep -vi "patternfly\|uxd-prototype-bar/"
 ```
 
 **Find authored stylesheets and JSX styles:**
 
 ```bash
 # Authored CSS and SCSS files are custom CSS
-find src -type f \( -name "*.css" -o -name "*.scss" \) -print
+find src -type f \( -name "*.css" -o -name "*.scss" \) -not -path "*/uxd-prototype-bar/*" -print
 
 # JSX/TSX style props are custom CSS
 grep -rn "style={{" --include="*.jsx" --include="*.tsx" src/

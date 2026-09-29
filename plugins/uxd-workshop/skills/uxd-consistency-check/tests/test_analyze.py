@@ -50,6 +50,56 @@ class AnalyzeCliTests(unittest.TestCase):
             markdown = reports[0].read_text() if reports else ""
             return result, markdown
 
+    def run_json_checker(self, fixture_name, guideline):
+        fixture = FIXTURES / fixture_name
+        return subprocess.run(
+            [
+                sys.executable,
+                str(ANALYZER),
+                "--src",
+                str(fixture),
+                "--guideline",
+                guideline,
+                "--json-output",
+            ],
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+
+    def test_project_felt_correct_ground_truth_passes(self):
+        result = self.run_json_checker("ground-truth/project-felt-correct", "project-felt-adoption")
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        report = json.loads(result.stdout)
+        self.assertEqual(report["summary"]["violations"], 0)
+        self.assertEqual(report["source_mode"]["violations"], [])
+
+    def test_project_felt_mixed_ground_truth_flags_default_background(self):
+        result = self.run_json_checker("ground-truth/project-felt-mixed", "project-felt-adoption")
+        self.assertEqual(result.returncode, 1, result.stdout + result.stderr)
+        report = json.loads(result.stdout)
+        findings = report["source_mode"]["violations"]
+        self.assertEqual(len(findings), 1)
+        self.assertTrue(findings[0]["file"].endswith("theme.css"))
+        self.assertIn("PF-Bkg-Generic-Light.svg", findings[0]["value"])
+        expected = json.loads((FIXTURES / "ground-truth" / "expected-findings.json").read_text())
+        self.assertEqual(expected["project-felt-correct"]["result"], "PASS")
+        self.assertEqual(expected["project-felt-mixed"]["result"], "VIOLATION")
+
+    def test_project_felt_requires_root_class_and_specific_background_asset(self):
+        with tempfile.TemporaryDirectory(prefix="uxd-consistency-felt-missing-") as tmp:
+            workspace = Path(tmp)
+            (workspace / "index.html").write_text('<html lang="en"><body>Prototype</body></html>\n')
+            result = subprocess.run(
+                [sys.executable, str(ANALYZER), "--src", str(workspace),
+                 "--guideline", "project-felt-adoption", "--json-output"],
+                capture_output=True, text=True, check=False,
+            )
+            self.assertEqual(result.returncode, 1, result.stdout + result.stderr)
+            values = [item["value"] for item in json.loads(result.stdout)["source_mode"]["violations"]]
+            self.assertTrue(any("pf-v6-theme-felt" in value for value in values))
+            self.assertTrue(any("Felt-Bkg-Generic" in value for value in values))
+
     def test_clean_patternfly_fixture_passes(self):
         result, markdown = self.run_checker("clean", "icon-style-consistency")
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
@@ -360,6 +410,96 @@ class AnalyzeCliTests(unittest.TestCase):
             findings = json.loads(result.stdout)["source_mode"]["violations"]
             self.assertEqual(len(findings), 1)
             self.assertTrue(findings[0]["file"].endswith("New.tsx"))
+
+    def test_tracked_only_changed_mode_ignores_untracked_worktree_files(self):
+        with tempfile.TemporaryDirectory(prefix="uxd-consistency-tracked-only-") as tmp:
+            workspace = Path(tmp)
+            (workspace / "src").mkdir()
+            tracked = workspace / "src" / "Tracked.tsx"
+            tracked.write_text("export const Tracked = () => <div />;\n")
+            subprocess.run(["git", "init", "-q"], cwd=workspace, check=True)
+            subprocess.run(["git", "config", "user.email", "test@example.com"], cwd=workspace, check=True)
+            subprocess.run(["git", "config", "user.name", "Test User"], cwd=workspace, check=True)
+            subprocess.run(["git", "add", "src/Tracked.tsx"], cwd=workspace, check=True)
+            subprocess.run(["git", "commit", "-qm", "base"], cwd=workspace, check=True)
+            (workspace / "src" / "LocalScratch.tsx").write_text(
+                "export const Scratch = () => <div style={{ color: 'red' }} />;\n"
+            )
+
+            result = subprocess.run(
+                [
+                    sys.executable, str(ANALYZER), "--src", str(workspace),
+                    "--guideline", "no-custom-css", "--changed", "--tracked-only",
+                    "--base-ref", "HEAD", "--json-output",
+                ],
+                capture_output=True, text=True, check=False,
+            )
+            self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+            report = json.loads(result.stdout)
+            self.assertEqual(report["source_mode"]["violations"], [])
+            self.assertEqual(report["summary"]["passes"], 0)
+
+    def test_merge_base_changed_mode_scopes_review_to_topic_commits(self):
+        with tempfile.TemporaryDirectory(prefix="uxd-consistency-merge-base-") as tmp:
+            workspace = Path(tmp)
+            source = workspace / "src"
+            source.mkdir()
+            (source / "Base.tsx").write_text("export const Base = () => <div />;\n")
+            subprocess.run(["git", "init", "-q"], cwd=workspace, check=True)
+            subprocess.run(["git", "config", "user.email", "test@example.com"], cwd=workspace, check=True)
+            subprocess.run(["git", "config", "user.name", "Test User"], cwd=workspace, check=True)
+            subprocess.run(["git", "add", "src/Base.tsx"], cwd=workspace, check=True)
+            subprocess.run(["git", "commit", "-qm", "common base"], cwd=workspace, check=True)
+            common = subprocess.run(
+                ["git", "rev-parse", "HEAD"], cwd=workspace, text=True, capture_output=True, check=True
+            ).stdout.strip()
+
+            subprocess.run(["git", "branch", "target"], cwd=workspace, check=True)
+            subprocess.run(["git", "checkout", "-qb", "topic"], cwd=workspace, check=True)
+            (source / "Topic.tsx").write_text("export const Topic = () => <div style={{ color: 'red' }} />;\n")
+            subprocess.run(["git", "add", "src/Topic.tsx"], cwd=workspace, check=True)
+            subprocess.run(["git", "commit", "-qm", "topic addition"], cwd=workspace, check=True)
+
+            subprocess.run(["git", "checkout", "-q", "target"], cwd=workspace, check=True)
+            (source / "Target.tsx").write_text("export const Target = () => <div style={{ color: 'blue' }} />;\n")
+            subprocess.run(["git", "add", "src/Target.tsx"], cwd=workspace, check=True)
+            subprocess.run(["git", "commit", "-qm", "target addition"], cwd=workspace, check=True)
+            subprocess.run(["git", "checkout", "-q", "topic"], cwd=workspace, check=True)
+            subprocess.run(["git", "branch", "merge-base", common], cwd=workspace, check=True)
+            (source / "LocalScratch.tsx").write_text("export const Scratch = () => <div style={{ color: 'green' }} />;\n")
+
+            result = subprocess.run(
+                [
+                    sys.executable, str(ANALYZER), "--src", str(workspace),
+                    "--guideline", "no-custom-css", "--changed", "--merge-base",
+                    "--tracked-only", "--base-ref", "target", "--json-output",
+                ],
+                capture_output=True, text=True, check=False,
+            )
+            self.assertEqual(result.returncode, 1, result.stdout + result.stderr)
+            findings = json.loads(result.stdout)["source_mode"]["violations"]
+            self.assertEqual(len(findings), 1)
+            self.assertTrue(findings[0]["file"].endswith("Topic.tsx"))
+
+    def test_trace_context_matches_gitlab_scp_remote_to_https_url(self):
+        with tempfile.TemporaryDirectory(prefix="uxd-consistency-gitlab-url-") as tmp:
+            workspace = Path(tmp)
+            (workspace / "src").mkdir()
+            (workspace / "src" / "Clean.tsx").write_text("export const Clean = () => <div />;\n")
+            subprocess.run(["git", "init", "-q"], cwd=workspace, check=True)
+            subprocess.run(["git", "config", "user.email", "test@example.com"], cwd=workspace, check=True)
+            subprocess.run(["git", "config", "user.name", "Test User"], cwd=workspace, check=True)
+            subprocess.run(["git", "remote", "add", "origin", "git@gitlab.cee.redhat.com:uxd/prototypes/rhoai.git"], cwd=workspace, check=True)
+
+            result = subprocess.run(
+                [
+                    sys.executable, str(ANALYZER), "--src", str(workspace),
+                    "--guideline", "no-custom-css", "--gitlab-url",
+                    "https://gitlab.cee.redhat.com/uxd/prototypes/rhoai.git", "--json-output",
+                ],
+                capture_output=True, text=True, check=False,
+            )
+            self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
 
 
 if __name__ == "__main__":

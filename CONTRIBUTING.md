@@ -31,7 +31,7 @@ Not sure what to build? Look for issues labeled [`good first issue`](../../label
 
 ### UXD contributions
 
-UXD skills live at `plugins/uxd-workshop/` and use the `uxd-` prefix. UXD PRs are reviewed by UXD maintainers.
+New UXD skills start in `plugins/uxd-workshop/` and use the `uxd-` prefix. Once validated, they graduate to a consumer plugin (`uxd-research`, `uxd-design`, or `uxd-prototype`). UXD PRs are reviewed by UXD maintainers.
 
 **Quick start:**
 
@@ -45,8 +45,8 @@ UXD skills live at `plugins/uxd-workshop/` and use the `uxd-` prefix. UXD PRs ar
 Plugins organize skills by domain. See the [full plugin table](CONTRIBUTING-SKILLS.md#step-5-pick-the-right-plugin) for what each plugin does and example skills.
 
 - **PatternFly skills** → `plugins/patternfly/<plugin>/` — use the `pf-` prefix
-- **UXD skills** → `plugins/uxd-workshop/` — use the `uxd-` prefix
-- Not sure where your skill belongs? Start in the workshop that matches your domain (`pf-workshop` or `uxd-workshop`). Skills graduate to consumer plugins once validated.
+- **UXD skills** → `plugins/uxd-research/`, `plugins/uxd-design/`, `plugins/uxd-prototype/` — use the `uxd-` prefix
+- Not sure where your skill belongs? Start in a workshop plugin (`pf-workshop` or `uxd-workshop`). Skills graduate to consumer plugins once validated.
 
 ## Adding a skill
 
@@ -179,8 +179,10 @@ graph LR
 1. Create the consumer plugin directory and manifests (if it's the first skill in that plugin)
 2. Move the skill directory from `plugins/<workshop>/skills/<skill>/` to `plugins/<consumer-plugin>/skills/<skill>/`
 3. Add the new plugin to both marketplace configs
-4. Run `bash scripts/generate-plugins-md.sh` to regenerate docs
-5. Open a pull request
+4. Update hand-written skill-to-plugin examples if they name the moved skill (for example the naming table in `CONTRIBUTING-SKILLS.md`). Leave generated docs alone — see below.
+5. Describe the plugin by its actual contents. Do not list skills that are still in the workshop.
+6. Keep the prefix examples in this file generic (one PatternFly line, one UXD workshop line). Do not add a new prefix bullet for the consumer plugin.
+7. Open a pull request. Do **not** run `scripts/generate-plugins-md.sh` or `make docs`, and do **not** hand-edit `PLUGINS.md`, the README plugin table or badge counts, the CONTRIBUTING-SKILLS plugin table, or per-plugin READMEs. CI regenerates those on merge to main.
 
 #### Demotion
 
@@ -213,7 +215,7 @@ graph LR
 5. Open a pull request against `main`
 6. Skillsaw lints content quality (advisory); CodeRabbit reviews structure and security
 7. A maintainer reviews for intent and quality
-8. On merge, CI regenerates `PLUGINS.md` and the README plugin table
+8. On merge, CI regenerates `PLUGINS.md`, the README plugin table and badge counts, the CONTRIBUTING-SKILLS plugin table, and per-plugin READMEs — do not include those changes in the PR
 
 ### Quality checklist
 
@@ -227,6 +229,7 @@ Before opening your PR, verify:
 - [ ] Tested locally on a real scenario
 - [ ] If new plugin: `.claude-plugin/` and `.cursor-plugin/` manifests are identical
 - [ ] Consumer-facing skills have an eval colocated at `skills/<skill-name>/eval/`
+- [ ] Did not edit auto-generated docs (`PLUGINS.md`, README plugin table/badges, CONTRIBUTING-SKILLS plugin table, per-plugin READMEs)
 - [ ] `make lint` passes locally (optional — CI runs it automatically)
 
 ## Your first contribution

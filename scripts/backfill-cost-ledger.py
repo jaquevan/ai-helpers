@@ -8,7 +8,7 @@ from pathlib import Path
 
 SCRIPT_DIR = Path(__file__).resolve().parent
 ROOT = SCRIPT_DIR.parent
-EVAL_SCRIPTS = ROOT / "plugins/uxd-workshop/skills/uxd-prototype-evaluate/scripts"
+EVAL_SCRIPTS = ROOT / "plugins/uxd-prototype/skills/uxd-prototype-evaluate/scripts"
 
 KEYS = [
     ("RHAISTRAT-1492", "golden-a-opus-nofix", "--fresh --no-fix --max-iterations=1"),

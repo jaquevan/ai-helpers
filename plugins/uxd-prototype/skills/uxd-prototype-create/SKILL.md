@@ -1,6 +1,6 @@
 ---
 name: uxd-prototype-create
-version: 0.1.0
+version: 1.0.0
 description: >-
   Create or refine a UX prototype from a Jira ticket, Figma design, feature
   description, or rough idea. Enumerates user journeys and page scenarios
@@ -44,6 +44,20 @@ Written under `.artifacts/{ID}/` in the consumer project (never `${CLAUDE_SKILL_
 | Optional exports | `exports/` when `--export` |
 
 Schemas: [references/output-formats.md](references/output-formats.md).
+
+## Measured OpenAI phases
+
+The measured creator runner uses the OpenAI defaults in
+[`config/model-routing.json`](config/model-routing.json): `gpt-6-sol` for paid
+creator phases and `gpt-6-luna` for judging. Eval-harness model settings are
+separate from the models used by the measured runner.
+
+For cost experiments, invoke one bounded phase at a time with
+[`scripts/creator-phase-runner.py`](scripts/creator-phase-runner.py). It requires
+a zero-spend estimate followed by explicit `--approve-estimate`, records phase
+usage under the creator-only `$15` cap, and writes metadata-only cost telemetry
+to Langfuse. The normal conversational workflow remains governed by the user's
+session model and is not represented by this phase-runner ledger.
 
 ## Flags
 
@@ -216,7 +230,7 @@ Read product-specific consistency decisions from
 `.design/product/design-guidelines/consistency/` when that directory exists.
 Bundled checker rules remain the portable default; project context explains
 local decisions and explicit exceptions. See
-[the consistency context contract](../uxd-consistency-check/references/project-context.md).
+[the consistency context contract](../../../uxd-workshop/skills/uxd-consistency-check/references/project-context.md).
 
 **Reachability self-check** (a minute or two, then move on):
 
@@ -254,7 +268,7 @@ Re-run after evaluate so the Eval tab gets the report (`public/evals/{ID}/`). Pa
 Run the bundled sibling checker before handing off the prototype:
 
 ```bash
-CONSISTENCY_SKILL="${CLAUDE_SKILL_DIR}/../uxd-consistency-check"
+CONSISTENCY_SKILL="${CLAUDE_SKILL_DIR}/../../../uxd-workshop/skills/uxd-consistency-check"
 CONSISTENCY_SOURCE=".artifacts/{ID}/prototype" # standalone
 # Workspace mode: set CONSISTENCY_SOURCE to workspace_path instead.
 
@@ -319,6 +333,9 @@ Print ID, title, decisions, screens, journeys, bar, exports, workspace, status, 
 4. `uxd-prototype-publish`
 
 If `--pipeline` / `--speedrun`, continue with [references/pipeline-mode.md](references/pipeline-mode.md).
+Use its deterministic local serve and identity gate before passing a generated
+URL to evaluate. The gate emits metadata-only creator events and leaves
+evaluator preflight/estimate approval in control of all paid evaluator work.
 
 ---
 

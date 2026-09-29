@@ -5,6 +5,7 @@ category: navigation
 automatable: true
 checkpoints: [local, mr, signoff]
 severity: error
+automation_result: candidate
 ---
 
 # Navigation Submenu Nesting Depth
@@ -102,7 +103,7 @@ grep -rn "children.*children.*children" --include="*.ts" --include="*.tsx" src/
 **Find deeply nested nav structures in JSX:**
 ```bash
 # Look for 4+ levels of NavExpandable nesting (violation)
-grep -rn "NavExpandable" --include="*.tsx" src/ | grep -c "NavExpandable"
+grep -rn "NavExpandable" --include="*.tsx" src/
 ```
 
 ## Manual Review Checklist

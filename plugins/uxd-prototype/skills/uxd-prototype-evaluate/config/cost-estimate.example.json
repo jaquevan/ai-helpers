@@ -1,0 +1,14 @@
+{
+  "multiplier": 1.0,
+  "phase_multipliers": {
+    "eval-journey": 1.2
+  },
+  "token_budgets": {
+    "eval-journey": { "input": 12000, "output": 2000 }
+  },
+  "rates_per_mtok": {
+    "gpt-6-sol": { "input": 2.0, "output": 10.0 },
+    "gpt-6-luna": { "input": 0.1, "output": 0.5 }
+  },
+  "flat_usd_per_run": null
+}
