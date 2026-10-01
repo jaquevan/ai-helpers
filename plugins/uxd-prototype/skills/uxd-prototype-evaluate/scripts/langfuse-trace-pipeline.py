@@ -27,6 +27,7 @@ sys.path.insert(0, str(SCRIPT_DIR))
 import langfuse_trace  # noqa: E402
 from extract_jira_context import extract_context  # noqa: E402
 from jira_context import load_jira_context  # noqa: E402
+from tracing_contract import phase_record, write_session_result, save_estimate, require_estimate, validate_session_mode
 from model_defaults import detect_platform, model_for, provider_for  # noqa: E402
 from model_routing import route_for  # noqa: E402
 from openai_api_agent import MAX_AGENT_TURNS  # noqa: E402
@@ -248,7 +249,7 @@ def run_personal_preflight(args: argparse.Namespace) -> dict[str, Any]:
     if importlib.util.find_spec("langfuse") is None:
         raise RuntimeError(
             "Langfuse Python package is required for personal runs; run "
-            "make langfuse-deps and use .venv/bin/python"
+            ".venv/bin/python -m pip install langfuse"
         )
     env_path = verify_langfuse.load_env_file(Path(args.env_file) if args.env_file else None)
     required = ("OPENAI_API_KEY", "LANGFUSE_HOST", "LANGFUSE_PUBLIC_KEY", "LANGFUSE_SECRET_KEY")
@@ -874,7 +875,7 @@ def run_openai_phases(
         phase_model = phase_route["model"]
         phase_reasoning_effort = reasoning_effort or phase_route["reasoning_effort"]
         phase_prompt = build_phase_prompt(spec, packet)
-        attempt_id = f"{run_id or 'eval'}-{index:02d}-{spec['name']}"
+        attempt_id = f"{run_id or 'eval'}-{index:02d}-{spec['name']}-{time.time_ns()}"
         phase_trace_path = trace_dir / f"{index:02d}-{spec['name']}.jsonl"
         usage_journal_path = trace_dir / f"{index:02d}-{spec['name']}-usage.jsonl"
         local_fix_noop = spec.get("runner") == "bounded_fix" and json.loads(
@@ -1039,6 +1040,8 @@ def run_openai_phases(
         )
         phase_entry = {
             "phase": spec["name"],
+            "attempt_id": attempt_id,
+            "run_id": run_id,
             "model": phase_model if result.get("model_invoked") is not False else None,
             "provider": "openai" if result.get("model_invoked") is not False else "local",
             "model_invoked": result.get("model_invoked") is not False,
@@ -1080,6 +1083,7 @@ def run_openai_phases(
         if reserve_exceeded:
             phase_entry["error_category"] = "reservation_exceeded"
             phase_entry["recovery_actions"] = ["stop_remaining_phases", "report_reserve_breach"]
+        phase_entry = phase_record(phase_entry)
         telemetry_phases.append(phase_entry)
         phase_results.append({**phase_entry, "output_text": result.get("output_text", "")})
         if phase_tracer:
@@ -1223,6 +1227,11 @@ def run_anthropic(prompt: str, model: str, project_dir: str, trace_path: Path) -
 def main() -> int:
     args = parse_args()
     try:
+        langfuse_trace.injected_trace_context()
+    except ValueError as error:
+        print(f"Trace bridge failed: {error}", file=sys.stderr)
+        return 2
+    try:
         normalize_execution_flags(args)
     except (TypeError, ValueError) as error:
         print(f"Invalid evaluator execution flags: {error}", file=sys.stderr)
@@ -1231,6 +1240,11 @@ def main() -> int:
         args.benchmark_name = "personal-evaluation"
     platform = args.platform or detect_platform()
     provider = args.provider or os.environ.get("EVAL_PROVIDER") or provider_for(platform)
+    try:
+        validate_session_mode(args, provider)
+    except ValueError as error:
+        print(f"Session approval gate: {error}", file=sys.stderr)
+        return 2
     model_override = args.model or os.environ.get("EVAL_MODEL")
     model = model_override or (
         model_for("eval-journey", platform) if provider == "anthropic" else "phase-routed"
@@ -1256,6 +1270,10 @@ def main() -> int:
         except (RuntimeError, ValueError) as error:
             print(f"Preflight failed: {error}", file=sys.stderr)
             return 2
+        save_estimate(args, preflight)
+        write_session_result({"status": "estimate_ready", "cost_usd": 0,
+                              "known_usage_cost_usd": 0, "usage_known": True,
+                              "billing_source": "local_no_model_cost"})
         print(json.dumps({
             "status": "ready",
             "mode": "estimate-only",
@@ -1289,6 +1307,7 @@ def main() -> int:
                 if args.personal_run
                 else run_step_zero(args)
             )
+            require_estimate(args, program_preflight)
         except (RuntimeError, ValueError) as error:
             print(f"Preflight failed: {error}", file=sys.stderr)
             return 2
@@ -1820,12 +1839,7 @@ def main() -> int:
     ledger_payload = {
         "eval_run_id": eval_run_id, "prototype_key": args.key, "invocation": "api",
         "model": result.get("model"), "iterate_flags": args.iterate_flags,
-        "phases": [{"phase": item.get("phase"), "model": item.get("model"),
-                    "provider": item.get("provider"), "status": item.get("status"),
-                    "input_tokens": item.get("input_tokens"), "output_tokens": item.get("output_tokens"),
-                    "cache_read_tokens": item.get("cache_read_tokens", 0),
-                    "cache_write_tokens": item.get("cache_write_tokens", 0),
-                    "llm_cost_usd": item.get("llm_cost_usd")} for item in result.get("phases", [])],
+        "phases": [phase_record(item) for item in result.get("phases", [])],
         "totals": {"llm_cost_usd": result.get("cost_usd"),
                    "known_usage_cost_usd": result.get("known_usage_cost_usd"),
                    "usage_known": result.get("usage_known", True),
@@ -1844,6 +1858,7 @@ def main() -> int:
         result["cost_ledger_status"] = f"failed: {ledger.stderr.strip()[-300:]}"
     else:
         result["cost_ledger_status"] = "written"
+    write_session_result({**result, "artifacts_dir": str(artifacts_dir)})
     print(json.dumps({**result, "eval_run_id": eval_run_id, **summary}, indent=2))
     return 2 if ledger.returncode else 0 if result.get("exit_code") == 0 else result.get("exit_code", 1)
 

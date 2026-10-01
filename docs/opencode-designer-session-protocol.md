@@ -1,291 +1,108 @@
-# OpenCode Designer Session Protocol (Langfuse observability)
+# Designer session protocol — fork-owned Langfuse runtime
 
-Internal. For UXD designers running consented OpenCode sessions against the
-`uxd-prototype-evaluate`, `uxd-prototype-create`, and `uxd-consistency-check`
-skills with Langfuse tracing enabled by `trace-in-langfuse`.
+Source: `jaquevan/ai-helpers:beau-testing`. Designer setup lives in the companion `uxd-langfuse-tracing` README. Upstream MLflow instructions do not describe this runtime.
 
-This flow is for internal technical evaluation only. The launcher displays a
-data notice and requires the user to type `TRACE` before starting OpenCode.
-The plugin captures full raw session content: user and assistant text,
-provider-exposed reasoning, tool arguments, and tool outputs (which may include
-file contents). Do not use it with HR, customer, personal, or confidential
-data. The Python evaluator's sanitized artifact policy does not sanitize these
-separate OpenCode session events. Trace consent does not approve paid evaluator
-phases.
+## Entry and consent
 
-Goal: a full opted-in designer session is **identifiable, timed, and
-cost-tracked** in Langfuse. Ordinary sessions remain unexported.
+Run `bash scripts/trace-in-langfuse <component> ...` from a **plain interactive terminal**, never from an assistant's shell tool or existing OpenCode session. The launcher verifies the selected project's credentials, describes full-session text capture and scoped workspace access, and requires exact `TRACE` at its prompt. It starts a fresh OpenCode 1.18.31 process with `run --command designer-<name>` and the header as arguments. Ordinary sessions do not load the tracing overlay.
 
-## Primary vs. secondary observability unit
+Capture includes user/assistant text, available provider-exposed reasoning and tool I/O with best-effort credential redaction. Opaque encrypted content and base64 attachments are omitted. This is not an anonymization guarantee for session text or file paths. Use only approved project content. Do not read, print or upload credential files or dump the environment.
 
-- **PRIMARY (this protocol):** a full consented UX designer session in OpenCode.
-  Everything the designer does in the conversation — user turns, assistant
-  generations, tool calls, tool failures, retries, tokens, cost — is traced by
-   the local launcher-only plugin automatically. Creator and consistency runs
-   do not invoke a paid pipeline.
-- **EVALUATOR PIPELINE:** the existing Python direct-API
-  pipeline (`scripts/langfuse-trace-pipeline.py` and the per-phase bounded
-  runners) remains for isolated phase benchmarks and cost-regression
-  experiments. In a consented evaluator run it is attached below the invoking
-  evaluator tool span.
-  It runs once and retains its existing estimate, reservation, and cap gates.
+OpenCode model usage may cost money. `TRACE` is separate from paid evaluator approval. The first evaluator invocation is estimate-only; a separately approved invocation reuses the identical inputs/context and consumes its saved estimate once. Preserve cap, reservation and settlement rules. Never automatically retry paid work.
 
-## How tracing works
+## Header
 
-Credentials live in owner-only, per-component files under
-`~/.config/opencode/langfuse/`. The launcher injects a component's credentials
-only into its fresh OpenCode process and loads the local plugin overlay.
-
-Verified behaviors of the installed plugin:
-
-- **One trace per consented run.** The plugin creates one root for the fresh
-  OpenCode session and closes it at `session.idle`. User turns, generations,
-  exposed reasoning, tool I/O, and the direct evaluator pipeline are children
-  of that trace.
-- Root metadata includes:
-  - `component` and `run_id` — the component and launcher-generated run id.
-  - `consent`, `trace_scope`, and `telemetry` — the typed consent and full-raw
-    capture scope.
-  - `evaluator_paid_approval` — whether the evaluator launcher invocation
-    carried the separate `--approve-estimate` flag.
-- `user_id` comes from `LANGFUSE_USER_ID` (defaulting to `anonymous`) and
-  `environment` from `LANGFUSE_ENVIRONMENT` (defaulting to
-  `development`). OpenCode `session.id` is attached to tool spans. Use the
-  root's component and run id as the reliable run identity.
-- There is no separate `invocation` tag. OpenCode observations use the
-  `opencode-langfuse-local-fork` instrumentation scope; evaluator pipeline
-  observations use the Python Langfuse tracer and attach below the invoking
-  tool span.
-- Observation types the plugin emits (verified names):
-  - `opencode.turn` (agent root, one per user turn) — carries the user message
-    as its **input**.
-  - `opencode.message.user` (event) — the user message, one per turn.
-  - `opencode.generation` (generation) — one per assistant model call.
-  - `opencode.message.text` and `opencode.message.reasoning` events — content
-    emitted by OpenCode when those message parts are available.
-  - tool spans (named after the tool, e.g. `bash`, `edit`, `webfetch`) — one per
-    tool call, with the tool args as input and the result as output.
-
-The local plugin does not currently create dedicated retry, compaction, or
-failed-generation observations, and it does not explicitly set error status on
-tool spans. Do not treat the presence of those observations or error markers as
-guaranteed.
-
-### What is captured on each `opencode.generation` (verified via the v4 API)
-
-| Field | Source | Notes |
-|---|---|---|
-| Model name | `model` | e.g. `Qwen3.8-27B`, `gpt-6-sol` |
-| Provider | `metadata` | OpenCode provider and model identifiers, plus billing source and `model_invoked` |
-| Token usage | `usageDetails` | `input`, `output`, `reasoning`, `cache_read`, `cache_write`, `total` — from the provider-reported step.ended tokens |
-| Per-call cost | `costDetails.total`, `inputCost`/`outputCost`/`totalCost` | Computed by Opencode from its **price card**. See cost limitation below. |
-| Generation duration | `latency` (ms), `startTime`/`endTime` | Wall-clock per model call |
-| Time to first token | `timeToFirstToken` | **Currently `null`** in this install — Opencode does not surface TTFT to the plugin here. |
-| Input / output | turn input, message events, generation output | User text is on the turn; available assistant text/reasoning is emitted as message events. Generation output contains message ID and finish metadata. |
-| Reasoning | `usageDetails.reasoning` (token count) + reasoning text when present | See reasoning limitation below. |
-
-### What is captured on tool spans (verified)
-
-Tool name, args (input), result title + output, and span timing. The current
-local plugin does not set a dedicated failure status or emit a separate
-`tool_failures` counter; tool errors may only be visible in the captured output.
-
-## The first-message header (required)
-
-The launcher starts a fresh OpenCode session and prepends this header to the
-skill invocation. Do not start a traced run mid-conversation or use
-`--continue`; the launcher does not accept an existing session. The header
-makes the trace searchable and identifiable:
-
-```
+```text
 [UXD-SESSION]
-component=<creator|evaluator|consistency>
+component=<creator|consistency|evaluator>
 run_kind=<manual-smoke|manual-designer-test|manual-regression>
-ticket=<JIRA_KEY>
-workspace=<absolute workspace path>
-prototype_url=<URL|none>
-scenario=<free-text purpose>
+ticket=<JIRA_KEY|none>
+workspace=<existing absolute directory>
+prototype_url=<http(s) URL|none>
+scenario=<one-line task with source/design links if relevant>
 ```
 
-Field rules:
-- `component` — one of `creator`, `evaluator`, `consistency`.
-- `run_kind` — one of `manual-smoke`, `manual-designer-test`, `manual-regression`.
-- `ticket` — the Jira key (e.g. `RHAISTRAT-1745`), or `none`.
-- `workspace` — absolute path to the working directory (e.g.
-  `/Users/ejaquez/Desktop/rhoai`).
-- `prototype_url` — the served prototype URL, or `none`.
-- `scenario` — one line of free text describing the purpose.
+`ticket=none` means no Jira lookup. Creator/consistency use the supplied feature brief. Evaluator `none` is restricted to manual-smoke with a served URL and explicitly stated acceptance criteria. Stage `{ "source": "synthetic-smoke", "ticket": { "key": "none", "summary": "Synthetic smoke", "description": "...", "acceptance_criteria": ["..."] } }`; these are synthetic requirements, never authenticated Jira evidence.
 
-This header is included in the first traced turn, so it is searchable in
-Langfuse and acts as the human-readable identity for the session. The stable
-machine identity is the trace root's component and launcher-generated `run_id`.
+For a creator/consistency refinement with `--context-file ... --offline-atlassian`, read the prepared local snapshot even when the ticket is a real Jira key. The launcher/plugin disables Atlassian/Jira/Confluence-named MCP servers for this child session. Do not use shell scripts or HTTP to bypass that policy. No Jira create/edit/comment/transition/attachment/link/watch actions are permitted. Snapshot provenance and proposed UI checks are distinct; prefer newer dated scope updates over superseded description text. The snapshot hash is part of the input fingerprint and the safe receipt records its path/hash.
 
-## Naming / search convention (stable)
+The default smoke workspace is `$AI_HELPERS_REPO/tmp/<name>`. External workspaces get a scoped run-only external-directory allow rule. Existing explicit denies are not overridden. Remaining tool/MCP policies still apply. If input or permission is missing, stop with `outcome_status: blocked` and a focused question in final text. A noninteractive run cannot answer a question/permission dialog.
 
-The launcher-generated trace root is named `evaluation/<run_id>` for evaluator
-runs and `<component>/<run_id>` for creator and consistency runs. Root metadata
-also records `component` and `run_id`. The session header identifies the
-ticket, run kind, workspace, URL, and scenario in the first turn.
+The launcher pins OpenCode's session directory to the fork root using `run --dir <ai-helpers-root>` and sets the child `PWD` to that same path. Setting only a subprocess working directory is insufficient: OpenCode 1.18.31 can otherwise select the caller's inherited `PWD`, making the fork protocol look external even when the prototype workspace is allowed.
 
-Finding a session in Langfuse v4 (this deployment is v4 `events_only`):
+Keep newly written logs and scratch outputs in the workspace. `UXD_TRACE_ARTIFACT_DIR` identifies `.artifacts/<ticket>/runs/<run_id>` there; create it if needed, put server output in `server.log`, and poll the served URL with a bounded readiness wait. Do not write a log to `/tmp` and then trigger an external-directory prompt while reading it. If a task stops after edits, preserve those edits and report verification still pending. Independent follow-up checks must be labeled as outside the original trace; do not rewrite the historical outcome.
 
-- **By trace name:** search for the component prefix and launcher-generated
-  run id, such as `evaluation/evaluator-20260925-120000-abcdef`.
-- **By metadata:** filter on root metadata `component` and `run_id`.
-- **By session id:** tool spans carry the OpenCode `session.id`; Langfuse may
-  expose this as `session_id`. Use it as a convenience when present, while the
-  root name and `run_id` remain the reliable run identity.
+Creator and consistency are conversational sessions; do not invoke direct pipelines unless a separately authorized measured creator workflow explicitly requires one. Evaluator uses the launcher-supplied interpreter and `node scripts/trace-eval-run.mjs` exactly once. A missing trace bridge is a blocker. Estimate-only does not produce a paid evaluation report. Respect an explicitly requested `--no-report`; do not infer it from a stale skill revision.
 
-Open the single trace root for that launcher invocation to see its turns,
-generations, tool spans, and evaluator pipeline children.
+## Identity and trace location
 
-## What is captured and what is not
+Read the named variables individually, e.g. `printf '%s\n' "$UXD_TRACE_RUN_ID"` and `printf '%s\n' "$UXD_TRACE_RECEIPT"`. Never use `env`/`printenv` without a specific safe name.
 
-Captured automatically (no action needed):
-- Every user turn and every assistant generation, in order.
-- Every tool call with its args and result, plus per-tool elapsed time.
-- Model-level retries and failed steps.
-- Per-generation model, provider, agent, mode, finish, and token usage.
-- Per-generation cost (subject to the price-card limitation below).
-- Provider-exposed reasoning (token count, and reasoning text when the provider
-  sends it).
+- `UXD_TRACE_RUN_ID`: available from the start of the session.
+- Root name: `<component>/<run_id>`; historical evaluator names began `evaluation/`.
+- Receipt: `tmp/traced-sessions/<run_id>/receipt.json` in the fork.
+- The plugin writes the actual OTel `trace_id` and `trace_url` into that receipt at initialization, and prints the URL to stderr. A tool can read this safe receipt during the session.
+- Hosted URL: `<LANGFUSE_BASE_URL>/project/<LANGFUSE_PROJECT_ID>/traces/<32-character-trace-id>`.
+- User identity: stable `sha256:<16 hex>` pseudonym shared by session, pipeline and ledger. Never substitute the raw username.
 
-Not captured / must be added by hand:
-- **Hidden or encrypted chain-of-thought.** OpenAI (and some other providers)
-  may return reasoning that is encrypted, redacted, or withheld. The plugin
-  only records what the provider actually emits as a reasoning part. When the
-  provider withholds it, there is no reasoning text to capture. Do not claim
-  private CoT is recorded.
-- **A per-session total as a single field.** Totals are sums across the
-  session's per-turn traces (see interpretation below).
-- **A decision log.** The plugin records *what* happened, not *why* you made a
-  design decision. Add a concise decision log in the final message of the
-  session (the commands below require this) so it is captured as the last
-  assistant generation.
-- **Artifact content.** Local artifacts (reports, screenshots, exported HTML)
-  are written to the workspace and are **not** uploaded to Langfuse. Record
-  their paths in the session's final message / scorecard.
+The launcher run ID is not the OTel trace ID. A printed link does not prove ingestion. Receipt `export_status=flush_completed` means the SDK flush finished; a separate read-only API/UI check verifies remote ingestion.
 
-## Reasoning limitation (state this honestly)
+The launcher performs a read-only post-run API check and writes `remote-verification.json`. New receipts list expected session observation IDs; the check compares these, counts and explicitly sourced OpenCode cost subtotals. `verified` is scoped to those session records, not an invoice or a full pipeline audit. `partial` means records/counts/costs disagree; `unavailable` means the check could not complete. A task may be completed while remote ingestion is partial. Do not retry model work. Recheck with `node scripts/verify-langfuse-receipt.mjs <receipt-path>`, which writes a new timestamped local verification without changing historical data.
 
-The plugin captures **provider-exposed** reasoning only:
-- The `reasoning` **token count** is recorded whenever the provider reports it
-  in its usage block.
-- Reasoning **text** is recorded only when the provider emits a reasoning
-  message part in clear text.
-- OpenAI may return reasoning as an encrypted or withheld blob; in that case
-  neither the text nor an interpretation is available, and the token count may
-  still be present.
+Langfuse v4 lists observations. Use **Is Root Observation = true** to browse one entry per invocation, then open its tree. All child observations must share the parent's trace ID; the Python bridge also suppresses an extra app-root marker. Unfiltered views intentionally show many rows. User/session attributes aid filtering, not automatic row collapsing. Estimate and approved invocations have separate trace IDs with a shared `input_fingerprint`.
 
-Because of this, the reliable "why" for a designer session comes from the
-assistant-visible rationale in the generation output, the tool trace, and the
-explicit decision log written at the end of the session — not from hidden CoT.
+## Trace content and accounting
 
-## Interpreting timing and cost
+The root contains turns, tools and generations. Each completed generation contains readable available conversation context and completed assistant parts, model, usage and cost provenance. It is not guaranteed to contain the exact provider wire prompt/system context. OpenCode message IDs deduplicate completion events; repeated text snapshots are consolidated. Available SDK message history is preferred, buffered parts are the labeled fallback.
 
-- **Per-generation time:** the `latency` on each `opencode.generation`.
-- **Per-tool time:** the `latency` on each tool span. Sum tool latencies for
-  total tool time.
-- **Total session time:** the span from the root's start to end (equivalently,
-  the wall-clock time of the OpenCode session).
-- **Total session tokens:** sum `usageDetails` (`input`, `output`, `reasoning`,
-  `cache_read`, `cache_write`) over every `opencode.generation` in the trace.
-  (Input tokens are re-sent per turn, so input totals are large by design.)
-- **Total session cost:** sum `costDetails.total` over every
-  `opencode.generation` in the trace.
+Generation duration comes from OpenCode message timestamps, not the moment a completed message is exported. This is message elapsed time, not guaranteed pure provider latency. User turns, generations and tool calls are separate counts. Tools record failures and nonzero reported exits. Parent-session shutdown does not react to a child's idle event. Shutdown callers share the pending flush.
 
-### Cost limitation (important)
+Only provider-exposed reasoning is observable. Hidden/encrypted CoT is not extracted or reconstructed. An explicit concise decision log is the reliable design rationale.
 
-Per-call cost is computed by Opencode from its **price card**, not from a
-provider invoice. Consequences:
-- For the **LiteMaaS / Qwen** custom provider, no price is configured, so
-  `costDetails.total` is **0** — cost is effectively **unavailable** for those
-  calls (they are not free, just unpriced in Opencode). Treat Qwen cost as
-  `unavailable`, not `$0`.
-- The **Qwen quality judge** is a separate Langfuse-side **LLM-as-a-Judge**, not
-  a traced pipeline model. Its cost is read out-of-band from the Scores API and
-  is **not** part of a session's traced `total_cost` — report it as
-  `unavailable (judge-only, not traced)`. Do not fold a Qwen judge observation
-  into the generation `costDetails` sum above.
-- For price-carded models (e.g. OpenAI models), cost is a **price-card
-  estimate**, not an invoice figure. Reconcile against provider billing
-  separately before quoting an "invoice" number.
-- `inputPrice`/`outputPrice` are `null` in this install; only the summed
-  `costDetails.total` is populated when a price exists.
-- `timeToFirstToken` is `null` — do not report TTFT.
+OpenCode's normalized input/output exclude cache/reasoning; the plugin exports disjoint numeric usage fields without adding the provider's overlapping total. Costs come from OpenCode's price card and the evaluator's provider-usage price card. They are estimates, not invoices. Unknown/unpriced values are never called free.
 
-## Session scorecard template
+The root/receipt carries `known_session_cost_usd`, `unpriced_generations`, usage totals and coverage, plus a separate `direct_pipeline` result. The pipeline result is read from an atomic structured sidecar, not terminal scrollback. Pipeline observations and cost ledger rows use the same phase accounting shape: phase status, output tokens, known subtotal and usage completeness. A failed phase can have known nonzero spend. Unknown usage can leave the full total null while the known subtotal remains nonzero. Root summary metadata does not add another billable generation.
 
-Fill this in at the end of each session (post it as the final message so it is
-traced, and keep a copy in the workspace).
+`session_status`, `task_outcome` and `export_status` are separate. The launcher returns nonzero for failed, blocked or unconfirmed outcomes and for missing/failed plugin export. It does not infer task completion from OpenCode exit code 0.
 
-```
+## Scorecard: report what is available now
+
+End with a concise decision log, artifact/prototype paths and URLs, followed by this block. Write the same block into a workspace file named with the run ID so later runs do not overwrite it.
+
+```text
 [UXD-SCORECARD]
-ticket:            <JIRA_KEY>
-component:         <creator|evaluator|consistency>
-run_kind:          <manual-smoke|manual-designer-test|manual-regression>
-langfuse_run_id:   <component-run-id from the trace root>
-trace_url:         <trace root URL>
-model:             <e.g. Qwen3.8-27B>
-total_time:        <mm:ss wall clock for the session>
-total_cost:        <sum of generation costDetails, or "unavailable (LiteMaaS)">; Qwen judge cost is separate and out-of-band — not in this total
-assistant_turns:   <count of opencode.turn observations>
-tool_calls:        <count of tool spans>
-tool_failures:     <inspect tool outputs; no explicit error status is guaranteed>
-total_tokens:      <input/output/reasoning summed>
-report_artifact:   <absolute path to report / exported artifact, or none>
-outcome:           <one line: what the session produced / decided>
-friction_notes:    <1–3 lines: what slowed you down, what was confusing>
-decision_log:      <concise: decisions made + why>
+ticket: <key|none>
+component: <creator|consistency|evaluator>
+run_kind: <header value>
+langfuse_run_id: <read UXD_TRACE_RUN_ID>
+trace_name: <component>/<run_id>
+trace_url: <read receipt.trace_url, or explicit receipt-read failure>
+model: <actual session model if available>
+report_artifact: <new absolute path(s), or none with reason>
+prototype_url: <verified served URL, or none>
+outcome_status: <completed|blocked|failed>
+outcome: <what actually happened; estimate-only is not a completed paid evaluation>
+friction_notes: <concrete issues>
+decision_log: <concise decisions and reasons>
+final_metrics: <receipt path; finalized after this message/session ends>
 ```
 
-## First evaluator test
+Do not guess final costs, durations or observation counts from terminal scrollback or report them as universally inaccessible. The run ID and receipt link are available during the session. Finalized metrics belong in the receipt after the last generation finishes and should be checked against remotely ingested observations.
 
-A fixed, repeatable smoke test to confirm the consented loop (launcher → traced
-evaluation → pipeline → artifacts → scorecard) before doing real work.
+## Artifacts
 
-- **Ticket:** RHAISTRAT-1745
-- **Workspace:** `/Users/ejaquez/Desktop/rhoai`
-- **URL:** `http://127.0.0.1:8080`
-- **Component:** `evaluator`
-- **Scenario:** evaluate existing prototype as a UX designer
+Report exact new artifact paths and verified URLs in final output. The root manifest also points to existing `.artifacts/<KEY>/eval/evaluation-report.html`, `journey-log.json`, `screenshots/`, `runs/`, ledger and `report-url.txt` when present. These inventory entries are labeled workspace-latest with unverified run ownership; do not attribute old reports to this run.
 
-Run the launcher from the repository. It first verifies the component project,
-then displays the full-session data notice and asks you to type `TRACE`. The
-first evaluator invocation stages Jira context, runs estimate-only, displays
-the estimate, and stops before paid evaluator phases. The OpenCode planning
-turn may still cost money through the configured OpenCode model.
+The manifest additionally consumes `report_artifact` and `prototype_url` from the final scorecard. This supports creator/consistency smoke artifacts whose key is not literally `none`. List absolute file paths separated by semicolons. Only existing paths contained in the workspace are inventoried, and these entries are labeled `session_reported`, not independently verified authorship. A newly discovered served URL is recorded even if the initial header used `prototype_url=none`.
 
-Command:
+`export-helper.mjs` serves local reports at `http://127.0.0.1:9417/evals/<KEY>/`. Local paths and localhost URLs only work on the owner's machine. A preexisting `report-url.txt` can provide a hosted link. Publishing through `publish-report.sh` commits/pushes to its configured destination and must be explicitly authorized separately. No artifact hosting or image upload is implied by `TRACE`. Inline image rendering on this deployment is pending live verification; links are the default.
 
-```
-bash scripts/trace-in-langfuse evaluator --ticket RHAISTRAT-1745 --workspace /Users/ejaquez/Desktop/rhoai --prototype-url http://127.0.0.1:8080 --scenario "evaluate existing prototype as a UX designer"
-```
+## Verification
 
-Do not use `--continue` or a session ID. The launcher refuses to attach tracing
-to an existing conversation.
+- `npm test --prefix .opencode-tracing`: offline hook, routing, consent-PTY and accounting behavior using mocks.
+- `.venv/bin/python plugins/uxd-prototype/skills/uxd-prototype-evaluate/tests/test-tracing-contract.py`: ledger/observation parity, unknown usage, bridge, context and approval guards.
+- Launcher `--dry-run`: no credentials/network; actual argv and expanded command body.
+- `node scripts/inspect-langfuse-trace.mjs <component> --trace <id>`: paginated read-only v4 API check; returns metadata, usage, parenting and I/O presence, not raw session text.
+- Each live test needs its own terminal `TRACE`; paid evaluator phases additionally need reviewed-estimate approval.
 
-Review the estimate. If you approve the paid evaluator phases, launch a second
-fresh traced session with the same ticket, workspace, URL, and scenario, adding
-`--approve-estimate`:
-
-```
-bash scripts/trace-in-langfuse evaluator --ticket RHAISTRAT-1745 --workspace /Users/ejaquez/Desktop/rhoai --prototype-url http://127.0.0.1:8080 --scenario "evaluate existing prototype as a UX designer" --approve-estimate
-```
-
-This flag records explicit approval and tells the evaluator skill to reuse the
-staged Jira context and run the bounded paid pipeline once. It does not replace
-the pipeline's preflight, reservation, or cap checks. If the run inputs change,
-repeat estimate-only and review the new estimate first.
-
-After the session, confirm one `evaluation/<run_id>` root contains the session,
-evaluator tool span, pipeline child, phase observations, final status, tokens,
-duration, and separate OpenCode/direct-pipeline cost fields.
-
-## Security
-
-- Langfuse/OpenAI keys live only in owner-only per-component files under
-  `~/.config/opencode/langfuse/` or launcher-injected environment variables. Never
-  print, commit, copy, or move them into repo files, docs, commands, tests, or
-  chat output.
-- All local `.env*` files remain gitignored.
+Keep credentials outside Git and generated receipts/configuration under ignored `tmp/`. Restart OpenCode after config/plugin/command changes; active sessions retain the old configuration.

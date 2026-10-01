@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 from pathlib import Path
 from typing import Any
 
@@ -25,7 +26,10 @@ def load_jira_context(path: str | Path, expected_key: str) -> dict[str, Any]:
     if not isinstance(data, dict):
         raise ValueError("Jira context must be a JSON object")
     source = data.get("source")
-    if source not in ALLOWED_SOURCES:
+    synthetic = (source == "synthetic-smoke" and expected_key == "none"
+                 and os.environ.get("OPENCODE_DEDICATED_TRACE") == "1"
+                 and os.environ.get("UXD_TRACE_RUN_KIND") == "manual-smoke")
+    if source not in ALLOWED_SOURCES and not synthetic:
         raise ValueError(
             "Jira context source must be 'atlassian-mcp' or "
             "'jira-authenticated-browser'"
@@ -48,6 +52,8 @@ def load_jira_context(path: str | Path, expected_key: str) -> dict[str, Any]:
     for field in ("summary", "description"):
         if not isinstance(ticket.get(field), str) or not ticket[field].strip():
             raise ValueError(f"Jira context ticket.{field} must be non-empty text")
+    if synthetic and not ticket.get("acceptance_criteria"):
+        raise ValueError("Synthetic smoke context needs explicit scenario acceptance criteria.")
     return data
 
 

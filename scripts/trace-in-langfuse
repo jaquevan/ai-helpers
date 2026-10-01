@@ -1,0 +1,6 @@
+#!/usr/bin/env bash
+# Fork-owned terminal entry point. No credentials are passed as command arguments.
+set -euo pipefail
+ROOT=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd -P)
+command -v node >/dev/null || { printf '%s\n' 'Install Node 24.15.0+ (24.x) and retry from a plain terminal.' >&2; exit 2; }
+exec node "$ROOT/.opencode-tracing/launcher.mjs" "$@"

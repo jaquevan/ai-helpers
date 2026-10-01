@@ -54,8 +54,12 @@ __pycache__/
 workspace/
 
 # Local Langfuse tracing config (machine-specific)
-/.opencode/
-/.opencode-tracing/
+/.opencode/*
+!/.opencode/command/
+/.opencode/command/*
+!/.opencode/command/designer-create.md
+!/.opencode/command/designer-consistency.md
+!/.opencode/command/designer-evaluate.md
 /.claude/
 /docker/langfuse/
 /docs/cost-experiments/
@@ -65,11 +69,8 @@ workspace/
 /docs/tracing-guide.md
 **/langfuse-trace-context*.json
 
-# Full-session OpenCode Langfuse launcher/docs are maintained separately
+# Machine-specific OpenCode configuration; runtime sources are fork-owned.
 /opencode.json
-/scripts/trace-in-langfuse
-/docs/trace-in-langfuse.md
-/docs/opencode-designer-session-protocol.md
 
 # Local OpenCode overrides (user-specific)
 AGENTS.local.md

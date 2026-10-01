@@ -1,0 +1,2 @@
+# Tested Python bridge SDK; runtime internals require revalidation on upgrade.
+langfuse==4.15.6

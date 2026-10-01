@@ -55,6 +55,8 @@ NON_LLM_PHASES = frozenset({
 })
 
 PHASE_METADATA_FIELDS = frozenset({
+    "attempt_id",
+    "run_id",
     "acceptance_criteria",
     "affected_files",
     "after_match_count",
@@ -648,6 +650,8 @@ def injected_trace_context() -> dict[str, str] | None:
     parent_span_id = os.environ.get("LANGFUSE_PARENT_SPAN_ID", "")
     if re.fullmatch(r"[0-9a-f]{32}", trace_id) and re.fullmatch(r"[0-9a-f]{16}", parent_span_id):
         return {"trace_id": trace_id, "parent_span_id": parent_span_id}
+    if os.environ.get("OPENCODE_DEDICATED_TRACE") == "1":
+        raise ValueError("Launcher-owned evaluator requires valid LANGFUSE_TRACE_ID and LANGFUSE_PARENT_SPAN_ID. No standalone fallback is permitted.")
     return None
 
 
@@ -941,7 +945,7 @@ def _allocate_costs(
     """Normalize legacy phase fields without inventing or reallocating spend.
 
     OpenAICostAuthority is the only writer of OpenAI cost. Historical callers
-    without phase settlement retain zero cost rather than a duration-weighted
+    without phase settlement retain unknown cost rather than a duration-weighted
     attribution that could disagree with the provider ledger.
     """
     llm_phases = [
@@ -953,7 +957,7 @@ def _allocate_costs(
 
     for phase in llm_phases:
         phase.setdefault("model", default_model)
-        phase.setdefault("llm_cost_usd", 0)
+        phase.setdefault("llm_cost_usd", None)
     return phases
 
 
@@ -1247,7 +1251,7 @@ def build_pipeline_phases(
                 "model": model_name,
                 "input_tokens": usage.get("inputTokens", 0),
                 "output_tokens": usage.get("outputTokens", 0),
-                "llm_cost_usd": usage.get("costUSD", 0),
+                "llm_cost_usd": usage.get("costUSD"),
             })
         return merged
 
@@ -1258,6 +1262,8 @@ def _trace_url(client, trace_id: str) -> str:
     host = os.environ.get("LANGFUSE_HOST", "").rstrip("/")
     if not host:
         return ""
+    if os.environ.get("LANGFUSE_PROJECT_ID"):
+        return f"{host}/project/{os.environ['LANGFUSE_PROJECT_ID']}/traces/{trace_id}"
     try:
         return client.get_trace_url(trace_id=trace_id) or f"{host}/trace/{trace_id}"
     except Exception:
@@ -1303,8 +1309,10 @@ def _trace_values(payload: dict[str, Any]) -> dict[str, Any]:
         "team": "uxd",
         "component": component,
         "pipeline": pipeline,
-        "designer_id_hash": hash_user_id(
-            payload.get("designer") or os.environ.get("USER") or os.environ.get("USERNAME")
+        "designer_id_hash": (
+            os.environ["LANGFUSE_USER_ID"]
+            if re.fullmatch(r"sha256:[a-f0-9]{16}", os.environ.get("LANGFUSE_USER_ID", ""))
+            else hash_user_id(payload.get("designer") or os.environ.get("USER") or os.environ.get("USERNAME"))
         ),
     }
     if payload.get("jira_url"):
@@ -1363,6 +1371,8 @@ def _record_pipeline_content(
     )
 
     for phase in payload.get("phases") or []:
+        from tracing_contract import phase_record
+        phase = phase_record(phase)
         phase_name = phase.get("phase", "unknown")
         if phase_name in skip_phases:
             continue
@@ -1374,8 +1384,8 @@ def _record_pipeline_content(
         if is_llm and phase.get("model"):
             usage = langfuse_usage(phase)
             cost_details = {}
-            if phase.get("llm_cost_usd") is not None:
-                cost_details["total"] = float(phase["llm_cost_usd"])
+            if phase.get("known_usage_cost_usd") is not None:
+                cost_details["total"] = float(phase["known_usage_cost_usd"])
             observation = client.start_observation(
                 name=phase_name,
                 as_type="generation",
@@ -1384,11 +1394,16 @@ def _record_pipeline_content(
                 output=None,
                 usage_details=usage,
                 cost_details=cost_details or None,
-                level=level,
+                level="ERROR" if phase["status"] == "failed" else "WARNING" if phase["status"] == "blocked" else "DEFAULT",
                 metadata={
                     "phase": phase_name,
                     "provider": phase.get("provider") or values["provider"],
-                    "status": status,
+                    "status": phase["status"],
+                    "output_tokens": phase.get("output_tokens"),
+                    "estimated_cost_usd": phase["known_usage_cost_usd"],
+                    "usage_known": phase["usage_known"],
+                    "cost_complete": phase["cost_complete"],
+                    "billing_source": phase["billing_source"],
                     "privacy_mode": values["metadata"]["privacy_mode"],
                     **phase_metadata,
                 },
@@ -1419,7 +1434,7 @@ def _record_pipeline_content(
                     "input": usage.get("inputTokens", 0),
                     "output": usage.get("outputTokens", 0),
                 },
-                cost_details={"total": usage.get("costUSD", 0)},
+                cost_details={"total": usage["costUSD"]} if usage.get("costUSD") is not None else None,
                 level=level,
                 metadata={"status": status},
             ).end()
@@ -1530,6 +1545,11 @@ class LivePipelineTrace:
             metadata=self.values["metadata"],
         )
         self.root = self._root_context.__enter__()
+        if self.bridge_context and getattr(self.root, "_otel_span", None):
+            # A cross-process parent is exported by the JS session provider.
+            # Python cannot see it in its local span registry; suppress the
+            # otherwise automatic second app-root marker (SDK 4.15.6).
+            self.root._otel_span.set_attribute("langfuse.internal.is_app_root", False)
         if (
             self.trace_context_path and not self.bridge_context
             and re.fullmatch(r"[0-9a-f]{16}", str(getattr(self.root, "id", "")))
@@ -1545,9 +1565,13 @@ class LivePipelineTrace:
             temporary.replace(self.trace_context_path)
         self._attributes_context = propagate_attributes(
             user_id=self.values["metadata"]["designer_id_hash"],
+            session_id=os.environ.get("UXD_TRACE_RUN_ID") if self.bridge_context else None,
+            trace_name=(f"{component}/{os.environ['UXD_TRACE_RUN_ID']}"
+                        if self.bridge_context and os.environ.get("UXD_TRACE_RUN_ID") else None),
             metadata={
                 "prototype_key": self.values["prototype_key"],
                 "eval_run_id": self.values["eval_run_id"],
+                "run_id": os.environ.get("UXD_TRACE_RUN_ID") or self.values["eval_run_id"],
                 "component": component,
             },
             tags=[
@@ -1628,6 +1652,8 @@ class LivePipelineTrace:
         """Close a live model phase with exact usage, cost, and status."""
         if observation is None:
             return
+        from tracing_contract import phase_record
+        phase = phase_record(phase)
         phase_status = phase.get("status", "failed")
         level = "ERROR" if phase_status == "failed" else "DEFAULT"
         phase_name = phase.get("phase") or "unknown"
@@ -1667,6 +1693,8 @@ class LivePipelineTrace:
             "status_message": redact_text(output_text, 200),
             "metadata": {
                 "phase": phase.get("phase"),
+                "attempt_id": phase.get("attempt_id"),
+                "run_id": phase.get("run_id", self.values["eval_run_id"]),
                 "component": self.values["metadata"].get("component", "evaluator"),
                 "pipeline": self.values["metadata"].get("pipeline", "prototype-evaluator"),
                 "model": phase.get("model"),
@@ -1675,6 +1703,8 @@ class LivePipelineTrace:
                 "billing_source": "provider_usage_price_card_estimate" if phase.get("model") else "local_no_model_cost",
                 "pricing_reference": "https://developers.openai.com/api/docs/pricing" if phase.get("model") else None,
                 "input_tokens_including_cache": int(phase.get("input_tokens", 0) or 0),
+                "output_tokens": phase.get("output_tokens"),
+                "cost_complete": phase["cost_complete"],
                 "cached_input_tokens": int(phase.get("cache_read_tokens", 0) or 0),
                 "cache_write_tokens": int(phase.get("cache_write_tokens", 0) or 0),
                 "estimated_cost_usd": known_cost,
@@ -2024,14 +2054,14 @@ def log_pipeline_run(payload: dict[str, Any]) -> dict[str, Any]:
             "eval_run_id": payload.get("eval_run_id"),
             "langfuse_trace_url": "",
             "langfuse_enabled": is_enabled(),
-            "llm_cost_usd": (payload.get("run_result") or {}).get("cost_usd") or 0,
+            "llm_cost_usd": (payload.get("run_result") or {}).get("cost_usd"),
             "logged": False,
             "bridge_attached": True,
         }
     client = _get_client()
     values = _trace_values(payload)
     run_result = payload.get("run_result", {})
-    cost_usd = run_result.get("cost_usd") or 0
+    cost_usd = run_result.get("cost_usd")
     summary = {
         "eval_run_id": values["eval_run_id"],
         "langfuse_trace_url": "",

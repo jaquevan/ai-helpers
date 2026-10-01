@@ -24,6 +24,8 @@ class FakeObservation:
         self.updates = []
         self.child_observations = []
         self.ended = False
+        self.otel_attributes = {}
+        self._otel_span = types.SimpleNamespace(set_attribute=lambda key, value: self.otel_attributes.update({key: value}))
 
     def update(self, **kwargs):
         self.updates.append(kwargs)
@@ -152,7 +154,7 @@ def main() -> int:
         costed_by_name = {phase["phase"]: phase for phase in costed}
         assert costed_by_name["eval-consistency-source"].get("llm_cost_usd", 0) == 0
         assert costed_by_name["uxd-consistency-check"].get("llm_cost_usd", 0) == 0
-        assert costed_by_name["eval-consistency-visual"]["llm_cost_usd"] == 0
+        assert costed_by_name["eval-consistency-visual"]["llm_cost_usd"] is None
         assert costed_by_name["eval-consistency-visual"]["screenshots_analyzed"] == 3
 
     with tempfile.TemporaryDirectory() as tmp:
@@ -272,6 +274,7 @@ def main() -> int:
                     "parent_span_id": "b" * 16,
                 }
                 assert bridge_root.start_kwargs["name"].startswith("evaluation-pipeline/")
+                assert bridge_root.otel_attributes["langfuse.internal.is_app_root"] is False
                 bridge_phase = bridge.start_phase(
                     name="eval-journey", model="gpt-5.6-luna", input_text="raw opted-in prompt"
                 )

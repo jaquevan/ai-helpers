@@ -105,7 +105,9 @@ function appendIndex(projectRoot, row) {
     eval_run_id: row.eval_run_id,
     prototype_key: row.prototype_key,
     experiment: row.experiment,
-    llm_cost_usd: row.totals?.llm_cost_usd ?? 0,
+    llm_cost_usd: row.totals?.llm_cost_usd ?? null,
+    known_usage_cost_usd: row.totals?.known_usage_cost_usd ?? null,
+    usage_known: row.totals?.usage_known ?? false,
     langfuse_trace_url: row.langfuse_trace_url || '',
     run_mode: row.run_mode,
     fix_mode: row.fix_mode,
@@ -159,15 +161,18 @@ async function main() {
     iterate_flags: dims.iterate_flags,
     phases: payload.phases || [],
     totals: {
-      llm_cost_usd: payload.totals?.llm_cost_usd ?? payload.llm_cost_usd ?? 0,
+      llm_cost_usd: Object.hasOwn(payload.totals || {}, 'llm_cost_usd') ? payload.totals.llm_cost_usd : payload.llm_cost_usd ?? null,
+      known_usage_cost_usd: payload.totals?.known_usage_cost_usd ?? payload.totals?.llm_cost_usd ?? payload.llm_cost_usd ?? null,
+      usage_known: payload.totals?.usage_known ?? false,
       observability_cost_usd: payload.totals?.observability_cost_usd ?? 0,
-      total_tokens: payload.totals?.total_tokens ?? 0,
+      total_tokens: payload.totals?.total_tokens ?? null,
     },
     quality: payload.quality || readQualityFromArtifacts(artifactsDir),
     langfuse_trace_url: payload.langfuse_trace_url || '',
     privacy_mode: privacyMode,
     retention_days: 30,
-    designer_id_hash: hashUser(payload.designer || process.env.USER || process.env.USERNAME),
+    designer_id_hash: /^sha256:[a-f0-9]{16}$/.test(process.env.LANGFUSE_USER_ID || '')
+      ? process.env.LANGFUSE_USER_ID : hashUser(payload.designer || process.env.USER || process.env.USERNAME),
     notes: payload.notes || '',
   };
 

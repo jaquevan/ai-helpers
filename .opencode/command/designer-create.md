@@ -17,7 +17,7 @@ for it. The exact form:
 [UXD-SESSION]
 component=creator
 run_kind=<manual-smoke|manual-designer-test|manual-regression>
-ticket=<JIRA_KEY>
+ticket=<JIRA_KEY|none>
 workspace=<absolute workspace path>
 prototype_url=<URL|none>
 scenario=<free-text purpose>
@@ -31,7 +31,7 @@ focused question. Do not assert fake completion.
 
 - Load the `uxd-prototype-create` skill and act as a UX designer following it.
 - Work in the **local workspace** from the header.
-- Pull the Jira ticket (and Figma, if provided) for context.
+- If the launcher supplies a local snapshot with offline Atlassian access, use that snapshot and do not contact Jira. Otherwise pull Jira only when ticket is not `none`; use Figma only when supplied/requested. For `none`, use the explicit feature description without Jira/Figma lookup. Never write to Jira unless the user separately and explicitly requested that action.
 - Enumerate user journeys and page scenarios (empty / error / alternate
   conditions) and build or refine the prototype accordingly.
 - Serve the result locally and verify it renders (correct title/content, not a
@@ -69,4 +69,4 @@ End with:
 1. A concise **decision log** (design decisions and why).
 2. The **artifact / report / prototype location(s)** (absolute paths) and the
    served URL.
-3. A filled **`[UXD-SCORECARD]`** (see the protocol doc for the fields).
+3. A filled **`[UXD-SCORECARD]`** (see the protocol doc for the fields). Read `UXD_TRACE_RUN_ID` and the safe receipt at `UXD_TRACE_RECEIPT`; final metrics are finalized after the session ends. Include `outcome_status: completed`, `blocked`, or `failed` on its own line. If blocked, write the focused question in final text, not an interactive question tool.
