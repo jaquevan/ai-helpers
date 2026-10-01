@@ -1,9 +1,11 @@
 import fs from 'node:fs'
+import path from 'node:path'
 import { context, trace, ROOT_CONTEXT } from '@opentelemetry/api'
 import { LangfuseSpanProcessor } from '@langfuse/otel'
 import { resourceFromAttributes } from '@opentelemetry/resources'
 import { NodeTracerProvider } from '@opentelemetry/sdk-trace-node'
 import { createSessionHooks, hasTraceCredentials, rootNameFor } from './session-root-core.mjs'
+import { createDiagnosticExporter } from '../export-diagnostics.mjs'
 
 const ownerKey = Symbol.for('uxd.traced-session.owner.v2')
 export default async function LangfuseSessionRoot({ client }) {
@@ -12,9 +14,12 @@ export default async function LangfuseSessionRoot({ client }) {
   if (globalThis[ownerKey]) return globalThis[ownerKey].runID === env.UXD_TRACE_RUN_ID ? globalThis[ownerKey].promise : {}
   const promise = (async () => {
     const scope = 'opencode-langfuse-fork'
+    const exportJournal = path.join(path.dirname(env.UXD_TRACE_RECEIPT), 'export-journal.jsonl')
+    const exporter = createDiagnosticExporter(env, record => fs.appendFileSync(exportJournal, `${JSON.stringify(record)}\n`, { mode: 0o600 }))
     const provider = new NodeTracerProvider({
       resource: resourceFromAttributes({ 'service.name': scope }),
       spanProcessors: [new LangfuseSpanProcessor({
+        exporter,
         publicKey: env.LANGFUSE_PUBLIC_KEY, secretKey: env.LANGFUSE_SECRET_KEY,
         baseUrl: env.LANGFUSE_BASE_URL, environment: env.LANGFUSE_ENVIRONMENT,
         mediaUploadEnabled: false,
@@ -29,6 +34,7 @@ export default async function LangfuseSessionRoot({ client }) {
       'langfuse.trace.name': rootNameFor(env.UXD_TRACE_COMPONENT, env.UXD_TRACE_RUN_ID),
     } }, ROOT_CONTEXT)
     const hooks = createSessionHooks({ env, root, client,
+      getExportDiagnostics: () => ({ ...exporter.snapshot(), journal_path: exportJournal }),
       startSpan: (name, attributes, parent, times) => tracer.startSpan(name, { attributes, ...times }, trace.setSpan(context.active(), parent)),
       flush: () => provider.forceFlush(), shutdown: () => provider.shutdown(),
       writeReceipt: receipt => {

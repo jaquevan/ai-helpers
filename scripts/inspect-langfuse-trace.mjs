@@ -29,7 +29,7 @@ try {
       start_time: item.startTime, end_time: item.endTime,
       parent_id: item.parentObservationId, is_root: item.isRootObservation,
       user_id: item.userId, session_id: item.sessionId, model: item.model,
-      level: item.level, metadata: Object.fromEntries(Object.entries(item.metadata || {}).filter(([key]) => ['component', 'run_id', 'eval_run_id', 'status', 'task_outcome', 'billing_source', 'estimated_cost_usd', 'known_usage_cost_usd', 'usage_known', 'output_tokens', 'cost_complete'].includes(key))),
+      level: item.level, metadata: Object.fromEntries(Object.entries(item.metadata || {}).filter(([key]) => ['component', 'run_id', 'eval_run_id', 'attempt_id', 'status', 'task_outcome', 'billing_source', 'estimated_cost_usd', 'known_usage_cost_usd', 'usage_known', 'output_tokens', 'cost_complete'].includes(key))),
       input_present: Boolean(item.input && item.input !== 'null'), output_present: Boolean(item.output && item.output !== 'null'),
       usage: item.usageDetails, cost: item.costDetails, total_cost: item.totalCost,
       trace_url: traceURL(host, credentials.LANGFUSE_PROJECT_ID, item.traceId),

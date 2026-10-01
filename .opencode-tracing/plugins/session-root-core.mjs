@@ -97,7 +97,7 @@ export function artifactManifest(env, finalText = '') {
 
 // Lifecycle is independent of the exporter so event-order, dedup and flush tests
 // exercise the real implementation without exporting synthetic traces.
-export function createSessionHooks({ env, root, startSpan, flush, shutdown, client, writeReceipt, log = console.error }) {
+export function createSessionHooks({ env, root, startSpan, flush, shutdown, client, writeReceipt, getExportDiagnostics = () => null, log = console.error }) {
   const redact = redactor(env)
   const json = value => JSON.stringify(redact(value))
   const runID = env.UXD_TRACE_RUN_ID
@@ -181,8 +181,14 @@ export function createSessionHooks({ env, root, startSpan, flush, shutdown, clie
       if (taskOutcome === 'failed' || taskOutcome === 'blocked') error(root, taskOutcome)
       root.end()
       save({ ...summary, export_status: 'flushing' })
-      try { await flush(); await shutdown(); save({ export_status: 'flush_completed' }) }
-      catch { save({ export_status: 'flush_failed' }); log('Langfuse export failed; consult the run receipt. Remote ingestion is unverified.') }
+      try {
+        await flush(); await shutdown()
+        const delivery = getExportDiagnostics()
+        const deliveryIssue = delivery && (delivery.batches_failed > 0 || delivery.pending_batches > 0)
+        save({ export_status: deliveryIssue ? 'flush_completed_with_export_errors' : 'flush_completed', export_delivery: delivery })
+        if (deliveryIssue) log('Earlier or unfinished span exports were recorded; inspect export_delivery and the remote verification. Do not rerun model work.')
+      }
+      catch { save({ export_status: 'flush_failed', export_delivery: getExportDiagnostics() }); log('Langfuse export failed; consult the run receipt. Remote ingestion is unverified.') }
     })()
     return closing
   }

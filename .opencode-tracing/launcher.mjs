@@ -127,6 +127,9 @@ async function main() {
   fs.writeFileSync(verificationFile, JSON.stringify(verification, null, 2), { mode: 0o600 })
   console.error(`Remote ingestion: ${verification.status}. Verification: ${verificationFile}`)
   if (verification.status !== 'verified') console.error('Trace completeness is unverified. Recheck the receipt with scripts/verify-langfuse-receipt.mjs; do not rerun model work to repair telemetry.')
-  process.exitCode = code || (final.export_status !== 'flush_completed' || final.task_outcome !== 'completed' || verification.status !== 'verified' ? 2 : 0)
+  const flushFinished = ['flush_completed', 'flush_completed_with_export_errors'].includes(final.export_status)
+  // A timeout can occur after the server accepted a request. Retain that
+  // diagnostic, but use the independent API reconciliation for completeness.
+  process.exitCode = code || (!flushFinished || final.task_outcome !== 'completed' || verification.status !== 'verified' ? 2 : 0)
 }
 main().catch(error => fail(error.message))

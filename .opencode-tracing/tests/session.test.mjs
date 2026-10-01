@@ -74,3 +74,9 @@ test('snapshot-only policy disables inherited Atlassian servers without disablin
   assert.equal(h.receipts[0].source_context.atlassian_access, 'offline_snapshot_only')
   await h.hooks.dispose()
 })
+test('a successful final flush cannot hide an earlier export failure in the receipt', async () => {
+  const h = harness({ getExportDiagnostics: () => ({ batches_failed: 1, pending_batches: 0, failed_span_exports: 2 }) })
+  await h.hooks.dispose()
+  assert.equal(h.receipts.at(-1).export_status, 'flush_completed_with_export_errors')
+  assert.equal(h.receipts.at(-1).export_delivery.failed_span_exports, 2)
+})
