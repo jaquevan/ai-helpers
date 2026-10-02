@@ -240,7 +240,7 @@ if (consistencyReport) {
   } else {
     check('consistency was skipped', false,
       `Consistency checks were skipped: ${consistencyReport.reason || 'unknown reason'}. ` +
-      'Verify plugins/uxd-workshop/skills/uxd-consistency-check/guidelines/ exists.');
+      'Verify plugins/uxd-prototype/skills/uxd-consistency-check/guidelines/ exists.');
   }
 }
 

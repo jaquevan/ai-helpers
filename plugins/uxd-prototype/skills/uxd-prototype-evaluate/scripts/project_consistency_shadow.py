@@ -17,7 +17,7 @@ from typing import Any
 
 SCRIPT_DIR = Path(__file__).resolve().parent
 SKILL_DIR = SCRIPT_DIR.parent
-CONSISTENCY_DIR = SKILL_DIR.parents[2] / "uxd-workshop" / "skills" / "uxd-consistency-check"
+CONSISTENCY_DIR = SKILL_DIR.parent / "uxd-consistency-check"
 VALIDATOR = SCRIPT_DIR / "validate-canonical-artifacts.js"
 ADAPTER = SCRIPT_DIR / "materialize-legacy-eval-artifacts.js"
 SCHEMA_VERSION = "1.0.0"

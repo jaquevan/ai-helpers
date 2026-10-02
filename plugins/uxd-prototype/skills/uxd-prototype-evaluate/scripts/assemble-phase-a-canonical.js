@@ -251,7 +251,7 @@ function buildDocuments(artifactsDir, cacheDecision) {
   });
   const skillRoot = path.resolve(__dirname, '..');
   const consistencyRoot = path.resolve(
-    skillRoot, '..', '..', '..', 'uxd-workshop', 'skills', 'uxd-consistency-check'
+    skillRoot, '..', 'uxd-consistency-check'
   );
   const evaluatorFiles = [
     ...filesUnder(path.join(skillRoot, 'schemas', 'v1')),

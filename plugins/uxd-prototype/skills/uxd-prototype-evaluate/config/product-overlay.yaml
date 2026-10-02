@@ -56,9 +56,9 @@ publish:
 # Paths are skill-relative (resolved from CLAUDE_SKILL_DIR / EVAL_ROOT).
 design_system:
   name: "PatternFly 6"
-  context_path: "../../../uxd-workshop/skills/uxd-consistency-check/"
-  guidelines_path: "../../../uxd-workshop/skills/uxd-consistency-check/guidelines/"
-  analyze_script: "../../../uxd-workshop/skills/uxd-consistency-check/scripts/analyze.py"
+  context_path: "../uxd-consistency-check/"
+  guidelines_path: "../uxd-consistency-check/guidelines/"
+  analyze_script: "../uxd-consistency-check/scripts/analyze.py"
 
 # Personas — canonical catalogs live in the plugin; deep behavioral YAML from .context/usability-testing/
 personas:

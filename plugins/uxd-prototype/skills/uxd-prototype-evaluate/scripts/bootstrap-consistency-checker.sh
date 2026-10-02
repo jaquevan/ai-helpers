@@ -1,5 +1,5 @@
 #!/bin/bash
-# Resolve the repository-local consistency skill in the UXD workshop plugin.
+# Resolve the repository-local consistency skill in the UXD prototype plugin.
 # No project checkout, bootstrap clone, or network access is required.
 # Prints CONSISTENCY_DIR= and CONSISTENCY_AVAILABLE= for callers.
 
@@ -7,7 +7,7 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 SKILL_DIR="$(cd "${SCRIPT_DIR}/.." && pwd)"
-CONSISTENCY_DIR="${SKILL_DIR}/../../../uxd-workshop/skills/uxd-consistency-check"
+CONSISTENCY_DIR="${SKILL_DIR}/../uxd-consistency-check"
 
 has_guidelines() {
   local dir="$1"

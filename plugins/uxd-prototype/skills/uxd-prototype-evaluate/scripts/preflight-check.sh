@@ -73,11 +73,11 @@ else
     "Fetch Jira with the host Atlassian MCP and stage JIRA_CONTEXT_FILE; local credential lookup is disabled."
 fi
 
-# ── Consistency checker (UXD workshop plugin) ─────────────────────────
+# ── Consistency checker (UXD prototype plugin) ─────────────────────────
 guideline_count() {
   find "$1/guidelines" -name '*.md' 2>/dev/null | wc -l | tr -d ' '
 }
-CONSISTENCY_COUNT="$(guideline_count "${SKILL_DIR}/../../../uxd-workshop/skills/uxd-consistency-check")"
+CONSISTENCY_COUNT="$(guideline_count "${SKILL_DIR}/../uxd-consistency-check")"
 if [ "${CONSISTENCY_COUNT}" -gt 0 ]; then
   check_pass "Local uxd-consistency-check guidelines (${CONSISTENCY_COUNT} files)"
 else
