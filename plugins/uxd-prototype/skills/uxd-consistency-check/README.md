@@ -13,7 +13,7 @@ Local PatternFly consistency checker for UX prototypes.
 ## Direct use
 
 ```bash
-cd /path/to/ai-helpers/plugins/uxd-workshop/skills/uxd-consistency-check
+cd /path/to/ai-helpers/plugins/uxd-prototype/skills/uxd-consistency-check
 python3 scripts/analyze.py --src=/path/to/prototype --verbose
 ```
 

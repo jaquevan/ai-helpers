@@ -73,7 +73,7 @@ Every skill or agent must live in a plugin. Pick the one that matches your skill
 <tr><td nowrap><b>pf-assist</b></td><td>PatternFly skill routing — maps project signals to the right PF sub-skills for compliance, migration, and design audits</td><td></td></tr>
 <tr><td nowrap><b>uxd-assist</b></td><td>UXD skill routing — discover the right skills for research, design review, and prototyping workflows</td><td></td></tr>
 <tr><td nowrap><b>uxd-design</b></td><td>UX design workflow — Figma context, design evaluation, and implementation handoff</td><td>`uxd-design-handoff`, `uxd-figma-read`</td></tr>
-<tr><td nowrap><b>uxd-prototype</b></td><td>Create UX prototypes from Jira tickets, Figma designs, or feature descriptions</td><td>`uxd-prototype-create`, `uxd-prototype-evaluate`, `uxd-prototype-export`</td></tr>
+<tr><td nowrap><b>uxd-prototype</b></td><td>Create UX prototypes from Jira tickets, Figma designs, or feature descriptions</td><td>`uxd-consistency-check`, `uxd-prototype-create`, `uxd-prototype-evaluate`</td></tr>
 <tr><td nowrap><b>uxd-research</b></td><td>UX research pipeline — heuristic evaluation, usability testing, research methodology</td><td>`uxd-discovery`, `uxd-evaluate-design-heuristics`, `uxd-research-heuristic-eval`</td></tr>
 <tr><td nowrap><b>uxd-workshop</b></td><td>UXD skill incubator — new skills start here before graduating to consumer plugins</td><td></td></tr>
 <tr><td nowrap><b>pf-a11y</b></td><td>Accessibility auditing, reporting, and documentation</td><td>`pf-a11y-audit`, `pf-a11y-keyboard`, `pf-a11y-test-gen`</td></tr>
