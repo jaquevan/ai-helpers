@@ -282,7 +282,12 @@ def _run_consistency_check(args, resolved: dict[str, Any]) -> dict[str, Any]:
     report_path = resolved["artifacts"] / "consistency-report.json"
     command = [
         sys.executable,
-        str(Path(__file__).resolve().parents[4] / "uxd-workshop" / "skills" / "uxd-consistency-check" / "scripts" / "analyze.py"),
+        str(
+            Path(__file__).resolve().parents[2]
+            / "uxd-consistency-check"
+            / "scripts"
+            / "analyze.py"
+        ),
         f"--src={source}", "--json-file", str(report_path),
     ]
     if args.mode == "workspace":

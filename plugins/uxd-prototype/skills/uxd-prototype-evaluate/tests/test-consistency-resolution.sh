@@ -7,7 +7,7 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 EVALUATOR_DIR="$(cd "${SCRIPT_DIR}/.." && pwd)"
 BOOTSTRAP="${EVALUATOR_DIR}/scripts/bootstrap-consistency-checker.sh"
-EXPECTED_DIR="$(cd "${EVALUATOR_DIR}/../../../uxd-workshop/skills/uxd-consistency-check" && pwd)"
+EXPECTED_DIR="$(cd "${EVALUATOR_DIR}/../uxd-consistency-check" && pwd)"
 
 RESOLUTION="$(bash "${BOOTSTRAP}")"
 ACTUAL_DIR="$(printf '%s\n' "${RESOLUTION}" | sed -n 's/^CONSISTENCY_DIR=//p')"

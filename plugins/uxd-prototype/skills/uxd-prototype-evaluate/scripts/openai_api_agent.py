@@ -98,7 +98,7 @@ def tool_environment(
         "UXD_CONSISTENCY_CHECK_DIR": str(
             Path(consistency_check_dir).resolve()
             if consistency_check_dir
-            else Path(skill_dir).resolve().parents[2] / "uxd-workshop" / "skills" / "uxd-consistency-check"
+            else Path(skill_dir).resolve().parent / "uxd-consistency-check"
         ),
         "UXD_PROTOTYPE_EXPORT_DIR": str(
             Path(prototype_export_dir).resolve()
@@ -404,7 +404,7 @@ def run_agent(
     allowed_roots = tuple(str(Path(path).resolve()) for path in (
         project_dir,
         resolved_skill,
-        resolved_skill.parents[2] / "uxd-workshop" / "skills" / "uxd-consistency-check",
+        resolved_skill.parent / "uxd-consistency-check",
         resolved_skill.parent / "uxd-prototype-export",
         resolved_skill.parents[1] / "knowledge",
         benchmark_dir,

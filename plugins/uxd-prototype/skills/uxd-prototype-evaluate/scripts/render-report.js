@@ -2269,7 +2269,7 @@ function buildSmartComplianceTab(reason) {
   html += `<div class="card card-flat" style="margin:0 0 1.5rem">`;
   html += `<p style="font-weight:700;margin:0 0 0.25rem;color:var(--status-warning)">Automated Compliance Check Not Available</p>`;
   html += `<p class="small" style="margin:0">${escapeHtml(reason || 'consistency-checker not bootstrapped')}</p>`;
-  html += `<p class="small muted" style="margin:0.5rem 0 0">Install <code>plugins/uxd-workshop/skills/uxd-consistency-check</code> so its local guidelines are available.</p>`;
+  html += `<p class="small muted" style="margin:0.5rem 0 0">Install <code>plugins/uxd-prototype/skills/uxd-consistency-check</code> so its local guidelines are available.</p>`;
   html += `</div>`;
 
   const componentMap = readJsonOr(path.join(absArtifacts, 'component-map.json'), null);

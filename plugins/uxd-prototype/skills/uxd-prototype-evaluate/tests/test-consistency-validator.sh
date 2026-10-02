@@ -3,7 +3,7 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 EVALUATOR_DIR="$(cd "${SCRIPT_DIR}/.." && pwd)"
-CHECKER_DIR="$(cd "${EVALUATOR_DIR}/../../../uxd-workshop/skills/uxd-consistency-check" && pwd)"
+CHECKER_DIR="$(cd "${EVALUATOR_DIR}/../uxd-consistency-check" && pwd)"
 VALIDATOR="${EVALUATOR_DIR}/scripts/validate-consistency.js"
 ARTIFACTS_DIR="$(mktemp -d -t uxd-consistency-contract.XXXXXX)"
 trap 'rm -rf "${ARTIFACTS_DIR}"' EXIT

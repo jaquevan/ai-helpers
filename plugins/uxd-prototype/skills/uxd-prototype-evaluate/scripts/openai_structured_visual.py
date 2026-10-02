@@ -18,7 +18,7 @@ from prompt_cache import prefix_metrics
 SCRIPT_DIR = Path(__file__).resolve().parent
 SKILL_DIR = SCRIPT_DIR.parent
 GUIDELINES_DIR = (
-    SKILL_DIR.parents[2] / "uxd-workshop" / "skills" / "uxd-consistency-check" / "guidelines"
+    SKILL_DIR.parent / "uxd-consistency-check" / "guidelines"
 )
 PROCEDURE_PATH = SKILL_DIR / "references" / "api-phases" / "eval-consistency-visual.md"
 

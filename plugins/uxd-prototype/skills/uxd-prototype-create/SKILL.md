@@ -230,7 +230,7 @@ Read product-specific consistency decisions from
 `.design/product/design-guidelines/consistency/` when that directory exists.
 Bundled checker rules remain the portable default; project context explains
 local decisions and explicit exceptions. See
-[the consistency context contract](../../../uxd-workshop/skills/uxd-consistency-check/references/project-context.md).
+[the consistency context contract](../uxd-consistency-check/references/project-context.md).
 
 **Reachability self-check** (a minute or two, then move on):
 
@@ -268,7 +268,7 @@ Re-run after evaluate so the Eval tab gets the report (`public/evals/{ID}/`). Pa
 Run the bundled sibling checker before handing off the prototype:
 
 ```bash
-CONSISTENCY_SKILL="${CLAUDE_SKILL_DIR}/../../../uxd-workshop/skills/uxd-consistency-check"
+CONSISTENCY_SKILL="${CLAUDE_SKILL_DIR}/../uxd-consistency-check"
 CONSISTENCY_SOURCE=".artifacts/{ID}/prototype" # standalone
 # Workspace mode: set CONSISTENCY_SOURCE to workspace_path instead.
 
