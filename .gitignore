@@ -53,6 +53,9 @@ __pycache__/
 .local/
 workspace/
 
+# Local Langfuse tracing doc (internal use; not for publish)
+/docs/trace-in-langfuse.md
+
 # Local Langfuse tracing config (machine-specific)
 /.opencode/*
 !/.opencode/command/

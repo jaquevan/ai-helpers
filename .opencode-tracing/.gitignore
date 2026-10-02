@@ -1,3 +1,4 @@
 node_modules/
 runs/
 opencode.generated.json
+generated/

@@ -78,7 +78,7 @@ export function buildPlan(args, root) {
   const command = commands[component]
   const commandFile = path.join(root, '.opencode/command', `${command}.md`)
   required(commandFile, `Missing ${commandFile}. Use jaquevan/ai-helpers beau-testing with designer commands (bdbb588 or later) and the fork-owned tracing runtime.`)
-  const skill = component === 'creator' ? 'plugins/uxd-prototype/skills/uxd-prototype-create' : component === 'consistency' ? 'plugins/uxd-workshop/skills/uxd-consistency-check' : 'plugins/uxd-prototype/skills/uxd-prototype-evaluate'
+  const skill = component === 'creator' ? 'plugins/uxd-prototype/skills/uxd-prototype-create' : component === 'consistency' ? 'plugins/uxd-prototype/skills/uxd-consistency-check' : 'plugins/uxd-prototype/skills/uxd-prototype-evaluate'
   required(path.join(root, skill), `Missing ${skill}; update beau-testing.`)
   const inputFingerprint = crypto.createHash('sha256').update(JSON.stringify({ component, ticket, workspace, prototypeURL, runKind, scenario, model: model || 'default', ...(contextFile ? { contextFile, contextSha256, offlineAtlassian } : {}) })).digest('hex')
   const header = `[UXD-SESSION]\ncomponent=${component}\nrun_kind=${runKind}\nticket=${ticket}\nworkspace=${workspace}\nprototype_url=${prototypeURL}\nscenario=${scenario}`
