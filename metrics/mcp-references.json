@@ -43,8 +43,7 @@
       "packages/ds-patternfly/src/examples/README.md",
       "packages/ds-patternfly/src/stories/ai/MCP.stories.tsx",
       "package.json",
-      "pnpm-lock.yaml",
-      ".github/workflows/publish-mcp.yml"
+      "pnpm-lock.yaml"
     ]
   },
   {
@@ -65,6 +64,14 @@
     ]
   },
   {
+    "name": "LuciferForge/mcp-directory",
+    "url": "https://github.com/LuciferForge/mcp-directory",
+    "description": "The largest index of MCP servers. 18,146+ Model Context Protocol servers searchable at protodex.io",
+    "files": [
+      "docs/servers/patternfly-patternfly-mcp.html"
+    ]
+  },
+  {
     "name": "OpenShift-Fleet/rehor",
     "url": "https://github.com/OpenShift-Fleet/rehor",
     "description": "Rehor",
@@ -77,9 +84,7 @@
       "scripts/verify-python-preset-e2e.sh",
       "presets/shared/skills/detect-tech-stack/SKILL.md",
       "docs/onboarding-new-instance.md",
-      "presets/shared/skills/detect-tech-stack/detect_tech_stack.py",
-      "coordinator/test/opencode-config.test.ts",
-      "presets/shared/skills/detect-tech-stack/tests/test_detect_tech_stack.py"
+      "presets/shared/skills/detect-tech-stack/detect_tech_stack.py"
     ]
   },
   {
@@ -142,14 +147,6 @@
     "description": "Shared React component library for Red Hat Insights ACM and OCM projects built with PatternFly",
     "files": [
       ".agents/skills/patternfly/SKILL.md"
-    ]
-  },
-  {
-    "name": "RedHatInsights/nxtcm-ui-agent",
-    "url": "https://github.com/RedHatInsights/nxtcm-ui-agent",
-    "description": "",
-    "files": [
-      "instance/ui-config/agent/instance.yaml"
     ]
   },
   {
@@ -250,8 +247,7 @@
     "description": "",
     "files": [
       "README.md",
-      "package.json",
-      "src/__tests__/__snapshots__/options.test.ts.snap"
+      "package.json"
     ]
   },
   {
@@ -271,14 +267,28 @@
     ]
   },
   {
+    "name": "kosif199022-jpg/kosif-atlas",
+    "url": "https://github.com/kosif199022-jpg/kosif-atlas",
+    "description": "KOSIF Atlas: 14,793 Claude/ChatGPT skills as complete folders, with licenses and KOSIF security verdicts (mirror used by KOSIF Omni)",
+    "files": [
+      "skills/2998-patternfly/12768-pf-catalog-interaction-patterns/SKILL.md",
+      "skills/2999-pf-a11y/12803-pf-a11y-audit/SKILL.md",
+      "skills/2998-patternfly/12753-pf-a11y-audit/SKILL.md",
+      "skills/3002-pf-design-guide/12818-pf-catalog-interaction-patterns/SKILL.md",
+      "skills/3005-pf-react/12825-pf-component-check/SKILL.md",
+      "skills/2998-patternfly/12775-pf-component-check/SKILL.md",
+      "skills/2998-patternfly/12772-pf-react-migration-scan/SKILL.md",
+      "skills/3004-pf-migration/12822-pf-react-migration-scan/SKILL.md"
+    ]
+  },
+  {
     "name": "muditmittal/dbui",
     "url": "https://github.com/muditmittal/dbui",
     "description": "DBUI — Databricks UI Kit. DuBois design language on shadcn components.",
     "files": [
       "research/ux-standards/extracts/patternfly/AI--patternfly-mcp.md",
       "research/ux-standards/extracts/patternfly/AI--marketplace--marketplace.md",
-      "research/ux-standards/extracts/patternfly/AI--ai.md",
-      "research/ux-standards/extracts/patternfly/releases--release-highlights.md"
+      "research/ux-standards/extracts/patternfly/AI--ai.md"
     ]
   },
   {
@@ -350,19 +360,19 @@
     ]
   },
   {
+    "name": "sudosubin/agents.nix",
+    "url": "https://github.com/sudosubin/agents.nix",
+    "description": "Nixpkgs overlay for AI agent skills from skills.sh and skillsdirectory.com",
+    "files": [
+      "data/claude-code-marketplaces/github.com/patternfly/ai-helpers.json"
+    ]
+  },
+  {
     "name": "syntara-orchestration/syntara",
     "url": "https://github.com/syntara-orchestration/syntara",
     "description": "",
     "files": [
       ".mcp.json"
-    ]
-  },
-  {
-    "name": "tanvithsreddy-del/safemcp",
-    "url": "https://github.com/tanvithsreddy-del/safemcp",
-    "description": "",
-    "files": [
-      "public/sitemap-2.xml"
     ]
   }
 ]

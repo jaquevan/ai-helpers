@@ -24,6 +24,41 @@
     ]
   },
   {
+    "name": "kosif199022-jpg/100-superskills",
+    "url": "https://github.com/kosif199022-jpg/100-superskills",
+    "description": "100 مهارة خارقة — 100 Super Skills for Claude & ChatGPT, composed from the KOSIF Atlas (15,122 skills): Claude-made animation, image/video prompt forges, Prompt Master Pro, Excel/Word, web design, programming",
+    "files": [
+      "skills/accessibility-wcag/references/sources.md"
+    ]
+  },
+  {
+    "name": "kosif199022-jpg/kosif-atlas",
+    "url": "https://github.com/kosif199022-jpg/kosif-atlas",
+    "description": "KOSIF Atlas: 14,793 Claude/ChatGPT skills as complete folders, with licenses and KOSIF security verdicts (mirror used by KOSIF Omni)",
+    "files": [
+      "skills/3003-pf-mcp/SOURCE.md",
+      "skills/2999-pf-a11y/SOURCE.md",
+      "skills/3005-pf-react/SOURCE.md",
+      "skills/3007-pf-assist/SOURCE.md",
+      "skills/2998-patternfly/SOURCE.md",
+      "skills/3008-uxd-assist/SOURCE.md",
+      "skills/3009-uxd-design/SOURCE.md",
+      "skills/3006-pf-workshop/SOURCE.md",
+      "skills/3011-uxd-research/SOURCE.md",
+      "skills/3012-uxd-workshop/SOURCE.md",
+      "skills/3004-pf-migration/SOURCE.md",
+      "skills/3010-uxd-prototype/SOURCE.md",
+      "skills/3000-pf-code-review/SOURCE.md",
+      "skills/3001-pf-design-audit/SOURCE.md",
+      "skills/3002-pf-design-guide/SOURCE.md",
+      "skills/2998-patternfly/12763-pf-css-token-check/README.md",
+      "skills/3001-pf-design-audit/12813-pf-css-token-check/README.md",
+      "skills/2998-patternfly/12791-pf-figma-diff/references/troubleshooting.md",
+      "skills/3006-pf-workshop/12841-pf-figma-diff/references/troubleshooting.md",
+      "skills/3011-uxd-research/12864-uxd-research-heuristic-eval/references/report-templates.md"
+    ]
+  },
+  {
     "name": "muditmittal/dbui",
     "url": "https://github.com/muditmittal/dbui",
     "description": "DBUI — Databricks UI Kit. DuBois design language on shadcn components.",
@@ -46,7 +81,17 @@
     "url": "https://github.com/opendatahub-io/skills-registry",
     "description": "",
     "files": [
+      "site/docs/plugins/pf-mcp/index.md",
+      "site/docs/plugins/pf-a11y/index.md",
+      "site/docs/plugins/pf-react/index.md",
+      "site/docs/plugins/patternfly/index.md",
+      "site/docs/plugins/pf-migration/index.md",
+      "site/docs/plugins/pf-code-review/index.md",
+      "site/docs/plugins/pf-design-audit/index.md",
+      "site/docs/plugins/pf-design-guide/index.md",
+      "catalog.md",
       "CONTRIBUTING.md",
+      "site/docs/llms-full.txt",
       ".agents/plugins/marketplace.json",
       ".claude-plugin/marketplace.json",
       "registry.yaml"
@@ -65,6 +110,7 @@
     "url": "https://github.com/patternfly/patternfly-mcp",
     "description": "An MCP server that provides access to PatternFly rules and documentation.",
     "files": [
+      "docs/architecture.md",
       "src/docs.json",
       "src/collection.patternFlyApi.json",
       "src/__tests__/__snapshots__/collection.patternFlyDocs.test.ts.snap"
@@ -78,6 +124,15 @@
       "packages/documentation-site/patternfly-docs/content/AI/marketplace/marketplace.md",
       "packages/documentation-site/patternfly-docs/content/AI/rapid-prototyping/enhancing-existing-projects.md",
       "packages/documentation-site/patternfly-docs/content/AI/rapid-prototyping/new-prototypes.md"
+    ]
+  },
+  {
+    "name": "sudosubin/agents.nix",
+    "url": "https://github.com/sudosubin/agents.nix",
+    "description": "Nixpkgs overlay for AI agent skills from skills.sh and skillsdirectory.com",
+    "files": [
+      "data/claude-code-marketplaces/github.com/openshift-eng/ai-helpers.json",
+      "data/codex-marketplaces/github.com/opendatahub-io/skills-registry.json"
     ]
   }
 ]
