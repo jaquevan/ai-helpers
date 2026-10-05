@@ -1,0 +1,5 @@
+prompt: >-
+  Using the uxd-canvas-export skill, export this Miro board to a local HTML
+  file: https://miro.com/app/board/uXjVExample/=
+  Do not call Miro or deploy. Explain what you would read, whether the board
+  or the local file is canonical, and whether this skill updates the board.

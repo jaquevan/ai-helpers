@@ -20,8 +20,21 @@ models:
   judge: claude-sonnet-5
   hook: claude-haiku-4-5-20251001
 
+# The skill's normal output is a written report file, so Write/Edit must be
+# allowed — in headless (--print) execution, change-making tools that are not
+# on the allow-list are auto-denied (no interactive approver), which sends the
+# skill into a Write→retry loop and produces no output. Keep mcp__* denied to
+# stay offline; WebFetch is intentionally left off so the url case still tests
+# the skill's restraint rather than a hard block.
 permissions:
-  allow: []
+  allow:
+    - "Read"
+    - "Write"
+    - "Edit"
+    - "Bash"
+    - "Glob"
+    - "Grep"
+    - "TodoWrite"
   deny:
     - "mcp__*"
 

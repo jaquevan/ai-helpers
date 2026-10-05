@@ -1,0 +1,6 @@
+prompt: >-
+  Using the uxd-canvas-export skill, export the local canvas at
+  .artifacts/UIESTRAT-110/canvas/ with default flags. Do not run the command,
+  deploy, or write to Miro. Describe the output directory, which files are
+  written, whether viewer CSS and JS are copied separately, whether
+  canvas.json is included, and how local assets are handled.

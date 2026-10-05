@@ -1,0 +1,7 @@
+prompt: >-
+  Using the uxd-canvas-create skill, plan a local journey map for UIESTRAT-110.
+  Actor: a platform engineer onboarding a new cluster. Scenario: current-state,
+  first week. Phases: Discover, Request, Operate. Do not contact Miro, publish,
+  or run commands. Say where the files go, which template you start from, which
+  lanes you keep, how phases are arranged, what metadata.json contains, and how
+  you validate canvas.json. State whether this journey should be stored as Mermaid.

@@ -17,6 +17,7 @@ PatternFly team tools and skill incubation — issue triage, release management,
 - **PF Figma Diff** (`/pf-workshop:pf-figma-diff`) — Diff Figma designs to identify what changed and generate code update checklists.
 - **PF Modifier Scan** (`/pf-workshop:pf-modifier-scan`) — Analyze PatternFly modifier class (pf-m-*) usage across SCSS files and generate usage reports.
 - **PF Org Version Update** (`/pf-workshop:pf-org-version-update`) — Update patternfly-org for a new PatternFly release — resolve versions, update package.json and versions.json, and provide build steps.
+- **PF Prerelease Audit** (`/pf-workshop:pf-prerelease-audit`) — Audit a consumer project against PatternFly prerelease packages, compare validation results, classify compatibility findings, and produce a report.
 - **PF Prototype Mode** (`/pf-workshop:pf-prototype-mode`) — Enable prototype mode for React apps with grayscale styling and a banner overlay.
 - **PF Quarterly Report Gen** (`/pf-workshop:pf-quarterly-report-gen`) — Generate quarterly Jira status reports with RAG assessment, blocker tracking, and next-quarter recommendations.
 - **PF Rhds Icon Finder** (`/pf-workshop:pf-rhds-icon-finder`) — Find Red Hat Design System icons (@rhds/icons) by keyword or use case with visual previews.

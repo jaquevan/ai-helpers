@@ -1,0 +1,7 @@
+prompt: >-
+  Using the uxd-canvas-create skill, plan an update to this Miro board and a
+  local snapshot. The board is the source of truth:
+  https://miro.com/app/board/uXjVExample/=
+  Do not call Miro, write widgets, delete items, or publish. Explain what is
+  canonical, what the local file is, which ids and metadata you keep, and what
+  you confirm before any write. Do not use uxd-canvas-publish to change the board.

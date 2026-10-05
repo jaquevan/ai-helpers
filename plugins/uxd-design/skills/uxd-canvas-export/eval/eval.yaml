@@ -1,0 +1,226 @@
+name: uxd-canvas-export-eval
+description: >-
+  Evaluate uxd-canvas-export's HTML default, JSON-only output, Mermaid skip
+  rules, and read-only Miro handling
+
+skill: uxd-design:uxd-canvas-export
+
+execution:
+  mode: case
+  arguments: "{prompt}"
+
+runner:
+  type: claude-code
+  plugin_dirs:
+    - plugins/uxd-design
+
+models:
+  skill: claude-sonnet-4-6
+  judge: claude-sonnet-4-6
+
+permissions:
+  allow: []
+  deny:
+    - "mcp__*"
+
+dataset:
+  path: cases
+  schema: |
+    Each case directory contains:
+    - input.yaml: prompt field with a realistic user request
+    - annotations.yaml: case_type for conditional judges
+    Cases ask for the export contract. They must not deploy or write to Miro.
+
+outputs:
+  - path: artifacts
+    schema: |
+      Judges check conversation text for viewer defaults, flag behavior,
+      Mermaid limits, and the rule that a Miro input is read only.
+
+traces:
+  stdout: true
+  stderr: true
+  events: true
+  metrics: true
+
+judges:
+  - name: default_html_contract
+    description: Describes the default single-file HTML export and its omissions
+    if: "annotations.get('case_type') == 'default-html'"
+    check: |
+      import re
+
+      text = outputs.get("conversation", "")
+      for path, content in outputs.get("files", {}).items():
+          text += "\n" + content
+
+      html = re.search(r"index\.html", text, re.IGNORECASE)
+      inlined = re.search(
+          r"single|inline|inlined|do not copy.{0,40}(css|js)|not copy the separate",
+          text,
+          re.IGNORECASE | re.DOTALL,
+      )
+      manifest = re.search(r"export-manifest\.json", text, re.IGNORECASE)
+      if not html or not inlined or not manifest:
+          return False, "Did not describe a single inlined index.html plus export-manifest.json"
+
+      no_json = re.search(
+          r"(omit|without|no|not).{0,40}canvas\.json|canvas\.json.{0,40}(omit|default|not included|excluded)",
+          text,
+          re.IGNORECASE | re.DOTALL,
+      )
+      if not no_json:
+          return False, "Did not omit sidecar canvas.json from the default HTML export"
+
+      inline_assets = re.search(
+          r"inline|no assets/|without an assets",
+          text,
+          re.IGNORECASE,
+      )
+      if not inline_assets:
+          return False, "Did not default assets to inline"
+
+      sibling = re.search(r"export/", text)
+      if not sibling:
+          return False, "Did not name the export/ output directory"
+
+      deployed = re.search(
+          r"(deployed|published|pushed|wrote widgets|updated the board)",
+          text,
+          re.IGNORECASE,
+      )
+      if deployed and not re.search(r"do not|don't|not |will not|won't", text, re.IGNORECASE):
+          return False, "Deployed or wrote Miro from the export skill"
+
+      return True, "Described the default HTML export contract"
+
+  - name: json_only_contract
+    description: Describes a viewer-less export that writes canvas.json
+    if: "annotations.get('case_type') == 'json-only'"
+    check: |
+      import re
+
+      text = outputs.get("conversation", "")
+      for path, content in outputs.get("files", {}).items():
+          text += "\n" + content
+
+      no_viewer = re.search(r"--viewer none|--no-viewer|no viewer|without.{0,20}viewer", text, re.IGNORECASE)
+      writes_json = re.search(r"canvas\.json", text, re.IGNORECASE)
+      folder_assets = re.search(r"assets.{0,20}folder|folder.{0,20}assets|--assets folder", text, re.IGNORECASE)
+      no_html = re.search(
+          r"(no|omit|without|not).{0,30}index\.html|index\.html.{0,30}(omit|not|excluded)",
+          text,
+          re.IGNORECASE | re.DOTALL,
+      )
+      if not no_viewer or not writes_json:
+          return False, "Did not describe a viewer-less export that writes canvas.json"
+      if not folder_assets:
+          return False, "Did not copy assets as a folder when the viewer is omitted"
+      if not no_html:
+          return False, "Did not omit index.html for a viewer-less export"
+
+      return True, "Described the JSON-only export contract"
+
+  - name: skips_mermaid_for_journey
+    description: Refuses Mermaid export for a journey map
+    if: "annotations.get('case_type') == 'skip-journey-mermaid'"
+    check: |
+      import re
+
+      text = outputs.get("conversation", "")
+      for path, content in outputs.get("files", {}).items():
+          text += "\n" + content
+
+      skipped = re.search(
+          r"skip|won't|will not|do not|don't|not write|warn",
+          text,
+          re.IGNORECASE,
+      )
+      reason = re.search(r"lanes|phases|evidence", text, re.IGNORECASE)
+      html = re.search(r"html|viewer", text, re.IGNORECASE)
+      if not skipped or not reason:
+          return False, "Did not skip Mermaid because a journey map loses lanes, phases, or evidence"
+      if not html:
+          return False, "Did not keep the HTML viewer as the journey export"
+
+      wrote = re.search(
+          r"(wrote|writing|will write|I'll write).{0,40}diagram\.mmd",
+          text,
+          re.IGNORECASE,
+      )
+      if wrote and not re.search(r"skip|not write|won't write|will not write", text, re.IGNORECASE):
+          return False, "Wrote diagram.mmd for a journey map"
+
+      return True, "Skipped Mermaid export for the journey map"
+
+  - name: mermaid_node_shows_source
+    description: Exports a Mermaid node as source and optional diagram.mmd
+    if: "annotations.get('case_type') == 'mermaid-node'"
+    check: |
+      import re
+
+      text = outputs.get("conversation", "")
+      for path, content in outputs.get("files", {}).items():
+          text += "\n" + content
+
+      source = re.search(r"source", text, re.IGNORECASE)
+      no_library = re.search(
+          r"(does not|doesn't|do not|don't|without).{0,40}(load|library)|no mermaid library",
+          text,
+          re.IGNORECASE | re.DOTALL,
+      )
+      diagram = re.search(r"diagram\.mmd", text, re.IGNORECASE)
+      if not source or not no_library:
+          return False, "Did not state that HTML shows Mermaid source without loading a library"
+      if not diagram:
+          return False, "Did not write diagram.mmd for a Mermaid node when --mermaid is set"
+
+      return True, "Showed Mermaid source and wrote diagram.mmd"
+
+  - name: miro_export_is_read_only
+    description: Reads a Miro board for export and does not write widgets back
+    if: "annotations.get('case_type') == 'miro-read-only'"
+    check: |
+      import re
+
+      text = outputs.get("conversation", "")
+      for path, content in outputs.get("files", {}).items():
+          text += "\n" + content
+
+      read_only = re.search(
+          r"read only|do not write|don't write|not write|do not update|won't update|will not write",
+          text,
+          re.IGNORECASE,
+      )
+      snapshot = re.search(
+          r"snapshot.{0,80}(not|isn't|is not).{0,40}source of truth|not the source of truth|board stays canonical|board is canonical",
+          text,
+          re.IGNORECASE | re.DOTALL,
+      )
+      local = re.search(r"index\.html|export/", text, re.IGNORECASE)
+      if not read_only:
+          return False, "Did not keep the Miro read read-only"
+      if not snapshot:
+          return False, "Did not keep the board canonical over the export snapshot"
+      if not local:
+          return False, "Did not describe the local export output"
+      if re.search(r"deploy|vercel|github pages", text, re.IGNORECASE) and not re.search(
+          r"do not|don't|not |only when|suggest",
+          text,
+          re.IGNORECASE,
+      ):
+          return False, "Deployed from the export skill"
+
+      return True, "Exported from Miro without writing the board"
+
+thresholds:
+  default_html_contract:
+    min_pass_rate: 1.0
+  json_only_contract:
+    min_pass_rate: 1.0
+  skips_mermaid_for_journey:
+    min_pass_rate: 1.0
+  mermaid_node_shows_source:
+    min_pass_rate: 1.0
+  miro_export_is_read_only:
+    min_pass_rate: 1.0

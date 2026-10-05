@@ -3,7 +3,7 @@ name: uxd-research-heuristic-eval
 slug: uxd-research-heuristic-eval
 type: crossover
 phase: evaluative
-status: experimental
+status: stable
 description: "Conduct a heuristic evaluation of a prototype or interface using three independent expert evaluators. Use when running a usability audit, evaluating a UI against Nielsen's heuristics or other frameworks, or preparing for user testing. Do not use for accessibility audits, WCAG checks, or axe scans."
 ---
 
@@ -46,28 +46,25 @@ $ARGUMENTS
 
 Parse as: `<interface-input> [--framework <name>] [--heuristics <custom>] [--specialists <areas>] [--project <slug>] [--review chat|none] [--assume-defaults]`
 
-- `interface-input` — Screenshots, image files, text descriptions of
-  screens, or URLs. URLs must be inspected in a live browser (not
-  curl/WebFetch). For Figma prototypes, the user should provide
-  exported screenshots (Figma links cannot be inspected directly).
-- `--framework <name>[,<name>]` — Which heuristic framework(s) to use
-  (see [references/heuristic-frameworks.md](references/heuristic-frameworks.md)).
-  Accepts a single framework or a comma-separated list
-  (e.g., `--framework nielsen,shneiderman`). If not specified, **ask and
-  wait** — do not assume Nielsen or any other default. Required in
-  Mode B unless `--assume-defaults` is used.
+- `interface-input` — Screenshots, image files, text descriptions, or
+  URLs. URLs must be inspected in a live browser (not curl/WebFetch).
+  For Figma, provide exported screenshots (links can't be inspected).
+- `--framework <name>[,<name>]` — Heuristic framework(s) to use (see
+  [references/heuristic-frameworks.md](references/heuristic-frameworks.md));
+  single or comma-separated (e.g., `nielsen,shneiderman`). If not
+  specified, **ask and wait** — do not assume Nielsen or any default.
+  Required in Mode B unless `--assume-defaults` is used.
 - `--heuristics <custom>` — User-defined heuristics (overrides framework).
-- `--specialists <areas>` — Add specialist evaluators beyond the core
-  three (e.g., `information-architecture,content-ux-writing`).
-  Accessibility is not a valid specialist — see Guardrails.
-- `--project <slug>` — Project directory for saving output. If not
-  specified, save to current working directory.
-- `--review chat|none` — Controls the researcher review gate.
-  `chat` = present consolidated findings and wait for researcher
-  confirm/dismiss/severity (current default behavior). `none` = skip
-  researcher review, use AI-suggested severities, and emit reports with
-  an "Unreviewed Draft" banner. In Mode A, if omitted, ask. In Mode B,
-  required (or use `--assume-defaults`).
+- `--specialists <areas>` — Specialist evaluators beyond the core three
+  (e.g., `information-architecture`). Accessibility is not valid — see
+  Guardrails.
+- `--project <slug>` — Output directory. Defaults to the current working
+  directory.
+- `--review chat|none` — Researcher review gate. `chat` = present
+  consolidated findings and wait for confirm/dismiss/severity (default
+  behavior). `none` = skip review, use AI-suggested severities, and emit
+  reports with an "Unreviewed Draft" banner. Mode A: if omitted, ask.
+  Mode B: required (or use `--assume-defaults`).
 - `--assume-defaults` — Shorthand for `--framework nielsen --review none`
   with no specialist passes. Explicitly opts into documented defaults
   for non-interactive runs. Does not silently activate — the output will
@@ -76,46 +73,33 @@ Parse as: `<interface-input> [--framework <name>] [--heuristics <custom>] [--spe
 
 ## Operating Modes
 
-This skill supports two operating modes. Mode detection is based on
-arguments — if `--review` or `--assume-defaults` is present, the skill
-operates in Mode B. Otherwise, Mode A.
+Mode detection is explicit and argument-based: if `--review` or
+`--assume-defaults` is present, the skill runs in **Mode B**; otherwise
+**Mode A**. Never silently enter Mode B, and never silently skip an
+interactive gate.
 
-### Mode A — Human-operated (default)
+**Mode A — human-operated (default).** A researcher drives an
+interactive session. All interactive gates are enforced: ask-and-wait
+for `--framework` (Step 0), offer specialist lenses, then ask the review
+format and **wait** for confirm/dismiss/severity before writing reports
+(Step 4). The researcher owns severity ratings and the decision to
+publish.
 
-**Caller:** Researcher in an interactive session.
+**Mode B — agent-operated (explicit opt-in).** Another agent, eval
+harness, or automation that cannot answer mid-run. The caller **must**
+supply `--framework` and `--review chat|none` — or `--assume-defaults`
+(which covers both); if neither is satisfied, the skill **stops with an
+error** rather than defaulting or guessing. No interactive questions are
+asked — every decision comes from arguments. With `--review none`,
+reports carry an **Unreviewed Draft** banner and severities are labeled
+"Suggested severity"; with `--review chat`, findings are presented and
+the skill stops for a human to resume. Mode B never simulates researcher
+decisions — it defers them (clearly labeled) or waits for a human.
 
-1. Researcher provides interface input.
-2. If no `--framework`, the skill **asks and waits** (does not evaluate).
-3. After framework is confirmed, the skill offers specialist lenses.
-4. Agent runs Evaluator A/B/C (+ specialists if requested), reconciles.
-5. Agent asks review format (spreadsheet vs chat); **waits** for
-   confirm/dismiss/severity before writing reports.
-
-All interactive gates are enforced. The researcher owns severity
-ratings and the decision to publish findings.
-
-### Mode B — Agent-operated (explicit opt-in)
-
-**Caller:** Another agent, eval harness, or automation that cannot
-answer interactive questions mid-run.
-
-1. Caller **must** supply `--framework` and `--review chat|none` — or
-   use `--assume-defaults` (which covers both). If neither path is
-   satisfied, the skill stops with an error — it does not default or
-   guess.
-2. No interactive questions are asked. All decisions come from arguments.
-3. If `--review none`: reports are written with an **Unreviewed Draft**
-   banner. Severity ratings are labeled "Suggested severity" (not
-   confirmed). The researcher can review later.
-4. If `--review chat`: findings are presented and the skill stops,
-   waiting for a human to resume.
-
-Mode B never simulates researcher decisions. It either defers them
-(with clear labeling) or waits for a human to arrive.
-
-### Pipeline integration
-
-Automated callers must pass `--assume-defaults` (equivalent to `--framework nielsen --review none`) or explicit `--framework`/`--review` flags. The skill cannot auto-detect automation context — missing flags produce an error. See [human-vs-agent-operation.md](references/human-vs-agent-operation.md) for setup guidance.
+**Pipeline integration.** Automated callers must pass `--assume-defaults`
+or explicit `--framework`/`--review` flags; the skill cannot auto-detect
+automation context, so missing flags produce an error. See
+[references/human-vs-agent-operation.md](references/human-vs-agent-operation.md).
 
 ---
 
@@ -139,10 +123,22 @@ Confirm what you're evaluating. The user may provide:
   user: "I can't access Figma directly, but exported screenshots work
   well. Export each key screen or flow step as an image."
 
-If the input is ambiguous or incomplete, ask:
+If the input is ambiguous or incomplete, do **not** evaluate on a guess
+— resolve it first. There is no safe default for "which screens am I
+even evaluating?":
+
 - Which screens or flows should be evaluated?
 - Is this a complete flow or isolated screens?
 - What is the user trying to accomplish in this interface?
+
+**Mode A:** ask the researcher and **wait** for an answer before any
+evaluation passes — a human is present to clarify.
+
+**Mode B:** no human can answer mid-run, so **stop with a clear error**
+naming what is missing (e.g., "Interface input is ambiguous — specify
+which screens/flows to evaluate and the user's task context"), exactly
+as a missing `--framework` halts Mode B. Never proceed on incomplete
+input, and never hang waiting for a reply that cannot come.
 
 ### Review subject record
 
@@ -158,12 +154,10 @@ Task context: [what the user is trying to accomplish, if provided]
 Evaluation date: [YYYY-MM-DD]
 ```
 
-- If the researcher provides a **URL**, copy the full URL exactly
-  into `Source URL`. Do not omit it from later outputs.
-- If input is **screenshots or files**, list every file path in
-  `Source files`.
-- If both URL and files are used (e.g., live browser inspection plus
-  saved screenshots), include both.
+Copy any **URL** exactly into `Source URL` (never omit it from later
+outputs), list every **screenshot/file** path in `Source files`, and
+include both when a URL and files are used together (e.g., live browser
+inspection plus saved screenshots).
 
 ### Browser inspection (when input is a URL)
 
@@ -183,11 +177,17 @@ state — not the document behind the page.
    Playwright accessibility snapshot as an a11y audit.
 4. **Inspect interactive elements** — click/hover expandable sections,
    popovers, drawers, menus, toggles, modals. Capture each state.
-5. **Save screenshots** as `heuristic-eval-[date]-screenshot-[N]-[description].png`
+5. **Save screenshots** to the resolved project directory — the `--project` dir,
+   or the current working directory if none was given (the same location as the
+   report). Pass an **absolute** path to the browser tool
+   (e.g. `[project-dir]/heuristic-eval-[date]-screenshot-[N]-[description].png`)
+   so it does not resolve a bare filename against its own working root and orphan
+   the files. Do not write to the home directory and do not prompt — screenshots
+   stay co-located with the report that references them.
 6. **Build an inspection summary** listing screenshots, page-structure
    observations, and interactive states.
 
-**If no live browser is available:** Stop. Ask the researcher to provide screenshots. Do **not** fall back to curl, wget, or WebFetch — fetched markup omits layout, rendered UI, and interaction states. Do not invent findings from a URL alone.
+**If no live browser is available:** stop and ask for screenshots. Do **not** fall back to curl, wget, or WebFetch — fetched markup omits layout, rendered UI, and interaction states. Do not invent findings from a URL alone.
 
 ### Heuristic framework(s)
 
@@ -203,21 +203,13 @@ unavailable, ask the same question in chat and stop until the researcher
 replies.
 
 > **Which heuristic framework(s) should the evaluators use?**
-> You can select more than one (e.g., "1 and 2").
+> You can select more than one (e.g., "1 and 2"). Full definitions:
+> [references/heuristic-frameworks.md](references/heuristic-frameworks.md).
 >
-> 1. **Nielsen's 10 Usability Heuristics** — visibility, feedback,
->    consistency, error prevention, recognition, flexibility, aesthetics,
->    error recovery, help/documentation, user control.
-> 2. **Shneiderman's 8 Golden Rules** — consistency, shortcuts,
->    feedback, dialog closure, error handling, easy reversal, user
->    control, reduced memory load.
-> 3. **ISO 9241-110 Interaction Principles** — task suitability,
->    self-descriptiveness, conformity, learnability, controllability,
->    error tolerance, user engagement.
-> 4. **Gerhardt-Powals' Cognitive Engineering Principles** — cognitive
->    load focused: automate workload, reduce uncertainty, fuse data,
->    meaningful aids, related names, consistent grouping, limit
->    data-driven tasks, judicious redundancy.
+> 1. **Nielsen's 10 Usability Heuristics**
+> 2. **Shneiderman's 8 Golden Rules**
+> 3. **ISO 9241-110 Interaction Principles**
+> 4. **Gerhardt-Powals' Cognitive Engineering Principles**
 > 5. **Custom** — Provide your own heuristics.
 > 6. **Not sure** — I'll default to Nielsen's 10.
 
@@ -246,9 +238,10 @@ heuristics within each violation. Report "no violations" per framework.
 
 ### Specialist evaluators (Mode A only)
 
-After the framework is confirmed, offer specialist lenses. Use the
-environment's interactive question mechanism when available. If that
-mechanism is unavailable, ask in chat.
+After the framework is confirmed, offer specialist lenses **through the
+environment's interactive question mechanism** (the same `AskUserQuestion`
+tool used for the framework choice) — not free-text prose, which a
+non-interactive/agent caller cannot answer, stalling the skill.
 
 > **Would you like to add specialist evaluator lenses beyond the three
 > generalist passes?**
@@ -258,8 +251,11 @@ mechanism is unavailable, ask in chat.
 > 3. **Interaction design** (micro-interactions, state transitions)
 > 4. **Content/UX writing** (labels, instructions, error messages)
 
-Multi-select allowed. If declined or no answer, proceed with
-generalist evaluators only — specialists are additive, not required.
+Multi-select allowed. **This is not a hard stop** (unlike the framework
+question): if the interactive mechanism is unavailable, or the question
+is declined or unanswered, default to **"None"** and continue with the
+generalist evaluators — specialists are additive, not required. Do not
+end your turn waiting for a reply.
 
 **Do not offer accessibility as a specialist lens.** If the researcher
 asks for accessibility, WCAG, or axe, decline: this skill inspects
@@ -267,9 +263,8 @@ usability heuristics, not correctness/conformance. Note that a
 dedicated accessibility skill is the right place for that work, then
 continue with generalist (and any other requested) passes.
 
-**In Mode B,** do not ask. Specialists are controlled by
-`--specialists` only. If `--specialists` is not provided, run
-generalist evaluators only. If the list includes `accessibility`,
+**In Mode B,** do not ask — specialists come from `--specialists` only
+(none → generalist evaluators only); if the list includes `accessibility`,
 skip that lens (see Step 2) and continue with any remaining valid
 specialists.
 
@@ -366,33 +361,51 @@ Number consolidated violations sequentially: V-01, V-02, V-03...
 
 ## Step 4: Researcher Review
 
-### Mode A and `--review chat`: interactive review (default)
+### Mode A: choose review format, then review (default)
 
-Present consolidated findings to the researcher before generating
-output. This is a required human gate. Follow the review format
-described in [references/researcher-review.md](references/researcher-review.md),
-which supports both spreadsheet (Google Sheets) and chat-based review.
+Required human gate: present consolidated findings and get the
+researcher's confirm/dismiss/severity decisions **before** writing any
+report files.
 
-After review: remove dismissed violations, use researcher's severity
-ratings, append researcher context, and add any new violations the
-researcher identified.
+**First, ask how they want to review** — through the environment's
+interactive question mechanism (the same `AskUserQuestion` tool used for
+the framework choice), not free-text prose a non-interactive caller
+cannot answer:
+
+> **How would you like to review the findings?**
+>
+> 1. **Spreadsheet** — I'll create a Google Sheet with all violations,
+>    suggested severities, and columns for your decisions.
+> 2. **Here in the chat** — I'll present the findings inline and we'll
+>    walk through them together.
+
+This is a **hard stop** (like the framework question): wait for the
+answer before presenting findings. If the mechanism is unavailable, ask
+in chat and stop until the researcher replies — do not pick a format and
+proceed on your own. This arises only in Mode A, where a human is
+present; Mode B always carries `--review`, which bypasses it. Then follow
+the chosen format in
+[references/researcher-review.md](references/researcher-review.md).
+
+### `--review chat`: present in chat and wait
+
+The researcher has already chosen chat — skip the format question.
+Present consolidated findings inline and wait for their
+confirm/dismiss/severity before writing reports.
+
+After review (either path): remove dismissed violations, use researcher's
+severity ratings, append researcher context, and add any new violations
+the researcher identified.
 
 ### `--review none`: skip review (Mode B)
 
-When `--review none` is set, skip the researcher review entirely:
-
-1. **Do not ask** for a review format (spreadsheet or chat).
-2. **Use AI-suggested severities** from Step 3 reconciliation. Label
-   every severity as **"Suggested severity"** — never bare "Severity"
-   or "Confirmed."
-3. **Do not pretend a human confirmed severities.** The output must
-   make clear that no researcher has reviewed or signed off.
-4. Proceed directly to Step 5 with the **Unreviewed Draft** banner.
-
-A researcher can review later by running the skill again with the same
-input and `--review chat`. See
-[references/researcher-review.md](references/researcher-review.md)
-for details on deferred review.
+Skip the researcher review entirely: do **not** ask for a review format;
+use the Step 3 AI-suggested severities, labeled **"Suggested severity"**
+(never bare "Severity" or "Confirmed"); do **not** imply a human
+confirmed them; proceed to Step 5 with the **Unreviewed Draft** banner.
+A researcher can review later by re-running with the same input and
+`--review chat` (see
+[references/researcher-review.md](references/researcher-review.md)).
 
 ## Step 5: Generate Output
 
@@ -422,21 +435,18 @@ full **Source URL** when one was provided and the **Evaluation date**.
 Researchers running multiple evaluations rely on this block to tell
 reports apart at a glance.
 
-**Evaluator legend is required in every output.** Include the following
-legend in all outputs (chat, spreadsheet, markdown, HTML) so readers
-understand what each evaluator was focused on:
+**Evaluator legend is required in every output.** Include the evaluator
+legend (A/B/C lens and focus — the table in
+[references/report-templates.md](references/report-templates.md)) in all
+outputs (chat, spreadsheet, markdown, HTML), placed alongside the
+severity legend, so readers can interpret the "Identified by" field.
 
-| Evaluator | Lens | Focus |
-|-----------|------|-------|
-| A | Visual inspection | Labels, layout, visual hierarchy, affordances, feedback indicators — screen by screen, element by element |
-| B | Task flow | Transitions, feedback after actions, where users might lose context — follows the user's likely workflow |
-| C | Edge cases | Empty states, long text, unexpected input, missing data, unlabeled controls — looks for what's NOT there |
-
-Place this legend alongside the severity legend so researchers have a
-complete key for interpreting the findings.
-
-All outputs include a traceability line at the bottom. Read the version
-from the plugin's `plugin.json` manifest and populate `[version]`.
+All outputs include a traceability line at the bottom. The `uxd-research`
+manifest intentionally carries no `version` field (repo convention — Claude Code
+falls back to the git commit SHA), so populate `[version]` from the plugin's
+current **git ref**: the short commit SHA (`git rev-parse --short HEAD`), or a tag
+if the plugin is checked out at one. If no git ref is resolvable, emit
+`unversioned` rather than a placeholder.
 
 ## Guardrails
 

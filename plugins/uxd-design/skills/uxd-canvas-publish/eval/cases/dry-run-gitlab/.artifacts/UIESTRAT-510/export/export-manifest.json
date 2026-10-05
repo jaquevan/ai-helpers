@@ -1,0 +1,5 @@
+{
+  "title": "Cluster onboarding",
+  "flags": { "viewer": "html", "target": "gitlab" },
+  "files": ["index.html"]
+}

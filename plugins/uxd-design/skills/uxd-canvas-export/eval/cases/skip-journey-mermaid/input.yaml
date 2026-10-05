@@ -1,0 +1,5 @@
+prompt: >-
+  Using the uxd-canvas-export skill, someone asked to pass --mermaid for the
+  journey map at .artifacts/UIESTRAT-110/canvas/. Do not run the command.
+  Follow the skill: say whether diagram.mmd should be written and what to
+  export instead.

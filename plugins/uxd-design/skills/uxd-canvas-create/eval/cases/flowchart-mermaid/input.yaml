@@ -1,0 +1,6 @@
+prompt: >-
+  Using the uxd-canvas-create skill, plan a local canvas for a checkout
+  flowchart: cart, payment, and receipt, with a yes/no branch on payment
+  success. This is a flowchart, not a journey map. Do not contact Miro, publish,
+  or run commands. Say how the diagram is stored on a local canvas and what the
+  HTML viewer does with it.
