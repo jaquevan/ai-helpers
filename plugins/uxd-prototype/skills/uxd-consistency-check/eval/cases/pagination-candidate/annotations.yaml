@@ -1,0 +1,10 @@
+case_type: source
+guideline: table-pagination
+expected_exit: 0
+expected_summary:
+  total_guidelines_checked: 1
+  violations: 0
+  warnings: 1
+  passes: 0
+expected_findings:
+  - {file: src/Example.tsx, line: null, guideline_id: table-pagination, severity: warning, verdict: FLAGGED, confidence: low, review_candidate: true}

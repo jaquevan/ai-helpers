@@ -2,7 +2,7 @@
 /**
  * Validate pipeline artifact schemas before report generation.
  * Catches schema drift between skill outputs and downstream consumers
- * (render-report.js, MLflow scorers, validate-pipeline-output.js).
+ * (render-report.js and validate-pipeline-output.js).
  *
  * Usage: node validate-artifact-schemas.js .artifacts/<KEY>/
  * Exit code 0 = all pass, 1 = failures found.
@@ -240,7 +240,7 @@ if (consistencyReport) {
   } else {
     check('consistency was skipped', false,
       `Consistency checks were skipped: ${consistencyReport.reason || 'unknown reason'}. ` +
-      'Verify .context/consistency-checker/ is bootstrapped.');
+      'Verify the consistency tools and the explicitly selected workspace/guideline sources.');
   }
 }
 

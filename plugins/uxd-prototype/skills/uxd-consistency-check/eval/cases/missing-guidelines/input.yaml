@@ -1,0 +1,6 @@
+prompt: >-
+  Review prototype/ using uxd-consistency-check with --workspace prototype.
+  No design guidelines are provided. Compare the edited NewPage.tsx to the
+  similar ExistingPage.tsx and save a validated internal-consistency-review.json
+  to artifacts/. Do not edit the prototype or invent product policy. Explain
+  whether the difference is a review candidate or an intentional improvement.

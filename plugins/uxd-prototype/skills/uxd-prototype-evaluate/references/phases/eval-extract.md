@@ -2,6 +2,10 @@
 
 Gathers all context needed for evaluation from Jira, the RFE, the workspace, and decision history. Writes structured JSON artifacts that downstream skills read.
 
+For MCP-staged direct API runs, `scripts/extract_jira_context.py` performs this
+phase deterministically before any model invocation. The procedure below remains
+the interactive-host contract and the definition of the output schema.
+
 ## Phased Execution
 
 eval-extract runs in two phases to minimize Phase A cold-start time:
@@ -79,6 +83,13 @@ The cache stays valid as long as the ticket's acceptance criteria AND prototype 
 
 ### Step 1: Fetch Jira Story
 
+When `JIRA_CONTEXT_FILE` is set, read and validate that MCP-staged file first.
+Treat its `ticket` and `related_issues` as the authoritative Jira response; do
+not call Jira again. The file must report `source: "atlassian-mcp"` and match
+`JIRA_ISSUE_KEY`.
+
+Otherwise, the host assistant calls Atlassian MCP directly:
+
 ```
 mcp__atlassian__getJiraIssue(
   issueIdOrKey: "<KEY>",
@@ -88,6 +99,9 @@ mcp__atlassian__getJiraIssue(
 ```
 
 Atlassian MCP is **required**. The pipeline will fail at preflight if not configured. There is no offline fallback — Jira data is needed for AC extraction.
+
+Never search credential files, environment variables, home directories, or
+Keychain to access Jira. Stop before model execution when MCP context is absent.
 
 **Cache raw ticket fields for enrichment phase:** Save `parent` and `issuelinks` from the Jira response into `extract-state.json` as `raw_parent` and `raw_issuelinks`. The enrichment phase (Steps 6-7) needs these to discover the Outcome ticket without re-fetching from Jira.
 

@@ -16,6 +16,18 @@ tmp/
 # Eval run artifacts
 **/eval/runs/
 
+# Generated evaluation artifacts and reports
+/.artifacts/
+
+# Local Python environments and test/tool caches
+/.venv/
+.playwright-cli/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+coverage/
+
 # Local skill-creator loop output (not the harness)
 **/evals/
 
@@ -34,6 +46,30 @@ __pycache__/
 
 # Local Claude Code settings (user-specific)
 .claude/settings.local.json
+
+# Local agent/editor state
+/.agents/
+/.codex/
+.local/
+workspace/
+
+# Local Langfuse tracing config (machine-specific)
+/.opencode/
+/.opencode-tracing/
+/.claude/
+/docker/langfuse/
+/docs/cost-experiments/
+/plugins/uxd-workshop/skills/uxd-prototype-evaluate/
+/docs/eval-environment-audit.md
+/docs/evaluator-pipeline-audit.md
+/docs/tracing-guide.md
+**/langfuse-trace-context*.json
+
+# Full-session OpenCode Langfuse launcher/docs are maintained separately
+/opencode.json
+/scripts/trace-in-langfuse
+/docs/trace-in-langfuse.md
+/docs/opencode-designer-session-protocol.md
 
 # Local OpenCode overrides (user-specific)
 AGENTS.local.md

@@ -1,0 +1,7 @@
+# Optional developer regression suites; skill eval cases remain published.
+/tests/
+/eval/tests/
+
+# Consumer runs do not belong in the installed skill.
+/reports/
+/visual-extraction/

@@ -1,6 +1,7 @@
 [
   {
     "persona": "alex-junior",
+    "persona_name": "Alex (Junior ML Engineer)",
     "task_index": 1,
     "task": "Check scheduling status",
     "outcome": "completed",
@@ -9,6 +10,7 @@
     "confusion_events": 0,
     "patience_start": 100,
     "patience_end": 100,
+    "screenshots": ["screenshots/persona-alex-junior-task-1-step-1.png"],
     "trace": [
       {
         "step": 1,

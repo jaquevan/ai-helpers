@@ -16,27 +16,23 @@ After normal create questions, also ask:
 
 ## Sequence
 
-```
+```text
 1. CREATE    → follow uxd-prototype-create Steps 1–13
                (Prototype Bar on by default; optional --export after serve URL is known)
 1b. BAR      → install-prototype-bar.sh --artifacts (ALWAYS unless --no-prototype-bar)
                Syncs prototype-bar.json from metadata + installs assets into source.
                Must run BEFORE serve so the bar is visible immediately.
-2. SERVE     → ensure prototype is reachable at {URL}
+2. SERVE     → use the workspace's documented dev server or serve the standalone HTML
+               Verify the root and primary journey route are reachable and show the
+               intended prototype, then persist the exact URL in pipeline-config.yaml.
 2b. EXPORT?  → if --export, run Step 12 (journey static HTML / tree under .artifacts/{ID}/exports)
 3. EVALUATE  → /uxd-prototype-evaluate {ID} {URL} [--workspace=…]
-3b. BAR (refresh) → re-run install-prototype-bar.sh --artifacts after evaluate.
-               This re-syncs the config AND copies the eval report into
-               public/evals/{ID}/ so the Eval tab works on Pages.
-               (Happens automatically — Step 3 in the unified script detects the report.)
-               MUST run before publish so public/evals/ exists on disk.
-4. REFINE?   → if .artifacts/{ID}/eval/evaluation-report.csv has FAIL → refine (this skill) → re-eval
-               skip when FAIL count is 0
-5. PUBLISH?  → /uxd-prototype-publish {ID} --target={target}  (if target ≠ none)
-               When target was a git URL, pass --target=<url> (or --target=repo with
-               upstream already set / submit_to_repo.py --upstream <url>)
-               Publish Step 2a re-copies eval + refreshes the bar; repo submit
-               auto-stages public/evals/{ID}/ even if omitted from changeset.md.
+3b. BAR      → re-run install-prototype-bar.sh --artifacts after evaluate
+               Refresh public/evals/{ID}/ before publish so the Eval tab works on Pages.
+4. REFINE?   → if .artifacts/{ID}/eval/evaluation-report.csv has FAIL → refine → re-eval
+               Stop when FAIL count is 0 or max_refine_cycles is reached.
+5. PUBLISH?  → /uxd-prototype-publish {ID} --target={target} (if target ≠ none)
+               Pass a git URL as --target=<url>; publish refreshes the bar and eval copy.
 ```
 
 Persist flags to `.artifacts/{ID}/pipeline-config.yaml` so the run survives context compression:
@@ -47,11 +43,11 @@ pipeline:
   workspace: https://gitlab.example.com/user/fork.git
   workspace_branch: main          # optional; clone branch for --workspace
   decisions: skip
-  # depth: normal          # only when decisions is auto or human
+  # depth: normal                 # only when decisions is auto or human
   url: http://localhost:3000
   target: repo
   target_repo_url: https://gitlab.example.com/org/canonical.git
-  target_branch: release-2.22     # optional; MR/PR base on --target
+  target_branch: release-2.22      # optional; MR/PR base on --target
   max_refine_cycles: 3
   dry_run: false
   prototype_bar: true
@@ -81,11 +77,11 @@ When `--target` is a git URL, normalize `target` to `repo` and store the URL in 
 
 ## Repo submit notes
 
-When `--target=repo` or `--target` is a git URL, publish uses `submit_to_repo.py` (fork-aware `glab mr create`, MR verification, optional Pages polling). Run git push / submit scripts with elevated permissions (`required_permissions: ["all"]` in Cursor).
+When `--target=repo` or `--target` is a git URL, publish uses `submit_to_repo.py` (fork-aware `glab mr create`, MR verification, optional Pages polling). Follow the host assistant's permission controls for git push and submission.
 
 **Fork demo pattern:**
 
-```
+```text
 --workspace https://gitlab.example.com/user/fork.git \
 --workspace-branch main \
 --target https://gitlab.example.com/org/canonical.git \
@@ -96,4 +92,4 @@ When `--target=repo` or `--target` is a git URL, publish uses `submit_to_repo.py
 
 ## Batch
 
-If multiple IDs are provided, run the sequence per ID. Write a brief batch summary table at the end (ID, FAIL count, publish URL).
+If multiple IDs are provided, run the sequence per ID. Write a brief batch summary at the end (ID, FAIL count, publish URL).

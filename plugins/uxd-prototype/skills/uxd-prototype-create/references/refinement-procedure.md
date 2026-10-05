@@ -100,7 +100,10 @@ Append a refinement section to `.artifacts/{ID}/changeset.md`:
 - `src/pages/ApiKeys/ApiKeyDetail.tsx` — Fixed drawer close, added keyboard nav
 ```
 
-For workspace mode, re-run post-change verification (lint + build).
+Re-run the creation consistency check in both modes and overwrite
+`.artifacts/{ID}/consistency-report.json`. Fix new high-confidence findings and
+leave low-confidence candidates `FLAGGED` for review. For workspace mode, also
+re-run lint and build.
 
 ### Step 9: Report
 

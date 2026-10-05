@@ -1,0 +1,7 @@
+prompt: >-
+  Use --workspace prototype. The fixture's local automated guideline commands
+  are approved; use --trust-guideline-commands with the analyzer.
+  Use uxd-consistency-check to audit prototype/ against no-custom-css only.
+  Save the bundled analyzer's JSON to artifacts/consistency-report.json in this
+  workspace and summarize the result. Do not modify source, enable tracing,
+  install dependencies, or run visual checks.

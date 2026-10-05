@@ -1,0 +1,7 @@
+prompt: >-
+  Use --workspace prototype. Source files do not establish rendered visual styling.
+  I have only a source consistency report. Can uxd-consistency-check confirm
+  that the rendered prototype uses Project Felt, pill-shaped controls, and a
+  red primary action? I have not supplied a live URL or any screenshots.
+  Explain what evidence is needed and how a visual review relates to the
+  deterministic source result. Do not run commands or create a report.

@@ -39,6 +39,7 @@ Written under `.artifacts/{ID}/` in the consumer project (never `${CLAUDE_SKILL_
 | RFE snapshot, metadata, changeset, summary | `rfe-snapshot.md`, `metadata.json`, `changeset.md`, `prototype-summary.yaml` |
 | Journeys + scenarios | `journeys.json`, `scenarios.json` |
 | Prototype Bar config | `prototype-bar.json` |
+| Creation consistency check | `consistency-report.json` |
 | Design decisions | `decisions/` (only when `--decisions` is `auto` or `human`) |
 | Optional exports | `exports/` when `--export` |
 
@@ -53,6 +54,7 @@ Parse as: `<source> [--workspace <path-or-url-or-standalone>] [--target <dest>] 
 | Flag | Values | Default | Description |
 |------|--------|---------|-------------|
 | `--workspace` | path, git URL, or `standalone` | `standalone` | Codebase to build in |
+| `--guidelines` | local path or raw Markdown URL | — | Repeatable supplements to workspace design guidelines; forward to consistency review |
 | `--workspace-branch` | branch name | from URL / default branch | Clone branch |
 | `--target` | `repo`, `github`, `gitlab`, `vercel`, `none`, or a git URL | `none` (pipeline) | Publish destination only. A git URL means open an MR/PR against that repo (implies `repo`) |
 | `--target-branch` | branch name | `--workspace-branch` | MR/PR base on `--target` |
@@ -209,6 +211,13 @@ Decision pages use [references/decision-page-template.html](references/decision-
 
 Use PatternFly docs MCP if available. Same scenario wiring as above.
 
+Read product-specific rules from `.design/product/design-guidelines/` in the
+workspace, plus any explicit user-supplied guideline sources. RHOAI styling
+and Project Felt requirements belong in its product repository, not universal
+checker defaults. With no guidelines, compare the edited areas to relevant
+workspace peers and flag differences for review rather than inventing policy. See
+[the consistency context contract](../uxd-consistency-check/references/project-context.md).
+
 **Reachability self-check** (a minute or two, then move on):
 
 - Every new route is registered and linked from nav/CTAs — no orphan screens
@@ -240,9 +249,38 @@ Re-run after evaluate so the Eval tab gets the report (`public/evals/{ID}/`). Pa
 
 ## Step 11: Post-Change Verification
 
-*Workspace mode only. Mandatory.*
+*All modes. Mandatory.*
 
-Install deps if needed, lint/build/type-check changed files, fix failures introduced by the prototype, update `changeset.md`, record pass/fail in `.artifacts/{ID}/verification.json`.
+Run the generic sibling checker before handing off the prototype. Forward
+explicit `--guidelines` arguments to all checker tools:
+
+```bash
+CONSISTENCY_SKILL="${CLAUDE_SKILL_DIR}/../uxd-consistency-check"
+CONSISTENCY_SOURCE=".artifacts/{ID}/prototype" # standalone
+# Workspace mode: set CONSISTENCY_SOURCE to workspace_path instead.
+
+if [ "{MODE}" = "workspace" ]; then
+  python3 "${CONSISTENCY_SKILL}/scripts/analyze.py" \
+    --workspace="${CONSISTENCY_SOURCE}" --changed --base-ref=HEAD \
+    --json-file=".artifacts/{ID}/consistency-report.json"
+else
+  python3 "${CONSISTENCY_SKILL}/scripts/analyze.py" \
+    --workspace="${CONSISTENCY_SOURCE}" \
+    --json-file=".artifacts/{ID}/consistency-report.json"
+fi
+```
+
+Then follow the sibling consistency skill's internal peer-comparison workflow,
+even when no guidelines exist. Validate `internal-consistency-review.json` and
+keep guideline compliance separate. Local command automation requires explicit
+approval via `--trust-guideline-commands`; without it, the host reviews the
+resolved Markdown rules. Fix only guideline-backed, high-confidence issues
+when requested; peer-only candidates remain `FLAGGED` and cannot trigger auto-fixes.
+
+In workspace mode, also install deps if needed and lint/build/type-check changed
+files. Fix failures introduced by the prototype. Update `changeset.md`; record
+command results, consistency counts, and the report path in
+`.artifacts/{ID}/verification.json`.
 
 ## Step 12: Journey export (when `--export`)
 
@@ -284,6 +322,9 @@ Print ID, title, decisions, screens, journeys, bar, exports, workspace, status, 
 4. `uxd-prototype-publish`
 
 If `--pipeline` / `--speedrun`, continue with [references/pipeline-mode.md](references/pipeline-mode.md).
+Use its deterministic local serve and identity gate before passing a generated
+URL to evaluate. The gate emits metadata-only creator events and leaves
+evaluator preflight/estimate approval in control of all paid evaluator work.
 
 ---
 
@@ -306,6 +347,7 @@ Reads `.artifacts/{ID}/eval/evaluation-report.csv` + `refinement-suggestions.jso
 - **Do not invent journeys or scenarios** that the source does not support — record assumptions instead.
 - **Scenarios must be visually distinct** on load; interaction states belong in journey `actions`, not scenarios.
 - **Workspace verification is mandatory** — lint/build failures introduced by the prototype must be fixed.
+- **Consistency verification is mandatory in every mode** — resolve the checker from the sibling skill, never from the consumer project or network.
 
 ## Reference Docs
 

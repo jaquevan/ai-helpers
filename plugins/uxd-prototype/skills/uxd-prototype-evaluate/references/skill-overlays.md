@@ -2,7 +2,7 @@
 
 ## What It Is
 
-A skill overlay is a set of project-specific context that sits on top of the general-purpose `prototype-evaluate` skill. Instead of hard-coding product knowledge (Jira URLs, repo conventions, design system paths, MLflow, context git remotes) into the SKILL.md, we externalize it into a YAML config file.
+A skill overlay is a set of project-specific context that sits on top of the general-purpose `prototype-evaluate` skill. Instead of hard-coding product knowledge (Jira URLs, repo conventions, design system paths, context git remotes) into the SKILL.md, we externalize it into a YAML config file.
 
 ## Why
 
@@ -10,7 +10,7 @@ The evaluator should work for any product team — not just one product. The che
 
 ## Where UXD/RHOAI values live
 
-Red Hat internal remotes, MLflow, Jira, Pages URLs, and persona research citations ship in the VPN-only repo:
+Red Hat internal remotes, Jira, Pages URLs, and persona research citations ship in the VPN-only repo:
 
 [gitlab.cee.redhat.com/uxd/internal-ai-helpers](https://gitlab.cee.redhat.com/uxd/internal-ai-helpers) → plugin `uxd-eval-config` → `overlays/uxd-prototype-evaluate.yaml` and `knowledge/personas/`
 
@@ -42,8 +42,6 @@ Auto-discovery checks:
 
 Environment variables still override individual keys when the scripts read them first:
 
-- `MLFLOW_TRACKING_URI`
-- `CONSISTENCY_CHECKER_REPO`
 - `USABILITY_TESTING_REPO`
 - `EVAL_PAGES_REPO` / `EVAL_PAGES_URL`
 - `JIRA_BASE_URL`
@@ -68,9 +66,7 @@ export EVAL_OVERLAY_PATH="$UXD_INTERNAL_HELPERS/plugins/uxd-eval-config/overlays
 | `git.base_branch` | What branch to diff against for MR delta |
 | `git.remote_url` | Prototype repo URL used when building MR/PR links |
 | `git.mr_url_style` | `gitlab` (`/-/merge_requests/N`) or `github` (`/pull/N`) |
-| `context_repos.consistency_checker` | Git URL for design-guideline bootstrap (empty = skip) |
 | `context_repos.usability_testing` | Git URL for deep persona YAML bootstrap (empty = skip) |
-| `mlflow.tracking_uri` | Optional tracking server (empty = skip unless env is set) |
 | `publish.*` | Pages repo, Pages base URL, Jira base, hosted dashboard URL |
 | `design_system` | PatternFly/consistency checker paths |
 | `personas` | Persona + overlay catalog paths for usability scoring |

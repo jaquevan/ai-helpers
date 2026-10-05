@@ -1,0 +1,139 @@
+name: uxd-consistency-check-eval
+description: >-
+  Evaluate workspace policy resolution, grounded findings, review candidates,
+  missing-guideline peer review, and visual-evidence limits
+
+skill: uxd-prototype:uxd-consistency-check
+
+execution:
+  mode: case
+  arguments: "{prompt}"
+
+runner:
+  type: claude-code
+  plugin_dirs:
+    - plugins/uxd-prototype
+
+models:
+  skill: claude-sonnet-4-6
+  judge: claude-sonnet-4-6
+
+permissions:
+  allow:
+    - Read
+    - Bash
+    - Write
+    - Glob
+    - Grep
+  deny:
+    - "mcp__*"
+
+dataset:
+  path: cases
+  workspace:
+    files:
+      - prototype
+  schema: |
+    Each case has input.yaml and annotations.yaml. Source cases include a
+    prototype/ tree copied into the consumer workspace. Annotations record
+    the scoped guideline and exact expected source locations and verdicts.
+    The visual case provides no URL or screenshot and must not launch a browser.
+
+outputs:
+  - path: artifacts
+    schema: |
+      Source cases write artifacts/consistency-report.json using the bundled
+      analyzer. The report retains separate source_mode and visual_mode fields.
+      Visual evidence limits are explained in the conversation.
+
+traces:
+  stdout: true
+  stderr: true
+  events: true
+  metrics: true
+
+judges:
+  - name: grounded_source_report
+    description: Requires analyzer output with exact findings and no fabricated visual checks
+    if: "annotations.get('case_type') == 'source'"
+    check: |
+      import json
+
+      case = outputs.get("annotations", {})
+      reports = [content for path, content in outputs.get("files", {}).items()
+                 if path.replace("\\", "/").endswith("artifacts/consistency-report.json")]
+      if len(reports) != 1:
+          return False, "Expected one consumer-workspace consistency-report.json"
+      try:
+          report = json.loads(reports[0])
+          source = report["source_mode"]
+          visual = report["visual_mode"]
+          findings = source["violations"]
+          summary = report["summary"]
+      except (ValueError, KeyError, TypeError):
+          return False, "Missing or invalid analyzer report contract"
+       if report.get("source") != "uxd-consistency-check" or report.get("degraded") is not False:
+          return False, "Must use the bundled checker without degraded search-only fallback"
+      if source.get("ran") is not True:
+          return False, "Source analysis did not run"
+      if visual.get("ran") is not False or visual.get("screenshots_checked") != 0 or visual.get("findings") != []:
+          return False, "Source-only run claimed visual evidence"
+      fields = ("file", "line", "guideline_id", "severity", "verdict", "confidence", "review_candidate")
+      actual = [{key: finding.get(key) for key in fields} for finding in findings]
+      expected = case.get("expected_findings", [])
+      normalize = lambda items: sorted(json.dumps(item, sort_keys=True) for item in items)
+      if normalize(actual) != normalize(expected):
+          return False, f"Incorrect source evidence or classification: {actual}"
+      if summary != case.get("expected_summary"):
+          return False, f"Incorrect guideline-level summary: {summary}"
+      return True, "Exact grounded findings, candidate classification, and source-only contract"
+
+  - name: visual_evidence_limits
+    description: Does not claim screenshot or DOM conclusions from source-only evidence
+    if: "annotations.get('case_type') == 'visual-unavailable'"
+    check: |
+      import re
+
+      text = outputs.get("conversation", "")
+      missing = re.search(r"(no|without|missing|not supplied|unavailable|cannot|can't).{0,100}(screenshot|DOM|visual|URL)", text, re.I | re.S)
+      needs = re.search(r"(need|provide|supply|require|share).{0,100}(screenshot|URL)|(?:screenshot|URL).{0,60}(needed|required)", text, re.I | re.S)
+      separation = re.search(r"(visual|DOM).{0,100}(separate|supplement|not replace|unavailable|cannot|can't)|separate.{0,80}(visual|DOM)", text, re.I | re.S)
+      if not (missing and needs and separation):
+          return False, "Must explain missing visual evidence, request it, and preserve source/visual separation"
+      claims = re.search(r"(confirmed|verified|measured|observed).{0,60}(pill|red primary|root theme)|visual.{0,30}(passed|PASS)", text, re.I | re.S)
+      if claims:
+          return False, "Claimed visual verification without a screenshot or live DOM"
+      return True, "Acknowledged visual evidence limits without inventing a visual pass"
+
+  - name: internal_without_policy
+    description: Reviews comparable source evidence without inventing product guideline compliance
+    if: "annotations.get('case_type') == 'internal-only'"
+    check: |
+      import json
+
+      reports = [content for path, content in outputs.get("files", {}).items()
+                 if path.replace("\\", "/").endswith("artifacts/internal-consistency-review.json")]
+      if len(reports) != 1:
+          return False, "Expected one validated internal consistency review"
+      try:
+          review = json.loads(reports[0])
+      except (ValueError, TypeError):
+          return False, "Invalid internal review JSON"
+      if review.get("mode") != "internal" or review.get("coverage") != "reviewed":
+          return False, "Expected a completed peer comparison"
+      if review.get("guideline_compliance") != "not_evaluated":
+          return False, "No product policy was supplied"
+      comparisons = review.get("comparisons", [])
+      if not comparisons or not all(item.get("peers") and item.get("rationale") for item in comparisons):
+          return False, "Missing comparable evidence or rationale"
+      if any(item.get("severity") == "error" or item.get("verdict") == "VIOLATION" for item in review.get("findings", [])):
+          return False, "Peer conventions must remain review candidates"
+      return True, "Internal review completed without inventing product policy"
+
+thresholds:
+  grounded_source_report:
+    min_pass_rate: 1.0
+  visual_evidence_limits:
+    min_pass_rate: 1.0
+  internal_without_policy:
+    min_pass_rate: 1.0

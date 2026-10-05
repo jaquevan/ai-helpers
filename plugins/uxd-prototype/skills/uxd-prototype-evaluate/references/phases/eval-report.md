@@ -4,6 +4,14 @@ Renders the final HTML report from JSON/CSV artifacts produced by earlier phases
 
 ## Inputs
 
+The renderer prefers a complete schema-valid canonical set (`brief.json`,
+`evaluation.json`, `evidence.json`, `actions.json`, `state.json`). It reads
+nested verdicts and consistency findings through an in-memory normalization
+layer and resolves raw/cropped image paths directly from `evidence.json`.
+When no canonical file exists, the legacy inputs below remain supported. A
+partial or invalid canonical set is an error; do not fall back to stale legacy
+results.
+
 | Input | Description | Required |
 |-------|-------------|----------|
 | `.artifacts/<KEY>/eval/evaluation-report.csv` | AC verdicts (Section 1) + usability dimensions (Section 2) | Yes |
@@ -24,6 +32,19 @@ Renders the final HTML report from JSON/CSV artifacts produced by earlier phases
 | `.artifacts/eval/runs/run-log.csv` | Appended run entry for cross-run tracking |
 
 ## Procedure
+
+### Standard execution
+
+Run the packaged report pipeline. `EVALUATOR_SKILL_DIR` is the directory
+containing this skill's `SKILL.md`:
+
+```bash
+node "${EVALUATOR_SKILL_DIR}/scripts/run-report.js" "${ARTIFACTS_DIR}"
+```
+
+This blocks on classification/schema errors, renders with the sibling template,
+and validates the resulting HTML. It does not publish or authenticate. The
+remaining steps describe its contract and optional host actions.
 
 ### Step 1: Verify artifacts exist
 
@@ -47,7 +68,7 @@ If any required file is missing, stop and report which file is absent. The upstr
 Before rendering, validate all artifact JSON files against the schemas render-report.js expects:
 
 ```bash
-node ${CLAUDE_SKILL_DIR}/scripts/validate-artifact-schemas.js $ARTIFACTS_DIR/
+node "${EVALUATOR_SKILL_DIR}/scripts/validate-artifact-schemas.js" "${ARTIFACTS_DIR}"
 ```
 
 If any violations are found, fix them before proceeding. The script prints specific fix instructions for each violation.
@@ -57,7 +78,7 @@ If any violations are found, fix them before proceeding. The script prints speci
 ### Step 2: Render the HTML report
 
 ```bash
-node ${CLAUDE_SKILL_DIR}/scripts/render-report.js .artifacts/$KEY/eval/
+node "${EVALUATOR_SKILL_DIR}/scripts/render-report.js" "${ARTIFACTS_DIR}"
 ```
 
 This script:
@@ -68,10 +89,6 @@ This script:
 - Also writes `evaluation-summary.json` alongside the HTML report — an agent-readable summary with AC verdicts, usability scores, counts, and iteration state.
 
 ### Step 3: Log the run
-
-```bash
-node ${CLAUDE_SKILL_DIR}/scripts/log-run.js .artifacts/$KEY/eval/ --note="<note>"
-```
 
 If `--note` was not provided, use a default: `"Evaluation run"`. On iterations, use `"Iteration <N>"`.
 

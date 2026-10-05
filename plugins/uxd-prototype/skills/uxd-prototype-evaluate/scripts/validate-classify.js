@@ -15,6 +15,7 @@
 
 const { readFileSync, existsSync } = require('fs');
 const { join, resolve } = require('path');
+const { parseCSVLine } = require('./csv-utils');
 
 const jsonMode = process.argv.includes('--json');
 const artifactsDir = process.argv.filter(a => a !== '--json')[2];
@@ -45,6 +46,7 @@ function readJson(filename) {
 log('\ntier-overrides.json:');
 
 const overrides = readJson('tier-overrides.json');
+const extractState = readJson('extract-state.json');
 
 if (!overrides) {
   check('tier-overrides exists', false, 'file not found or invalid JSON');
@@ -87,7 +89,6 @@ if (!overrides) {
     check('no duplicate ac_id entries', !hasDupes,
       hasDupes ? 'duplicate ac_id found' : `${seenIds.size} unique IDs`);
 
-    const extractState = readJson('extract-state.json');
     if (extractState && extractState.ac_list) {
       const acIds = new Set(extractState.ac_list.map(ac => ac.id || ac.criterion_id));
       const orphans = entries.filter(e => {
@@ -106,6 +107,71 @@ if (!overrides) {
     } else {
       log('  [SKIP] extract-state.json not found — skipping cross-reference checks');
     }
+  }
+}
+
+log('\nevaluation-report.csv:');
+const reportPath = join(abs, 'evaluation-report.csv');
+if (!existsSync(reportPath)) {
+  log('  [SKIP] evaluation-report.csv not found — tier override validation only');
+} else {
+  const requiredHeaders = [
+    'criterion_id', 'source', 'tier', 'criterion_text', 'verdict',
+    'rationale', 'evidence', 'fix_action', 'fix_file', 'human_action',
+  ];
+  const lines = readFileSync(reportPath, 'utf8').split(/\r?\n/);
+  const headerIndex = lines.findIndex(line => line.trim() === requiredHeaders.join(','));
+  check('AC header present', headerIndex >= 0,
+    headerIndex >= 0 ? 'all 10 required columns present' : 'missing exact acceptance-criteria header');
+
+  if (headerIndex >= 0) {
+    const rows = [];
+    for (const line of lines.slice(headerIndex + 1)) {
+      if (!line.trim() || line.startsWith('#')) break;
+      rows.push(parseCSVLine(line));
+    }
+    check('one classification per AC', Boolean(extractState?.ac_list) && rows.length === extractState.ac_list.length,
+      extractState?.ac_list
+        ? `${rows.length} rows for ${extractState.ac_list.length} ACs`
+        : 'extract-state.json missing or invalid');
+
+    const widthOk = rows.every(row => row.length === requiredHeaders.length);
+    check('classification rows have 10 columns', widthOk,
+      widthOk ? `${rows.length} rows are schema-aligned` : 'one or more rows have the wrong column count');
+
+    const records = rows.filter(row => row.length === requiredHeaders.length).map(row =>
+      Object.fromEntries(requiredHeaders.map((header, index) => [header, row[index]]))
+    );
+    const validTiers = new Set(['T1', 'T2', 'T3', 'T4']);
+    const tiersOk = records.every(record => validTiers.has(record.tier));
+    check('all criteria use T1-T4', tiersOk,
+      tiersOk ? 'all tier values valid' : 'invalid or missing tier value found');
+
+    const ids = records.map(record => record.criterion_id);
+    const uniqueIds = new Set(ids);
+    check('criterion IDs are unique', uniqueIds.size === ids.length,
+      `${uniqueIds.size} unique IDs across ${ids.length} rows`);
+
+    if (extractState?.ac_list) {
+      const expectedIds = extractState.ac_list.map((ac, index) =>
+        ac.criterion_id || ac.id || `AC-${index + 1}`
+      );
+      const idsMatch = expectedIds.length === ids.length && expectedIds.every(id => uniqueIds.has(id));
+      check('criterion IDs match extract-state', idsMatch,
+        idsMatch ? 'all extracted criteria classified' : 'CSV criteria differ from extract-state.json');
+    }
+
+    const t3Ok = records
+      .filter(record => record.tier === 'T3')
+      .every(record => record.verdict === 'PASS' && record.rationale.includes('Backend-only'));
+    check('T3 criteria auto-pass with rationale', t3Ok,
+      t3Ok ? 'all backend-only criteria are noted' : 'T3 rows require PASS and backend-only rationale');
+
+    const t4Ok = records
+      .filter(record => record.tier === 'T4')
+      .every(record => Boolean(record.human_action));
+    check('T4 criteria include human action', t4Ok,
+      t4Ok ? 'all subjective criteria have review instructions' : 'T4 row missing human_action');
   }
 }
 

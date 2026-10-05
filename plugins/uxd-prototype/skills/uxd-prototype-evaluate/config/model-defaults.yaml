@@ -1,0 +1,36 @@
+# Per-phase defaults for uxd-prototype-evaluate.
+# Suggested routes when the host supports per-phase model selection.
+# Otherwise use the host assistant's configured session model.
+# Do not put secrets here.
+
+platforms:
+  codex:
+    provider: openai
+    phases:
+      eval-extract: gpt-6-luna
+      eval-classify: gpt-6-luna
+      eval-journey: gpt-6-sol
+      eval-fix: gpt-6-sol
+      eval-usability: gpt-6-sol
+      eval-consistency: gpt-6-luna
+      eval-report: gpt-6-luna
+  cursor:
+    provider: openai
+    phases:
+      eval-extract: gpt-6-luna
+      eval-classify: gpt-6-luna
+      eval-journey: gpt-6-sol
+      eval-fix: gpt-6-sol
+      eval-usability: gpt-6-sol
+      eval-consistency: gpt-6-luna
+      eval-report: gpt-6-luna
+  anthropic:
+    provider: anthropic
+    phases:
+      eval-extract: claude-haiku-4-5
+      eval-classify: claude-haiku-4-5
+      eval-journey: claude-haiku-4-5
+      eval-fix: claude-opus-4-6
+      eval-usability: claude-sonnet-4-6
+      eval-consistency: claude-haiku-4-5
+      eval-report: claude-sonnet-4-6

@@ -1,0 +1,10 @@
+case_type: source
+guideline: patternfly-component-usage
+expected_exit: 1
+expected_summary:
+  total_guidelines_checked: 1
+  violations: 1
+  warnings: 0
+  passes: 0
+expected_findings:
+  - {file: src/Example.tsx, line: 1, guideline_id: patternfly-component-usage, severity: error, verdict: VIOLATION, confidence: high, review_candidate: false}

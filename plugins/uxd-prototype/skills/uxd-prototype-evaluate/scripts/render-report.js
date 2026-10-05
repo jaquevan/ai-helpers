@@ -7,16 +7,18 @@ const { execSync } = require('child_process');
 
 const artifactsDir = process.argv[2];
 if (!artifactsDir) {
-  console.error('Usage: node ${CLAUDE_SKILL_DIR}/scripts/render-report.js <artifacts-dir>');
-  console.error('  e.g. node ${CLAUDE_SKILL_DIR}/scripts/render-report.js .artifacts/PROJ-298/eval/');
+  console.error('Usage: node render-report.js <artifacts-dir>');
+  console.error('  The script resolves its template and helpers relative to its own directory.');
   process.exit(1);
 }
 
 const { resolveProjectRoot, resolveKeyFromArtifactsDir } = require('./resolve-root');
 const { loadOverlay } = require('./overlay-get');
+const { loadReportInputs } = require('./report-inputs');
 const absArtifacts = path.resolve(artifactsDir);
 const projectRoot = resolveProjectRoot();
 const templatePath = path.join(__dirname, '..', 'templates', 'evaluation-report.html');
+const reportInputs = loadReportInputs(absArtifacts);
 
 // ---------------------------------------------------------------------------
 // Inline SVG icons (used in action cards and evidence flags)
@@ -166,6 +168,7 @@ function normalizePersonaResults(raw) {
     const personaName = entry.persona_name || null;
     const taskIndex = entry.task_index ?? entry.task_idx ?? 1;
     const abandoned = entry.abandoned ?? (entry.outcome === 'abandoned') ?? false;
+    const outcome = entry.outcome || (abandoned ? 'abandoned' : 'completed');
 
     const rawTrace = entry.trace || [];
 
@@ -206,8 +209,10 @@ function normalizePersonaResults(raw) {
       patience_start: entry.patience_start ?? 100,
       patience_end: entry.patience_end ?? 100,
       abandoned,
-      outcome: entry.outcome || (abandoned ? 'abandoned' : 'completed'),
-      would_complete: entry.would_complete ?? !abandoned,
+      outcome,
+      // A blocked walkthrough cannot be a completed workflow even if an older
+      // producer emitted the contradictory would_complete=true combination.
+      would_complete: outcome === 'blocked' ? false : (entry.would_complete ?? !abandoned),
       confusion_events: confusionEvents,
       dimension_scores: entry.dimension_scores || {},
     };
@@ -307,6 +312,10 @@ function resolvePersonaName(nameMap, rawId) {
 }
 
 function readFileOr(filePath, fallback) {
+  if (path.dirname(path.resolve(filePath)) === absArtifacts) {
+    const virtual = reportInputs.virtualFiles.get(path.basename(filePath));
+    if (virtual !== undefined) return virtual;
+  }
   try { return fs.readFileSync(filePath, 'utf8'); } catch { return fallback; }
 }
 
@@ -331,7 +340,6 @@ function readProductOverlay() {
     },
     git: loaded.git || {},
     known_mrs: known,
-    mlflow: loaded.mlflow || {},
     context_repos: loaded.context_repos || {},
     publish: loaded.publish || {},
   };
@@ -410,6 +418,15 @@ function escapeHtml(str) {
     .replace(/</g, '&lt;')
     .replace(/>/g, '&gt;')
     .replace(/"/g, '&quot;');
+}
+
+function evaluationCostSection(artifactsDir) {
+  const file = path.join(artifactsDir, 'evaluation-cost.json');
+  if (!fs.existsSync(file)) return '';
+  let cost;
+  try { cost = JSON.parse(fs.readFileSync(file, 'utf8')); } catch { return ''; }
+  const rows = (cost.phases || []).map(phase => `<tr><td>${escapeHtml(phase.phase)}</td><td>${escapeHtml(phase.model || 'Local (no model)')}</td><td>${Number(phase.input_tokens || 0).toLocaleString()}</td><td>${Number(phase.cache_read_tokens || 0).toLocaleString()}</td><td>${Number(phase.cache_write_tokens || 0).toLocaleString()}</td><td>${Number(phase.output_tokens || 0).toLocaleString()}</td><td>$${Number(phase.llm_cost_usd || 0).toFixed(6)}</td></tr>`).join('');
+  return `<section class="card" data-section="evaluation-cost"><h2>Evaluation cost estimate</h2><p><strong>Total: $${Number(cost.total_estimated_usd || 0).toFixed(6)}</strong> · ${Number(cost.total_tokens || 0).toLocaleString()} tokens. This is a provider-usage price-card estimate, not an invoice. Cached input reads and cache writes use separate rates.</p><table><thead><tr><th>Phase</th><th>Model</th><th>Input tokens</th><th>Cache reads</th><th>Cache writes</th><th>Output tokens</th><th>Estimated cost</th></tr></thead><tbody>${rows}</tbody></table><p class="small">${escapeHtml((cost.excluded_costs || []).join('; '))} excluded; reconcile with provider billing for invoiced total.</p><a href="${escapeHtml(cost.pricing_reference || 'https://developers.openai.com/api/docs/pricing')}">Pricing source</a></section>`;
 }
 
 function renderInlineMarkdown(escaped) {
@@ -622,6 +639,10 @@ function buildSummaryJson() {
   const suggestions = readJsonOr(path.join(absArtifacts, 'refinement-suggestions.json'), []);
   const ud = journeyLog ? normalizeUsabilityDimensions(journeyLog.usability_dimensions) : null;
   const csvRows = parseCsv(csvRaw);
+  const externalEvidenceRows = csvRows.filter(row =>
+    row.tier === 'T4' && (row.human_action || '').startsWith('Confirm the design-process deliverable outside the prototype:')
+  );
+  const prototypeRows = csvRows.filter(row => !externalEvidenceRows.includes(row));
 
   let passCount = 0, failCount = 0, flaggedCount = 0;
   for (const r of csvRows) {
@@ -633,6 +654,7 @@ function buildSummaryJson() {
   const total = passCount + failCount + flaggedCount;
 
   let status = 'needs-attention';
+  if (csvRows.length > 0 && prototypeRows.length === 0 && externalEvidenceRows.length > 0) status = 'external-evidence-required';
   if (total > 0 && failCount === 0 && flaggedCount === 0) status = 'pass';
   else if (failCount > 0) status = 'fail';
 
@@ -674,7 +696,11 @@ function buildSummaryJson() {
     timestamp: (journeyLog && journeyLog.evaluated_at) || new Date().toISOString(),
     status,
     ac_verdicts: acVerdicts,
-    counts: { pass: passCount, fail: failCount, flagged: flaggedCount, total },
+    counts: {
+      pass: passCount, fail: failCount, flagged: flaggedCount, total,
+      prototype_testable: prototypeRows.length,
+      external_evidence_required: externalEvidenceRows.length,
+    },
     usability: Object.keys(usability).length ? usability : null,
     suggestions_pending: pendingSuggestions,
     iteration: Object.keys(iteration).length ? iteration : null,
@@ -704,12 +730,22 @@ function loadScreenshots(screenshotsDir) {
   const map = {};
   const fileToHash = {};
   const hashToFirstFile = {};
-  if (!fs.existsSync(screenshotsDir)) return { map, fileToHash, hashToFirstFile };
-  const files = fs.readdirSync(screenshotsDir).filter(f => f.endsWith('.png')).sort((a, b) => {
-    const stepA = parseInt((a.match(/step-(\d+)/) || [])[1] || '0', 10);
-    const stepB = parseInt((b.match(/step-(\d+)/) || [])[1] || '0', 10);
+  const legacyFiles = fs.existsSync(screenshotsDir)
+    ? fs.readdirSync(screenshotsDir).filter(f => f.endsWith('.png')).map(file => ({ file, filePath: path.join(screenshotsDir, file) }))
+    : [];
+  const canonicalFiles = reportInputs.imagePaths.map(relative => ({
+    file: path.basename(relative),
+    filePath: path.join(absArtifacts, relative),
+  })).filter(item => fs.existsSync(item.filePath));
+  const files = [...legacyFiles, ...canonicalFiles].filter((item, index, all) =>
+    all.findIndex(candidate => candidate.filePath === item.filePath) === index
+  ).sort((a, b) => {
+    const fileA = a.file;
+    const fileB = b.file;
+    const stepA = parseInt((fileA.match(/step-(\d+)/) || [])[1] || '0', 10);
+    const stepB = parseInt((fileB.match(/step-(\d+)/) || [])[1] || '0', 10);
     if (stepA !== stepB) return stepA - stepB;
-    return a.localeCompare(b);
+    return fileA.localeCompare(fileB);
   });
 
   const journeyLogPath = path.join(path.dirname(screenshotsDir), 'journey-log.json');
@@ -720,8 +756,7 @@ function loadScreenshots(screenshotsDir) {
   const hashToDataUri = new Map();
   let dedupSaved = 0;
 
-  for (const file of files) {
-    const filePath = path.join(screenshotsDir, file);
+  for (const { file, filePath } of files) {
     if (journeyLogMtime > 0) {
       const ssMtime = fs.statSync(filePath).mtimeMs;
       if (ssMtime > journeyLogMtime + 60000) {
@@ -1068,10 +1103,28 @@ function loadPersonaData(absArtifacts, screenshotsDir) {
   let ud = journeyLog ? normalizeUsabilityDimensions(journeyLog.usability_dimensions) : null;
   if (!ud) ud = {};
 
+  // Canonical artifacts use persona-<slug>; the richer live persona results
+  // retain <role>+<level>. Rejoin them before rendering traces and names.
+  if (ud.personas_evaluated && personaResults.length > 0) {
+    ud.personas_evaluated = ud.personas_evaluated.map(pid => {
+      const match = personaResults.find(result =>
+        result.persona === pid || `persona-${result.persona.replace(/\+/g, '-')}` === pid
+      );
+      return match ? match.persona : pid;
+    });
+  }
+
   const personaNameMap = buildPersonaNameMap(personaResults, journeyLog);
 
-  if (!ud.personas_evaluated && personaResults.length > 0) {
-    ud.personas_evaluated = [...new Set(personaResults.map(r => r.persona).filter(Boolean))];
+  // Partial usability failures can leave valid persona-results.json while the
+  // journey log has no usable persona list. Merge both sources so the report
+  // still renders the evidence that was captured before the failure.
+  const personaIds = [
+    ...(Array.isArray(ud.personas_evaluated) ? ud.personas_evaluated : []),
+    ...personaResults.map(result => result.persona).filter(Boolean),
+  ];
+  if (personaIds.length > 0) {
+    ud.personas_evaluated = [...new Set(personaIds)];
   }
   if (!ud.personas_evaluated && fs.existsSync(screenshotsDir)) {
     const ssFiles = fs.readdirSync(screenshotsDir).filter(f => f.startsWith('persona-') && f.endsWith('.png'));
@@ -1106,7 +1159,7 @@ function buildPersonaWalkthroughData() {
   const { personaResults, ud, tasksDefined, screenshotsByPersona, journeyLog, personaNameMap } = loadPersonaData(absArtifacts, screenshotsDir);
   const consistencyReport = readJsonOr(path.join(absArtifacts, 'consistency-report.json'), null);
 
-  if (!ud || !ud.personas_evaluated) return '{}';
+  if (!ud || !Array.isArray(ud.personas_evaluated) || ud.personas_evaluated.length === 0) return '{}';
 
   const overlays = ud.persona_overlays || [];
   const traces = (ud.think_aloud || {}).traces || [];
@@ -1185,6 +1238,24 @@ function buildPersonaWalkthroughData() {
               confusionEvents: []
             });
           }
+        }
+
+        // Browser capture records every observed step, while the model result
+        // may select only its final evidence image. Keep the full capture set
+        // visible in the report instead of silently dropping those screenshots.
+        let referencedCount = steps.filter(step => step.screenshot).length;
+        for (const screenshot of screenshots.slice(referencedCount)) {
+          steps.push({
+            step: steps.length + 1,
+            see: '',
+            thinking: '',
+            trying: 'Captured browser evidence',
+            confidence: '',
+            patience: '100',
+            screenshot: screenshotSrc(screenshot.file),
+            confusionEvents: [],
+          });
+          referencedCount += 1;
         }
 
         const taskDef = tasksDefined[taskIdx - 1] || {};
@@ -1760,8 +1831,17 @@ function buildCodeDeltasHtml() {
 }
 
 function buildHeroStatus(csvRows, passCount, failCount, flaggedCount, extractState, iterationLog) {
+  const externalEvidenceRows = csvRows.filter(row =>
+    row.tier === 'T4' && (row.human_action || '').startsWith('Confirm the design-process deliverable outside the prototype:')
+  );
+  const prototypeRows = csvRows.filter(row => !externalEvidenceRows.includes(row));
+  const prototypePassCount = prototypeRows.filter(row => (row.verdict || '').toUpperCase() === 'PASS').length;
+  const prototypeFailCount = prototypeRows.filter(row => (row.verdict || '').toUpperCase() === 'FAIL').length;
+  const prototypeFlaggedCount = prototypeRows.filter(row => (row.verdict || '').toUpperCase() === 'FLAGGED').length;
+  const allCriteriaNeedExternalEvidence = csvRows.length > 0 && prototypeRows.length === 0;
+  const scoredTotal = prototypePassCount + prototypeFailCount + prototypeFlaggedCount;
   const totalCount = passCount + failCount + flaggedCount;
-  const passPercent = totalCount > 0 ? Math.round((passCount / totalCount) * 100) : 0;
+  const passPercent = scoredTotal > 0 ? Math.round((prototypePassCount / scoredTotal) * 100) : 0;
 
   const delta = normalizeDelta(readJsonOr(path.join(absArtifacts, 'mr-delta.json'), null));
   const filesChanged = delta ? (delta.total_files_changed || 0) : '—';
@@ -1769,14 +1849,14 @@ function buildHeroStatus(csvRows, passCount, failCount, flaggedCount, extractSta
   const iterCount = iterationLog && iterationLog.iterations ? iterationLog.iterations.length : 0;
   const totalFixed = iterationLog ? (iterationLog.total_criteria_fixed || 0) : 0;
 
-  const hasProblems = failCount > 0 || flaggedCount > 0;
-  const heroColor = hasProblems ? (failCount > 0 ? 'var(--status-danger)' : 'var(--status-warning)') : 'var(--status-success)';
+  const hasProblems = prototypeFailCount > 0 || prototypeFlaggedCount > 0;
+  const heroColor = allCriteriaNeedExternalEvidence ? 'var(--status-warning)' : (hasProblems ? (prototypeFailCount > 0 ? 'var(--status-danger)' : 'var(--status-warning)') : 'var(--status-success)');
 
   let html = '<section class="status-section">';
 
   html += `<div class="status-hero">`;
-  html += `<div class="status-hero-value" style="color:${heroColor}">${passCount}/${totalCount}</div>`;
-  html += '<div class="status-hero-label">acceptance criteria passing</div>';
+  html += `<div class="status-hero-value" style="color:${heroColor}">${allCriteriaNeedExternalEvidence ? externalEvidenceRows.length : `${prototypePassCount}/${scoredTotal}`}</div>`;
+  html += `<div class="status-hero-label">${allCriteriaNeedExternalEvidence ? 'Jira criteria need external evidence' : 'prototype-testable criteria passing'}</div>`;
   html += '<div class="status-bar">';
   html += `<div class="status-bar-fill" style="width:${passPercent}%;background:${heroColor}"></div>`;
   html += '</div>';
@@ -1793,9 +1873,13 @@ function buildHeroStatus(csvRows, passCount, failCount, flaggedCount, extractSta
     html += `<div class="status-hero-meta">${metaParts.join(' · ')}</div>`;
   }
 
+  if (externalEvidenceRows.length) {
+    html += `<p class="small muted" style="margin:0.5rem 0 0">${externalEvidenceRows.length} Jira ${externalEvidenceRows.length === 1 ? 'criterion is' : 'criteria are'} design-process or handoff evidence, not claims a rendered prototype can prove. They are not counted as prototype pass/fail.</p>`;
+  }
+
   // Inline problem callouts within the hero card
-  if (failCount > 0) {
-    const failItems = csvRows.filter(r => (r.verdict || '').toUpperCase() === 'FAIL');
+  if (prototypeFailCount > 0) {
+    const failItems = prototypeRows.filter(r => (r.verdict || '').toUpperCase() === 'FAIL');
     html += '<div class="status-hero-issues">';
     for (const f of failItems) {
       const acId = f.criterion_id || '?';
@@ -1804,8 +1888,8 @@ function buildHeroStatus(csvRows, passCount, failCount, flaggedCount, extractSta
     }
     html += '</div>';
   }
-  if (flaggedCount > 0) {
-    const flagItems = csvRows.filter(r => (r.verdict || '').toUpperCase() === 'FLAGGED');
+  if (prototypeFlaggedCount > 0) {
+    const flagItems = prototypeRows.filter(r => (r.verdict || '').toUpperCase() === 'FLAGGED');
     html += '<div class="status-hero-issues">';
     for (const f of flagItems) {
       const acId = f.criterion_id || '?';
@@ -1814,17 +1898,20 @@ function buildHeroStatus(csvRows, passCount, failCount, flaggedCount, extractSta
     }
     html += '</div>';
   }
-  html += '<div class="status-hero-legend" style="font-size:0.65rem;color:var(--text-secondary);margin-top:0.5rem;font-style:italic">AC = Acceptance Criteria (from Jira ticket)</div>';
+  html += '<div class="status-hero-legend" style="font-size:0.65rem;color:var(--text-secondary);margin-top:0.5rem;font-style:italic">AC = Acceptance Criteria imported from Jira. External-evidence ACs are tracked separately from prototype findings.</div>';
 
   html += '</div>';
 
   // Action CTAs
   let primaryText, primaryAction;
-  if (flaggedCount > 0) {
-    primaryText = `Review ${flaggedCount} flagged item${flaggedCount !== 1 ? 's' : ''}`;
+  if (externalEvidenceRows.length && !prototypeFlaggedCount && !prototypeFailCount) {
+    primaryText = `Review ${externalEvidenceRows.length} external-evidence item${externalEvidenceRows.length !== 1 ? 's' : ''}`;
+    primaryAction = "scrollToSection('ac-results')";
+  } else if (prototypeFlaggedCount > 0) {
+    primaryText = `Review ${prototypeFlaggedCount} flagged item${prototypeFlaggedCount !== 1 ? 's' : ''}`;
     primaryAction = "openReviewPanel()";
-  } else if (failCount > 0) {
-    primaryText = `View ${failCount} failure${failCount !== 1 ? 's' : ''}`;
+  } else if (prototypeFailCount > 0) {
+    primaryText = `View ${prototypeFailCount} failure${prototypeFailCount !== 1 ? 's' : ''}`;
     primaryAction = "scrollToSection('ac-results')";
   } else {
     primaryText = 'View conclusion';
@@ -2182,7 +2269,7 @@ function buildSmartComplianceTab(reason) {
   html += `<div class="card card-flat" style="margin:0 0 1.5rem">`;
   html += `<p style="font-weight:700;margin:0 0 0.25rem;color:var(--status-warning)">Automated Compliance Check Not Available</p>`;
   html += `<p class="small" style="margin:0">${escapeHtml(reason || 'consistency-checker not bootstrapped')}</p>`;
-  html += `<p class="small muted" style="margin:0.5rem 0 0">Set <code>context_repos.consistency_checker</code> in the product overlay (or <code>CONSISTENCY_CHECKER_REPO</code>), then re-run <code>bootstrap-consistency-checker.sh</code>.</p>`;
+  html += `<p class="small muted" style="margin:0.5rem 0 0">Provide workspace guidelines or an explicit guideline source for compliance review. Internal peer consistency is reviewed separately and does not establish product-policy compliance.</p>`;
   html += `</div>`;
 
   const componentMap = readJsonOr(path.join(absArtifacts, 'component-map.json'), null);
@@ -2190,17 +2277,17 @@ function buildSmartComplianceTab(reason) {
 
   html += `<h3 style="font-size:0.875rem;margin:1.25rem 0 0.35rem">Checks performed when enabled</h3>`;
   html += `<ul class="small muted" style="margin:0 0 1rem;padding-left:1.25rem;line-height:1.8">`;
-  html += `<li>Hardcoded color values vs <code>--pf-t-*</code> design tokens</li>`;
-  html += `<li>Custom spacing vs PatternFly spacing tokens</li>`;
+  html += `<li>Colors and spacing against explicitly supplied design-system conventions</li>`;
+  html += `<li>Hierarchy and interaction patterns against comparable workspace areas</li>`;
   html += `<li>Icon imports, sizing, and accessibility labels</li>`;
-  html += `<li>Deprecated PF class names and incorrect component nesting</li>`;
+  html += `<li>Component usage and nesting against the selected library and rules</li>`;
   html += `<li>Missing aria attributes, roles, and focus management</li>`;
-  html += `<li>Typography vs PF type scale</li>`;
+  html += `<li>Typography against the supplied guidelines or established peer context</li>`;
   html += `</ul>`;
 
   if (componentMap && componentMap.components && componentMap.components.length > 0) {
-    html += `<h3 style="font-size:0.9375rem;margin:1.5rem 0 0.5rem">Detected PatternFly Components</h3>`;
-    html += `<p class="small muted" style="margin:0 0 0.75rem">These PF components were identified in the prototype and would be checked for guideline compliance:</p>`;
+    html += `<h3 style="font-size:0.9375rem;margin:1.5rem 0 0.5rem">Detected Components</h3>`;
+    html += `<p class="small muted" style="margin:0 0 0.75rem">These components were identified in the prototype; compliance depends on the selected guideline sources:</p>`;
     html += `<div style="display:flex;flex-wrap:wrap;gap:0.35rem;margin-bottom:1rem">`;
     const seen = new Set();
     for (const c of componentMap.components) {
@@ -2220,7 +2307,7 @@ function buildSmartComplianceTab(reason) {
     if (screenshotCount.size > 0) {
       html += `<div class="card card-compact" style="margin:1rem 0">`;
       html += `<p class="small" style="margin:0"><strong>${screenshotCount.size} screenshots captured</strong> during persona walkthroughs. `;
-      html += `When enabled, the visual mode compares these against PF layout guidelines, spacing, and color usage.</p>`;
+      html += `Visual review compares actual evidence against supplied rules and comparable workspace screens.</p>`;
       html += `</div>`;
     }
   }
@@ -2312,15 +2399,26 @@ function buildChangesTabHtml() {
 
 function buildConsistencyHtml() {
   const report = readJsonOr(path.join(absArtifacts, 'consistency-report.json'), null);
-  if (!report) return buildSmartComplianceTab();
+  const internal = readJsonOr(path.join(absArtifacts, 'internal-consistency-review.json'), null);
+  const internalHtml = internal
+    ? `<div class="card card-flat"><p><strong>Internal consistency: ${escapeHtml(internal.coverage || 'not evaluated')}</strong></p><p>${internal.findings?.length || 0} peer-comparison review candidates; these are not authoritative policy violations.</p><ul>${(internal.findings || []).map(finding => `<li><code>${escapeHtml(finding.file)}:${escapeHtml(String(finding.line))}</code> — ${escapeHtml(finding.description)} ${escapeHtml(finding.suggestion)}</li>`).join('')}</ul></div>`
+    : '';
+  const reviews = ['consistency-source-ai.json', 'consistency-visual-ai.json']
+    .map(name => readJsonOr(path.join(absArtifacts, name), null)).filter(review => review?.status === 'completed');
+  const guidelineHtml = reviews.length
+    ? `<div class="card card-flat"><p><strong>Guideline compliance: model-assisted review completed</strong></p>${reviews.map(review => `<p class="small">${escapeHtml(review.mode)} review — ${review.findings?.length || 0} findings. Sources: ${(review.guideline_context?.sources || []).map(source => escapeHtml(source.location)).join(', ')}</p><ul>${(review.findings || []).map(finding => `<li>${escapeHtml(finding.guideline_title)} — ${escapeHtml(finding.description)} ${escapeHtml(finding.suggestion)}</li>`).join('')}</ul>`).join('')}</div>`
+    : '';
+  if (!report) return internalHtml + guidelineHtml + buildSmartComplianceTab();
 
   if (report.skipped) {
     return buildSmartComplianceTab(report.reason);
   }
 
   if (!report.source_mode?.ran && !report.visual_mode?.ran) {
-    return buildSmartComplianceTab(
-      report.source_mode?.reason || 'No files in scope — consistency checks did not run'
+    return internalHtml + guidelineHtml + buildSmartComplianceTab(
+      report.source_mode?.reason || (reviews.length
+        ? 'Automated checks not evaluated; validated model-assisted guideline review is shown separately'
+        : 'Guideline compliance not evaluated — no approved automated checks or guideline review ran')
     );
   }
 
@@ -2329,12 +2427,19 @@ function buildConsistencyHtml() {
   if (!summary.total_guidelines_checked && summary.violations != null) {
     summary.total_guidelines_checked = (summary.violations || 0) + (summary.warnings || 0) + (summary.passes || 0);
   }
-  const violations = (srcMode && Array.isArray(srcMode.violations) && srcMode.violations.length > 0)
+  const sourceFindings = (srcMode && Array.isArray(srcMode.violations) && srcMode.violations.length > 0)
     ? srcMode.violations
     : (srcMode && Array.isArray(srcMode.findings))
       ? srcMode.findings.filter(f => f.severity === 'error' || f.severity === 'violation')
       : (Array.isArray(report.findings) ? report.findings : []);
-  let html = '';
+  const visualFindings = report.visual_mode && Array.isArray(report.visual_mode.findings)
+    ? report.visual_mode.findings
+    : [];
+  const violations = [...sourceFindings, ...visualFindings];
+  let html = internalHtml + guidelineHtml;
+  if (report.guideline_context?.sources?.length) {
+    html += `<p class="small muted">Guideline sources: ${report.guideline_context.sources.map(source => escapeHtml(source.location)).join(', ')}</p>`;
+  }
 
   // Summary stats
   html += `<div class="consistency-summary">`;
@@ -2355,7 +2460,7 @@ function buildConsistencyHtml() {
     const k = v.guideline_id;
     if (!byGuideline[k]) byGuideline[k] = { ...v, count: 0, files: new Set() };
     byGuideline[k].count++;
-    byGuideline[k].files.add(v.file);
+    byGuideline[k].files.add(v.file || v.screenshot || 'visual evidence');
   }
 
   const allQuickFixes = Object.values(byGuideline)
@@ -2479,6 +2584,23 @@ function buildConsistencyHtml() {
   return html;
 }
 
+function buildHeuristicHtml() {
+  const report = readJsonOr(path.join(absArtifacts, 'heuristic-evaluation.json'), null);
+  if (!report) return '';
+  const findings = Array.isArray(report.findings) ? report.findings : [];
+  let html = `<hr style="margin:2rem 0;border:0;border-top:1px solid var(--border)"><h2>Heuristic Evaluation</h2>`;
+  html += `<p class="small muted">Unreviewed draft from three AI-simulated evaluator lenses using Nielsen's 10. Suggested severities require researcher review. Accessibility was not evaluated.</p>`;
+  html += `<p class="small"><a href="heuristic-evaluation.html">Open the self-contained heuristic report &rarr;</a></p>`;
+  if (!findings.length) return html + `<p class="small muted">No heuristic violations were identified in the supplied evidence.</p>`;
+  for (const finding of findings) {
+    html += `<div class="consistency-finding consistency-finding-warning">`;
+    html += `<div class="consistency-finding-head"><strong style="font-size:0.8125rem">${escapeHtml(finding.id)}. ${escapeHtml(finding.title)}</strong><span class="delta-tag delta-tag-high">${escapeHtml(finding.suggested_severity || 'unrated')}</span></div>`;
+    html += `<p class="consistency-guideline">${escapeHtml(finding.location || '')} · ${escapeHtml(finding.agreement || '')}</p>`;
+    html += `<p class="small">${escapeHtml(finding.observation || '')}</p></div>`;
+  }
+  return html;
+}
+
 
 
 
@@ -2505,13 +2627,18 @@ function buildFixHistoryNarrative() {
 
 function buildComplianceNarrative() {
   const cr = readJsonOr(path.join(absArtifacts, 'consistency-report.json'), null);
+  if (['consistency-source-ai.json', 'consistency-visual-ai.json'].some(name =>
+    readJsonOr(path.join(absArtifacts, name), null)?.status === 'completed')) {
+    return `<p class="appendix-narrative">Model-assisted review against supplied guidelines completed. Automated checks and internal peer consistency have separate coverage labels below.</p>`;
+  }
   if (!cr || cr.skipped) {
     return `<p class="appendix-narrative">Automated compliance checks are not yet configured for this prototype. The section below describes what would be checked and shows detected PF components.</p>`;
   }
   const violations = (cr.source_mode && cr.source_mode.violations) ? cr.source_mode.violations.length : 0;
   const checked = (cr.summary && cr.summary.total_guidelines_checked) ? cr.summary.total_guidelines_checked : 0;
-  if (!violations) return `<p class="appendix-narrative">All ${checked} PatternFly guidelines checked — no violations found.</p>`;
-  return `<p class="appendix-narrative">${violations} PatternFly guideline violation${violations !== 1 ? 's' : ''} found across ${checked} guidelines checked.</p>`;
+  if (!checked && !cr.visual_mode?.ran) return `<p class="appendix-narrative">Guideline compliance not evaluated. Internal consistency uses a separate, evidence-backed peer review.</p>`;
+  if (!violations) return `<p class="appendix-narrative">${checked} supplied guideline checks ran with no source violations found; this does not cover unreviewed rules or internal consistency.</p>`;
+  return `<p class="appendix-narrative">${violations} supplied-guideline violation${violations !== 1 ? 's' : ''} found across ${checked} guideline checks.</p>`;
 }
 
 // ---------------------------------------------------------------------------
@@ -3098,13 +3225,19 @@ function buildTokens(opts = {}) {
       criterionHtml += `<details class="ac-details"><summary class="ac-expand">Expand</summary><p class="ac-full-text">${escapeHtml(rawText)}</p></details>`;
     }
 
-    const verdict = badgeHtml(r.verdict, r.criterion_id);
+    const requiresExternalEvidence = r.tier === 'T4' && (r.human_action || '').startsWith('Confirm the design-process deliverable outside the prototype:');
+    const verdict = requiresExternalEvidence
+      ? '<span class="badge badge-flagged" title="This is design-process or handoff evidence, not a prototype failure">External evidence</span>'
+      : badgeHtml(r.verdict, r.criterion_id);
 
     const evidenceRaw = r.evidence || '';
     const hasScreenshot = /screenshot/i.test(evidenceRaw) || /\.png/i.test(evidenceRaw) || /\.jpg/i.test(evidenceRaw);
     let evidenceHtml = `<a href="#" class="ac-view-link" onclick="openEvidenceViewer('${escapeHtml(r.criterion_id)}');return false">View evidence →</a>`;
     if (!hasScreenshot) {
       evidenceHtml += `<span style="display:inline-flex;align-items:center;gap:0.25rem;color:var(--status-warning);font-size:0.7rem;margin-left:0.5rem" title="No screenshot evidence linked for this criterion">${SVG_ICON.warningSmall} No visual evidence</span>`;
+    }
+    if (requiresExternalEvidence) {
+      evidenceHtml += `<span style="display:inline-flex;align-items:center;gap:0.25rem;color:var(--text-secondary);font-size:0.7rem;margin-left:0.5rem">Not testable from rendered prototype</span>`;
     }
     if (evidenceText) evidenceHtml += `<span class="ac-evidence-text">${escapeHtml(evidenceText)}</span>`;
 
@@ -3846,9 +3979,21 @@ function buildTokens(opts = {}) {
   // ---- Conclusion (generated from results) ----
   const personasEvaluated = ud ? (ud.personas_evaluated || []) : [];
   let conclusionHtml = '';
-  if (passCount + failCount + flaggedCount > 0) {
-    const total = passCount + failCount + flaggedCount;
-    const passRate = Math.round((passCount / total) * 100);
+  const externalEvidenceRows = csvRows.filter(row =>
+    row.tier === 'T4' && (row.human_action || '').startsWith('Confirm the design-process deliverable outside the prototype:')
+  );
+  const prototypeRows = csvRows.filter(row => !externalEvidenceRows.includes(row));
+  const prototypePassCount = prototypeRows.filter(row => (row.verdict || '').toUpperCase() === 'PASS').length;
+  const prototypeFailCount = prototypeRows.filter(row => (row.verdict || '').toUpperCase() === 'FAIL').length;
+  const prototypeFlaggedCount = prototypeRows.filter(row => (row.verdict || '').toUpperCase() === 'FLAGGED').length;
+  const allCriteriaNeedExternalEvidence = csvRows.length > 0 && prototypeRows.length === 0;
+
+  if (allCriteriaNeedExternalEvidence) {
+    conclusionHtml += `<p style="font-size:0.875rem;color:var(--text-secondary);margin:0 0 0.75rem"><strong style="color:var(--text)">${externalEvidenceRows.length} Jira acceptance criteria were imported correctly from the linked story.</strong> Each describes design exploration, feedback, engineering validation, a Figma handoff, or competitive research. Those are external deliverables, so this prototype cannot pass or fail them.</p>`;
+    conclusionHtml += `<p style="font-size:0.875rem;color:var(--text-secondary);margin:0 0 0.75rem">Prototype findings are reported separately through the live usability walkthrough and local consistency checker. Collect links or evidence for these Jira deliverables before closing the story.</p>`;
+  } else if (passCount + failCount + flaggedCount > 0) {
+    const total = prototypePassCount + prototypeFailCount + prototypeFlaggedCount;
+    const passRate = total ? Math.round((prototypePassCount / total) * 100) : 0;
     const iterLog = readJsonOr(path.join(absArtifacts, 'iteration-log.json'), null);
     const iterations = iterLog ? (iterLog.iterations || []).length : 1;
     const fixCount = iterLog ? iterLog.total_criteria_fixed || 0 : 0;
@@ -3857,11 +4002,11 @@ function buildTokens(opts = {}) {
     const extractState = readJsonOr(path.join(absArtifacts, 'extract-state.json'), null);
 
     // Score bar with fraction (Decision 7: Fraction with Visual Bar)
-    const barPct = Math.round((passCount / total) * 100);
+    const barPct = total ? Math.round((prototypePassCount / total) * 100) : 0;
     const barColor = barPct >= 70 ? 'var(--status-success)' : barPct >= 40 ? 'var(--status-warning)' : 'var(--status-danger)';
 
     conclusionHtml += `<div style="display:flex;align-items:center;gap:1.25rem;margin-bottom:1rem">`;
-    conclusionHtml += `<div style="font-family:var(--font-heading);font-size:1.75rem;font-weight:700;color:${barColor};line-height:1">${passCount}/${total}</div>`;
+    conclusionHtml += `<div style="font-family:var(--font-heading);font-size:1.75rem;font-weight:700;color:${barColor};line-height:1">${prototypePassCount}/${total}</div>`;
     conclusionHtml += `<div style="flex:1;max-width:16rem"><div style="font-size:0.7rem;color:var(--text-secondary);font-family:var(--font-mono);margin-bottom:0.25rem">Criteria passing (${barPct}%)</div><div style="height:6px;background:var(--border);border-radius:3px;overflow:hidden"><div style="width:${barPct}%;height:100%;background:${barColor};border-radius:3px;transition:width 0.4s ease"></div></div></div>`;
     if (concUsabilityRaw != null) {
       const scoreNum = typeof concUsabilityRaw === 'number' ? concUsabilityRaw : parseFloat(String(concUsabilityRaw));
@@ -3873,7 +4018,7 @@ function buildTokens(opts = {}) {
     conclusionHtml += `</div>`;
 
     conclusionHtml += `<p style="font-size:0.875rem;color:var(--text-secondary);margin:0 0 0.75rem">`;
-    conclusionHtml += `Evaluated <strong style="color:var(--text)">${total} acceptance criteria</strong> from the Jira ticket`;
+    conclusionHtml += `Evaluated <strong style="color:var(--text)">${total} prototype-testable acceptance criteria</strong> from the Jira ticket`;
     if (extractState && extractState.rfe_key) conclusionHtml += ` (linked from RFE ${extractState.rfe_key})`;
     conclusionHtml += `.`;
     if (iterations > 1) conclusionHtml += ` Pipeline ran <strong style="color:var(--text)">${iterations} iterations</strong>, fixing ${fixCount} initially-failing criteria.`;
@@ -4062,6 +4207,7 @@ function buildTokens(opts = {}) {
     '{{EVIDENCE_VIEWER_DATA}}': JSON.stringify(buildEvidenceViewerData()),
     '{{FIXES_APPLIED_HTML}}': buildFixesAppliedHtml(),
     '{{CONSISTENCY_HTML}}': buildConsistencyHtml(),
+    '{{HEURISTIC_HTML}}': buildHeuristicHtml(),
     '{{CHANGES_TAB_HTML}}': buildChangesTabHtml(),
     '{{FIX_HISTORY_NARRATIVE}}': buildFixHistoryNarrative(),
     '{{COMPLIANCE_NARRATIVE}}': buildComplianceNarrative(),
@@ -4235,6 +4381,7 @@ function renderTemplate(tokens) {
 }
 
 function main() {
+  const renderStartMs = Date.now();
   if (!fs.existsSync(templatePath)) {
     console.error(`Template not found: ${templatePath}`);
     process.exit(1);
@@ -4248,16 +4395,34 @@ function main() {
     if (normalized.usability_dimensions) {
       normalizeUsabilityDimensions(normalized.usability_dimensions);
     }
-    fs.writeFileSync(jlPath, JSON.stringify(normalized, null, 2), 'utf8');
+    if (reportInputs.mode === 'legacy') {
+      fs.writeFileSync(jlPath, JSON.stringify(normalized, null, 2), 'utf8');
+    }
   }
 
   const tokens = buildTokens();
-  const template = renderTemplate(tokens);
+  let template = renderTemplate(tokens);
+  const costSection = evaluationCostSection(absArtifacts);
+  if (costSection && template.includes('</body>')) template = template.replace('</body>', `${costSection}</body>`);
 
   const outPath = path.join(absArtifacts, 'evaluation-report.html');
+  const outputBytes = Buffer.byteLength(template, 'utf8');
   fs.writeFileSync(outPath, template, 'utf8');
   console.log(`✓ Report written to ${outPath}`);
-  console.log(`  Size: ${(Buffer.byteLength(template) / 1024).toFixed(0)} KB`);
+  console.log(`  Size: ${(outputBytes / 1024).toFixed(0)} KB`);
+
+  const renderMetrics = {
+    phase: 'render-report.js',
+    input_mode: reportInputs.mode,
+    duration_ms: Date.now() - renderStartMs,
+    output_bytes: outputBytes,
+    llm_cost_usd: 0,
+  };
+  fs.writeFileSync(
+    path.join(absArtifacts, 'render-metrics.json'),
+    JSON.stringify(renderMetrics, null, 2),
+    'utf8'
+  );
 
   // Write agent-readable summary JSON
   const summary = buildSummaryJson();
@@ -4273,7 +4438,11 @@ function main() {
   const csvFlaggedCount = csvLines.filter(l => l.includes(',FLAGGED,')).length;
   const csvTotal = csvPassCount + csvFailCount + csvFlaggedCount;
   const heroMatch = template.match(/(\d+)\/(\d+)/);
-  if (heroMatch && csvTotal > 0) {
+  const acceptanceRows = parseCsv(csvRaw);
+  const allExternalEvidence = acceptanceRows.length > 0 && acceptanceRows.every(row =>
+    row.tier === 'T4' && (row.human_action || '').startsWith('Confirm the design-process deliverable outside the prototype:')
+  );
+  if (heroMatch && csvTotal > 0 && !allExternalEvidence) {
     const htmlPass = parseInt(heroMatch[1], 10);
     const htmlTotal = parseInt(heroMatch[2], 10);
     if (htmlPass !== csvPassCount || htmlTotal !== csvTotal) {

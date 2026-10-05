@@ -77,6 +77,7 @@ Create UX prototypes from Jira tickets, Figma designs, or feature descriptions
 
 <table>
 <tr><th>Skill</th><th>Description</th><th>Eval</th></tr>
+<tr><td nowrap><code>uxd-consistency-check</code></td><td>Review edited prototype areas against workspace or supplied design guidelines and comparable components/pages.</td><td>stable</td></tr>
 <tr><td nowrap><code>uxd-prototype-create</code></td><td>Create or refine a UX prototype from a Jira ticket, Figma design, feature description, or rough idea.</td><td>stable</td></tr>
 <tr><td nowrap><code>uxd-prototype-evaluate</code></td><td>Evaluate a running prototype against a Jira ticket's acceptance criteria, automatically fix what fails, then run persona-based usability walkthroughs.</td><td>stable</td></tr>
 <tr><td nowrap><code>uxd-prototype-export</code></td><td>Export a prototype page or journey step as static HTML, a React component tree, or a PatternFly implementation spec, and install the Prototype Bar (Sources, Prototype|Eval, Scenario, Export).</td><td>stable</td></tr>
@@ -273,7 +274,7 @@ PatternFly team tools and skill incubation — issue triage, release management,
 
 **Eval coverage**
 
-- Consumer: 44/44 (100%)
+- Consumer: 45/45 (100%)
 - Workshop: 0/21 (0%)
 
 ---
@@ -289,6 +290,7 @@ Generated from skill frontmatter and section headings. Token cost is a relative 
 | `uxd-canvas-publish` | UXD practitioners | Input Source Required Export directory .artifacts/{ID}/export/ or --source Yes export-manifes... | Structured result | S |
 | `uxd-design-handoff` | UXD practitioners | Input Required Source Design artifact (prototype files, Figma screenshots, text description) ... | The handoff spec is written to a local file (markdown by default, JSON when --format=json). I... | M |
 | `uxd-figma-read` | UXD practitioners | Task context | Structured result | M |
+| `uxd-consistency-check` | UXD practitioners | $ARGUMENTS workspace <local-path> (required): the prototype to review. Ask if absent; never g... | Write in the consumer project, normally .artifacts/<KEY>/eval/: consistency-report.json: loca... | M |
 | `uxd-prototype-create` | UXD practitioners | Input Required Source What to prototype (Jira URL/key, Figma link, description, or idea) Yes ... | Written under .artifacts/{ID}/ in the consumer project (never ${CLAUDESKILLDIR}): Output Loca... | XL |
 | `uxd-prototype-evaluate` | UXD practitioners | Input Example Required Jira story key PROJ-298 Yes Prototype URL http://localhost:3000 Condit... | Per-key eval files under ${UXDPROJECTROOT}/.artifacts/<KEY>/eval/ (ARTIFACTSDIR): File Descri... | XL |
 | `uxd-prototype-export` | UXD practitioners | Input Required Source What to export (current page, journey batch, or install bar) Yes User; ... | Under .artifacts/{ID}/exports/ unless --out is set: Output Description index.html + export-ma... | L |
