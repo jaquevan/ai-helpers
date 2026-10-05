@@ -77,7 +77,7 @@ Create UX prototypes from Jira tickets, Figma designs, or feature descriptions
 
 <table>
 <tr><th>Skill</th><th>Description</th><th>Eval</th></tr>
-<tr><td nowrap><code>uxd-consistency-check</code></td><td>Check UX prototypes against bundled PatternFly consistency guidelines and produce actionable source and visual findings.</td><td>—</td></tr>
+<tr><td nowrap><code>uxd-consistency-check</code></td><td>Check UX prototypes against bundled PatternFly consistency guidelines and produce actionable source and visual findings.</td><td>stable</td></tr>
 <tr><td nowrap><code>uxd-prototype-create</code></td><td>Create or refine a UX prototype from a Jira ticket, Figma design, feature description, or rough idea.</td><td>stable</td></tr>
 <tr><td nowrap><code>uxd-prototype-evaluate</code></td><td>Evaluate a running prototype against a Jira ticket's acceptance criteria, automatically fix what fails, then run persona-based usability walkthroughs.</td><td>stable</td></tr>
 <tr><td nowrap><code>uxd-prototype-export</code></td><td>Export a prototype page or journey step as static HTML, a React component tree, or a PatternFly implementation spec, and install the Prototype Bar (Sources, Prototype|Eval, Scenario, Export).</td><td>stable</td></tr>
@@ -274,7 +274,7 @@ PatternFly team tools and skill incubation — issue triage, release management,
 
 **Eval coverage**
 
-- Consumer: 44/45 (97%)
+- Consumer: 45/45 (100%)
 - Workshop: 0/21 (0%)
 
 ---
