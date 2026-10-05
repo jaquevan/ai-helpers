@@ -28,6 +28,17 @@ bash scripts/preflight-check.sh
 
 The first example evaluates a reachable prototype and enables the workspace fix loop; `review` opens the existing report without rerunning the pipeline.
 
+### Prepare acceptance criteria first
+
+Review the Jira RFE or STRAT before supplying its link. Prefer observable
+Given/When/Then outcomes over “looks good,” “works as expected,” or “TBD.”
+Turn relevant meeting notes into structured criteria first, using Gemini Pro
+when available, rather than pasting an entire transcript into the evaluator.
+
+If budget is a concern, evaluate focused changes with `--max-iterations=1` or
+`--no-iterate`. See [Cost Savings & Best Practices](../../../../docs/prototype-cost-best-practices.md)
+for examples, model choice, context screenshots, and planning checkpoints.
+
 ## Setup
 
 From the repository root, install the evaluator dependencies and Chromium before the first browser evaluation:

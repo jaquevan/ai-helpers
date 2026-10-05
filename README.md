@@ -82,9 +82,6 @@ cp -R plugins/uxd-prototype/skills/uxd-prototype-create ~/.agents/skills/
 cp -R plugins/uxd-prototype/skills/uxd-prototype-evaluate ~/.agents/skills/
 cp -R plugins/uxd-prototype/skills/uxd-prototype-export ~/.agents/skills/
 cp -R plugins/uxd-prototype/skills/uxd-prototype-publish ~/.agents/skills/
-if [ -d plugins/uxd-prototype/skills/uxd-consistency-check ]; then
-  cp -R plugins/uxd-prototype/skills/uxd-consistency-check ~/.agents/skills/
-fi
 ```
 
 In Codex CLI or the IDE extension, use `/skills` to find skills or `$uxd-prototype-create` to invoke the prototype workflow. Evaluation and browser export need Node.js 18+, Python 3, and Playwright Chromium; see the [evaluator setup](plugins/uxd-prototype/skills/uxd-prototype-evaluate/README.md#prerequisites) and [export setup](plugins/uxd-prototype/skills/uxd-prototype-export/README.md#setup). For the full install, Jira/Figma connections, and first-run walkthrough, see the [Codex setup guide](docs/codex-setup.md), the [official Codex skills guide](https://developers.openai.com/codex/skills/), and [Chai Bot MCP setup](#chai-bot-uxd-persona).
@@ -174,6 +171,11 @@ Use Chai Bot when you need help with:
 - Troubleshooting skill setup or flags
 
 **Setup:** In Slack, open Chai Bot's **Home** tab, select **🔑 MCP Server Tokens**, and choose the **UXD** persona. The dialog provides the MCP server URL and setup instructions for your editor. VPN is required.
+
+## Cost Savings & Best Practices
+
+For model selection, focused context, acceptance criteria, and included versus
+metered tools, see [Cost Savings & Best Practices](docs/prototype-cost-best-practices.md).
 
 ## Contributing
 

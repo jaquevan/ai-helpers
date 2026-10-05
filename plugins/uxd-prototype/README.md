@@ -15,16 +15,6 @@ Use **create → evaluate → publish**, with **export** whenever you need captu
 | `/uxd-prototype:uxd-prototype-export` | HTML, React, PatternFly specs, and Prototype Bar installation | [Skill guide](skills/uxd-prototype-export/SKILL.md) · [Journey schema](skills/uxd-prototype-export/references/journeys-schema.md) · [Scenario schema](skills/uxd-prototype-export/references/scenarios-schema.md) |
 | `/uxd-prototype:uxd-prototype-publish` | Publish for review or deployment | [Skill guide](skills/uxd-prototype-publish/SKILL.md) |
 
-The companion functional change adds **`uxd-consistency-check`** for any product.
-It supplements workspace guidelines with explicit local/URL sources and always
-compares edited areas with relevant workspace peers. Without guidelines,
-internal review still runs; guideline compliance is **Not evaluated**. Peer-only
-findings are review candidates, not permission to automatically copy a convention.
-See its [skill guide](https://github.com/jaquevan/ai-helpers/blob/627f4331e7cdc2ff035a51698818dac643bfbb69/plugins/uxd-prototype/skills/uxd-consistency-check/SKILL.md)
-and [source contract](https://github.com/jaquevan/ai-helpers/blob/627f4331e7cdc2ff035a51698818dac643bfbb69/plugins/uxd-prototype/skills/uxd-consistency-check/references/project-context.md).
-Install that version before using the new checker; this documentation change
-does not itself add the skill.
-
 **After evaluation:** publish when acceptance criteria pass and usability is acceptable. Review FLAGGED items; refine and re-evaluate major failures.
 
 **Create onboarding:** the skill asks about the source, workspace/standalone choice, and design decisions before building. It asks about decision depth when relevant, then presents a **Prototype Plan** for confirmation.
@@ -41,10 +31,6 @@ cp -R plugins/uxd-prototype/skills/uxd-prototype-create ~/.agents/skills/
 cp -R plugins/uxd-prototype/skills/uxd-prototype-evaluate ~/.agents/skills/
 cp -R plugins/uxd-prototype/skills/uxd-prototype-export ~/.agents/skills/
 cp -R plugins/uxd-prototype/skills/uxd-prototype-publish ~/.agents/skills/
-# Available after installing the companion functional change:
-if [ -d plugins/uxd-prototype/skills/uxd-consistency-check ]; then
-  cp -R plugins/uxd-prototype/skills/uxd-consistency-check ~/.agents/skills/
-fi
 ```
 
 Repeat the copy to update installed skills, reviewing local customizations first.
@@ -59,14 +45,18 @@ See the [create setup](skills/uxd-prototype-create/README.md#setup),
 - **Evaluate:** Node.js ≥ 18, Python 3, and Playwright Chromium. Install with `npm install` and `npx playwright install chromium` in the skill directory.
 - **Export:** Node.js ≥ 18; Chromium for browser captures.
 - **Publish:** Git and authentication for the selected GitHub/GitLab/Vercel destination.
-- **Consistency (companion change):** Python 3 and a required prototype workspace; Playwright is optional for DOM capture.
 - Live Jira lookup requires an authenticated Atlassian MCP. Copying files does not transfer MCP connections or credentials.
 
-## Best Practices & Cost Management
+## Cost Savings & Best Practices
 
-- Use the host assistant's configured model; per-phase settings are optional when supported. No particular provider or spend cap is imposed by the normal conversational workflow.
-- Write clear acceptance criteria and keep iterations focused. `--max-iterations=1` or `--no-iterate` can reduce repeated work.
-- Product guidelines live in the product's `.design/product/design-guidelines` directory. Explicit `--guidelines` sources supplement them; conflicts require resolution.
-- Compare peers critically: an existing convention can be poor or outdated, and an intentional improvement is not a violation.
+- **Review Jira RFE/STRAT criteria first:** use specific, testable outcomes. Vague or subjective criteria and full meeting-note dumps can create unnecessary evaluation loops. Gemini Pro can help structure notes before evaluation.
+- **Iterate small:** use focused changes and optional `--max-iterations=1` or `--no-iterate` controls instead of large repeated runs.
+- **Choose models by total task cost:** start with GPT-6 Luna at low/medium effort for easy-to-check work, GPT-6.1 Sol at medium effort for bounded judgment, and GPT-6.1 Sol at high effort for planning or multi-step work. Reserve Astra for budgeted, very complex tasks.
+- **Keep context focused:** one goal per chat, targeted files/sections, and only the authenticated MCP services needed for that goal.
+- **Plan and checkpoint:** agree on scope and stopping conditions, review progress, and summarize context for a fresh handoff when needed.
+- **Use included tooling where appropriate:** Gemini/Workspace and Rovo/Atlassian can cover research and summarization before a metered agentic run.
 
-For cost examples and setup tips, see the [uxd-prototype skills cost report](https://docs.google.com/document/d/1pLT1_tMHozWsPI-C2jLNLd5xSSUteldoDWzU5x4VZNA/edit?tab=t.0). Actual costs depend on model and scope.
+See the [full cost-saving guide](../../docs/prototype-cost-best-practices.md) for
+criteria examples, model/effort starting points, context and MCP screenshots,
+plan-mode guidance, and the included-versus-metered tooling comparison. For
+setup help, visit **RHAI UXD AI Office Hours** or **`#forum-rhai-uxd-ai-enablement`**.

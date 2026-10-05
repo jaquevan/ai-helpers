@@ -25,17 +25,10 @@ cp -R plugins/uxd-prototype/skills/uxd-prototype-create ~/.agents/skills/
 cp -R plugins/uxd-prototype/skills/uxd-prototype-evaluate ~/.agents/skills/
 cp -R plugins/uxd-prototype/skills/uxd-prototype-export ~/.agents/skills/
 cp -R plugins/uxd-prototype/skills/uxd-prototype-publish ~/.agents/skills/
-if [ -d plugins/uxd-prototype/skills/uxd-consistency-check ]; then
-  cp -R plugins/uxd-prototype/skills/uxd-consistency-check ~/.agents/skills/
-fi
 ```
 
 For a project-local installation, replace `~/.agents/skills/` with `.agents/skills/`.
-The standalone consistency checker is introduced by the companion functional
-change; see its [workspace/source contract](https://github.com/jaquevan/ai-helpers/blob/627f4331e7cdc2ff035a51698818dac643bfbb69/plugins/uxd-prototype/skills/uxd-consistency-check/SKILL.md).
-Product rules come from the workspace's `.design/product/design-guidelines` plus
-explicit local/URL supplements. With no rules, peer review still works and
-guideline compliance remains not evaluated. See the [Codex skills guide](https://developers.openai.com/codex/skills/).
+See the [Codex skills guide](https://developers.openai.com/codex/skills/) for supported locations.
 
 Some optional skill configuration and reference files contain `YOUR_*` example values. Replace those only in your local copy when configuring the matching integration; do not commit credentials. The four core prototype `SKILL.md` files do not require replacing generic input examples such as `{ID}` or `<URL>`.
 
@@ -52,6 +45,9 @@ Invocation differs by assistant: Claude Code and Cursor commonly use plugin-qual
 - **Jira:** configure an authenticated Atlassian MCP for direct issue lookup. If MCP is unavailable, provide the ticket details yourself or configure the REST fallback with `JIRA_SERVER`, `JIRA_USER`, and `JIRA_TOKEN` in your local environment. Never put tokens in a prompt, skill file, or repository.
 - **Figma:** connect an approved Figma MCP when the workflow needs to inspect design files directly, or provide an accessible Figma URL and any required screenshots/assets.
 - **Publishing:** connect only the GitHub, GitLab, or Vercel account needed for your chosen destination. See [publish setup](../plugins/uxd-prototype/skills/uxd-prototype-publish/README.md#setup).
+
+Before a run, turn off MCP servers unrelated to the goal and verify that the
+required ones are authenticated. See the [MCP controls example](prototype-cost-best-practices.md#provide-targeted-context-and-tools).
 
 For Chai Bot's UXD persona MCP setup, see [Chai Bot (UXD Persona)](../README.md#chai-bot-uxd-persona). VPN is required.
 
@@ -74,9 +70,14 @@ For live Jira lookup, connect Atlassian MCP first. Without it, provide the issue
 
 Use your existing migration prompt to inventory the current setup, then verify the result against this guide. Copying complete skill folders transfers skill instructions and bundled scripts, references, templates, and configuration. It does **not** transfer MCP connections, credentials, editor permissions, local settings, or other assistant-specific integrations; configure those separately in Codex. Review customized skill files before copying so local changes are not overwritten.
 
-## Tips for managing costs
+## Cost savings and model choice
 
-- Use `--no-iterate` for a quick evaluation pass without the Phase A fix loop, and `--no-report` when a full report is not needed. These are optional safeguards, not required setup steps; see the [evaluator flags](../plugins/uxd-prototype/skills/uxd-prototype-evaluate/SKILL.md#flags).
-- A full create + evaluate + publish workflow is estimated at **about $6** as a planning figure. Actual cost varies with scope, iterations, provider, and model. Review any estimate and obtain required approval before paid work.
-- A dedicated cost guide is planned; it will be linked here once `docs/cost-guide.md` is available.
-- Keep the **$300/month per-associate budget** in mind and ask the AI Budget Help Slack bot about access or budget policy.
+- Review Jira acceptance criteria before evaluation; use clear, observable outcomes instead of broad goals or full meeting transcripts.
+- Use focused changes and optional `--max-iterations=1` / `--no-iterate` controls. Use `--no-report` when a full report is not needed; see the [evaluator flags](../plugins/uxd-prototype/skills/uxd-prototype-evaluate/SKILL.md#flags).
+- Choose the latest approved OpenAI model appropriate to the task. A more capable model can be cheaper overall when it finishes in fewer turns; effort and context size also affect cost.
+- If GPT-6/6.1 options are missing, update Codex or restart the harness. Ask **RHAI UXD AI Office Hours** or **`#forum-rhai-uxd-ai-enablement`** for help.
+- Watch the usage indicator near Codex's model selector; hover for context details. Keep one goal per chat and use plan checkpoints for broad work.
+- Follow the current team budget and access policy; ask the **AI Budget Help** Slack bot when unsure.
+
+See [Cost Savings & Best Practices](prototype-cost-best-practices.md) for the
+model/effort recommendations, screenshots, criteria examples, and tool comparison.
