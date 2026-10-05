@@ -1,0 +1,13 @@
+case_type: source
+guideline: no-custom-css
+expected_exit: 1
+expected_summary:
+  total_guidelines_checked: 1
+  violations: 1
+  warnings: 0
+  passes: 0
+expected_findings:
+  - {file: src/index.html, line: 4, guideline_id: no-custom-css, severity: error, verdict: VIOLATION, confidence: high, review_candidate: false}
+  - {file: src/index.html, line: 5, guideline_id: no-custom-css, severity: error, verdict: VIOLATION, confidence: high, review_candidate: false}
+  - {file: src/index.html, line: 9, guideline_id: no-custom-css, severity: error, verdict: VIOLATION, confidence: high, review_candidate: false}
+  - {file: src/custom.css, line: null, guideline_id: no-custom-css, severity: error, verdict: VIOLATION, confidence: high, review_candidate: false}
