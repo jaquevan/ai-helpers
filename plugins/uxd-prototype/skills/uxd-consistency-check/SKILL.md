@@ -74,21 +74,6 @@ supplement separately from `source_mode.violations`, for example as
 `consistency-source-ai.json`; do not include deterministic counts as if they
 were model judgments.
 
-### Traced runs
-
-For a consented traced session, start with the component's Langfuse session
-launcher and pin the requested model with `--model openai/gpt-6-luna`. The
-launcher verifies the consistency-checker project before the run starts. Run
-the deterministic analyzer with `--trace-phase` and without `--env-file`: it
-uses the launcher's injected Langfuse credentials and parent context to record
-`consistency-source` under the active session trace. The AI-review validator records only model,
-phase, and finding counts in `consistency-source-ai` or
-`consistency-visual-ai`; the session trace records the model generation and
-tool calls. If the injected context is missing, the traced phase must fail
-rather than create an unparented trace or route to another project.
-Use the launcher's `UXD_TRACE_PYTHON` for traced analyzer and validator calls so
-the Langfuse SDK is available in the child process.
-
 Run from this directory or use absolute paths:
 
 ```bash
@@ -101,31 +86,6 @@ python3 scripts/analyze.py --src=/path/to/prototype \
   --changed --base-ref=main --json-file=/path/to/consistency-report.json
 python3 scripts/analyze.py --src=/path/to/git-worktree \
   --changed --merge-base --base-ref=main
-```
-
-To export a metadata-only source trace, pass the gitignored Langfuse env file,
-a prototype key, and an optional benchmark label. This runs a read-only
-health/auth preflight before exporting and never sends findings or source text.
-
-```bash
-python3 scripts/analyze.py --src=/path/to/prototype \
-  --json-file=/path/to/consistency-report.json \
-  --env-file=/path/to/.env.consistency-check \
-  --trace-key=PROJ-123 --benchmark-name=consistency-source-mode
-```
-
-For a real shared test case, add its Jira, GitLab, live prototype, and pinned
-source revision. The checker verifies the GitLab origin, checked-out revision,
-Jira key, and prototype HTTP response before exporting the trace.
-
-```bash
-python3 scripts/analyze.py --src=/path/to/git-checkout \
-  --json-file=/path/to/consistency-report.json \
-  --env-file=/path/to/.env.consistency-check --trace-key=PROJ-123 \
-  --jira-url=https://jira.example.com/browse/PROJ-123 \
-  --gitlab-url=https://gitlab.example.com/group/project.git \
-  --prototype-url=http://127.0.0.1:8080/ \
-  --source-revision=FULL_GIT_SHA --benchmark-name=real-PROJ-123
 ```
 
 Use `--changed` only when the source path is a Git worktree. The checker scopes

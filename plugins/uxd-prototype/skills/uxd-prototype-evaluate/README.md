@@ -93,7 +93,7 @@ Phase orchestration is documented in [SKILL.md](SKILL.md) and [references/orches
 | `scripts/pipeline-setup.sh` | Prepare pipeline artifact directories and runtime state |
 | `scripts/publish-report.sh` | Publish the generated report when configured |
 
-Product-specific remotes, MLflow, and Pages URLs come from the internal `uxd-eval-config` plugin. Persona files are under `plugins/uxd-prototype/knowledge/personas/`; see `references/skill-overlays.md` for overlays.
+Product-specific remotes and Pages URLs come from the internal `uxd-eval-config` plugin. Persona files are under `plugins/uxd-prototype/knowledge/personas/`; see `references/skill-overlays.md` for overlays.
 
 ## Related
 

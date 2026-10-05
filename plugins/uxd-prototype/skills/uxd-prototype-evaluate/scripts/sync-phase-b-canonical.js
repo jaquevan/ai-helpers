@@ -101,10 +101,6 @@ function sync(directory, { provider, model }) {
   const fallbackCapture = evidence.captures[0];
   if (!fallbackCapture) throw new Error('Canonical evidence has no baseline capture');
   const evidenceByPath = new Map(evidence.items.filter(item => item.image?.path).map(item => [item.image.path, item]));
-  const routes = readJson(path.resolve(__dirname, '..', 'config', 'phase-routing.json'));
-  const phaseModel = name => model === 'phase-routed'
-    ? routes.phases[`eval-${name}`]?.models?.[provider] || model
-    : model;
 
   function ensureEvidence(rawPath, purpose) {
     const relative = portable(rawPath);
@@ -254,9 +250,9 @@ function sync(directory, { provider, model }) {
   };
   state.phases = state.phases.filter(phase => !['journey', 'consistency-visual', 'usability'].includes(phase.name));
   state.phases.push(
-    modelPhase('journey', provider, phaseModel('journey'), at, evaluation.journeys.length ? 'completed' : 'skipped'),
-    modelPhase('consistency-visual', provider, phaseModel('consistency-visual'), at, evaluation.consistency.visual_checked ? 'completed' : 'skipped'),
-    modelPhase('usability', provider, phaseModel('usability'), at, evaluation.usability.status === 'completed' ? 'completed' : 'skipped'),
+    modelPhase('journey', provider, model, at, evaluation.journeys.length ? 'completed' : 'skipped'),
+    modelPhase('consistency-visual', provider, model, at, evaluation.consistency.visual_checked ? 'completed' : 'skipped'),
+    modelPhase('usability', provider, model, at, evaluation.usability.status === 'completed' ? 'completed' : 'skipped'),
   );
   return documents;
 }

@@ -45,20 +45,6 @@ Written under `.artifacts/{ID}/` in the consumer project (never `${CLAUDE_SKILL_
 
 Schemas: [references/output-formats.md](references/output-formats.md).
 
-## Measured OpenAI phases
-
-The measured creator runner uses the OpenAI defaults in
-[`config/model-routing.json`](config/model-routing.json): `gpt-6-sol` for paid
-creator phases and `gpt-6-luna` for judging. Eval-harness model settings are
-separate from the models used by the measured runner.
-
-For cost experiments, invoke one bounded phase at a time with
-[`scripts/creator-phase-runner.py`](scripts/creator-phase-runner.py). It requires
-a zero-spend estimate followed by explicit `--approve-estimate`, records phase
-usage under the creator-only `$15` cap, and writes metadata-only cost telemetry
-to Langfuse. The normal conversational workflow remains governed by the user's
-session model and is not represented by this phase-runner ledger.
-
 ## Flags
 
 $ARGUMENTS

@@ -481,26 +481,5 @@ class AnalyzeCliTests(unittest.TestCase):
             self.assertEqual(len(findings), 1)
             self.assertTrue(findings[0]["file"].endswith("Topic.tsx"))
 
-    def test_trace_context_matches_gitlab_scp_remote_to_https_url(self):
-        with tempfile.TemporaryDirectory(prefix="uxd-consistency-gitlab-url-") as tmp:
-            workspace = Path(tmp)
-            (workspace / "src").mkdir()
-            (workspace / "src" / "Clean.tsx").write_text("export const Clean = () => <div />;\n")
-            subprocess.run(["git", "init", "-q"], cwd=workspace, check=True)
-            subprocess.run(["git", "config", "user.email", "test@example.com"], cwd=workspace, check=True)
-            subprocess.run(["git", "config", "user.name", "Test User"], cwd=workspace, check=True)
-            subprocess.run(["git", "remote", "add", "origin", "git@gitlab.cee.redhat.com:uxd/prototypes/rhoai.git"], cwd=workspace, check=True)
-
-            result = subprocess.run(
-                [
-                    sys.executable, str(ANALYZER), "--src", str(workspace),
-                    "--guideline", "no-custom-css", "--gitlab-url",
-                    "https://gitlab.cee.redhat.com/uxd/prototypes/rhoai.git", "--json-output",
-                ],
-                capture_output=True, text=True, check=False,
-            )
-            self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
-
-
 if __name__ == "__main__":
     unittest.main()

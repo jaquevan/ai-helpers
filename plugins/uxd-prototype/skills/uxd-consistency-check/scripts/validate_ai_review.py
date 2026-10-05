@@ -1,15 +1,12 @@
 #!/usr/bin/env python3
-"""Validate and trace supplemental, non-deterministic consistency findings."""
+"""Validate supplemental, non-deterministic consistency findings."""
 
 from __future__ import annotations
 
 import argparse
 import json
-import os
 import re
 import sys
-import uuid
-from datetime import datetime, timezone
 from pathlib import Path, PurePosixPath
 from typing import Any
 
@@ -17,7 +14,6 @@ from typing import Any
 SCRIPT_DIR = Path(__file__).resolve().parent
 SKILL_DIR = SCRIPT_DIR.parent
 GUIDELINES_DIR = SKILL_DIR / "guidelines"
-LANGFUSE_TRACE_SCRIPT_DIR = SKILL_DIR.parent / "uxd-prototype-evaluate" / "scripts"
 
 
 def _frontmatter(text: str) -> dict[str, str]:
@@ -205,55 +201,6 @@ def validate_review(
     }
 
 
-def trace_review(review: dict[str, Any], *, ticket: str, prototype_url: str, benchmark_name: str) -> str:
-    if os.environ.get("UXD_TRACE_COMPONENT") != "consistency":
-        raise RuntimeError("AI review tracing requires UXD_TRACE_COMPONENT=consistency")
-    sys.path.insert(0, str(LANGFUSE_TRACE_SCRIPT_DIR))
-    import langfuse_trace  # noqa: PLC0415
-
-    if not langfuse_trace.injected_trace_context():
-        raise RuntimeError("AI review tracing requires an OpenCode-injected Langfuse parent context")
-    phase = f"consistency-{review['mode']}-ai"
-    run_id = f"{phase}-{ticket}-{datetime.now(timezone.utc).strftime('%Y%m%d-%H%M%S')}-{uuid.uuid4().hex[:6]}"
-    summary = {
-        "status": "completed",
-        "mode": review["mode"],
-        "model": review["model"],
-        "model_invoked": True,
-        **review["summary"],
-    }
-    trace = langfuse_trace.log_metadata_trace(
-        root_name=phase,
-        run_id=run_id,
-        metadata={
-            "component": "consistency",
-            "prototype_key": ticket,
-            "program_run_id": run_id,
-            "benchmark_name": benchmark_name,
-            "prototype_url": prototype_url,
-            "privacy_mode": "metadata_only",
-            "model_invoked": True,
-            "model": review["model"],
-        },
-        events=[{
-            "phase": phase,
-            "status": "completed",
-            "mode": review["mode"],
-            "model": review["model"],
-            "model_invoked": True,
-            "finding_count": review["summary"]["finding_count"],
-            "violation_count": review["summary"]["error_count"],
-            "warning_count": review["summary"]["warning_count"],
-            "prototype_url": prototype_url,
-            "output": summary,
-        }],
-        output=summary,
-    )
-    if not trace.get("logged"):
-        raise RuntimeError("Langfuse did not confirm the nested OpenCode AI-review phase")
-    return trace["langfuse_trace_url"]
-
-
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--mode", choices=("source", "visual"), required=True)
@@ -262,10 +209,6 @@ def main() -> int:
     parser.add_argument("--source-root", required=True, help="Read-only prototype source root")
     parser.add_argument("--screenshot", action="append", default=[], help="Allowed screenshot path; repeat for each image")
     parser.add_argument("--model", required=True, help="Exact provider/model used for the review")
-    parser.add_argument("--ticket", default="none")
-    parser.add_argument("--prototype-url", default="")
-    parser.add_argument("--benchmark-name", default="consistency-ai-review")
-    parser.add_argument("--trace-phase", action="store_true", help="Record a summary-only phase under the active OpenCode trace")
     args = parser.parse_args()
 
     source_root = Path(args.source_root).resolve()
@@ -276,18 +219,12 @@ def main() -> int:
         review = validate_review(
             raw, mode=args.mode, model=args.model, source_root=source_root, screenshots=args.screenshot
         )
-        if args.trace_phase:
-            review["trace_url"] = trace_review(
-                review, ticket=args.ticket, prototype_url=args.prototype_url, benchmark_name=args.benchmark_name
-            )
         output_path.parent.mkdir(parents=True, exist_ok=True)
         output_path.write_text(json.dumps(review, indent=2) + "\n", encoding="utf-8")
     except (OSError, json.JSONDecodeError, ValueError, RuntimeError) as error:
         print(f"AI review validation failed: {error}", file=sys.stderr)
         return 2
     print(json.dumps({"status": review["status"], "mode": args.mode, "model": args.model, **review["summary"]}))
-    if review.get("trace_url"):
-        print(f"Langfuse phase: {review['trace_url']}")
     return 0
 
 

@@ -9,14 +9,10 @@ that same already-resolved directory; they do not authorize cache discovery.
 
 ## Model Defaults Per Phase
 
-Each phase delegates to `--model` when launched via Task tool. Source of truth:
-`config/model-defaults.yaml` (loaded by `scripts/model_defaults.py`).
-See `references/langfuse-conventions.md` for trace naming and metadata standards.
-
-The default platform is direct OpenAI API. Set `AI_HELPERS_PLATFORM=codex`,
-`AI_HELPERS_PLATFORM=cursor`, or `AI_HELPERS_PLATFORM=anthropic` when the host
-provides a different model catalog. If the host cannot be detected, ask the
-designer which platform they are using before selecting a model.
+Use the host assistant's configured model for judgment phases. When the host
+supports per-phase model selection, consult `config/model-defaults.yaml` for
+suggested routes and honor an explicit `--model` override. Keep deterministic
+work in the bundled local scripts.
 
 | Phase | OpenAI default | Rationale |
 |-------|--------------|-----------|
@@ -29,7 +25,7 @@ designer which platform they are using before selecting a model.
 | eval-consistency-visual | `gpt-6-sol` | Bounded crop audit against a static rule prefix. |
 | eval-report | Local script | Schema validation and template rendering. |
 
-When `--model` is set, ALL phases use that model (useful for comparison runs).
+When `--model` is set, use it for model-based phases; local phases stay local.
 
 **Artifact paths:** Pin `UXD_PROJECT_ROOT`, `KEY_DIR`, and absolute `ARTIFACTS_DIR` first (see SKILL.md "Artifact location"). All eval writes use `${ARTIFACTS_DIR}` (absolute = `.artifacts/<KEY>/eval`). Never write under `${CLAUDE_SKILL_DIR}`. After any `cd` (skill install or `.artifacts/<KEY>/code` clone), keep using the absolute `ARTIFACTS_DIR`.
 
@@ -42,21 +38,12 @@ no_fix = parse --no-fix (default: false)
 no_report = parse --no-report (default: false)
 
 # ── Preflight check (fail-fast before any work) ───────────────────────
-# For a direct API benchmark, the host has already called Atlassian MCP:
+# The host has already called Atlassian MCP and staged the returned payload:
 export JIRA_ISSUE_KEY=<KEY>
-export JIRA_CONTEXT_FILE=<absolute gitignored benchmark path>/jira-context.json
+export JIRA_CONTEXT_FILE=${KEY_DIR}/jira-context.json
 bash ${CLAUDE_SKILL_DIR}/scripts/preflight-check.sh
 # Exits non-zero if required prerequisites are missing.
 # Never fall back to home-directory config, credential files, or Keychain.
-
-# Direct OpenAI no-fix runs use langfuse-trace-pipeline.py's bounded controller.
-# It inlines only the active phase procedure and declares required inputs and
-# expected outputs. Jira extraction, classification, and baseline screenshot
-# capture are deterministic. Journey is one tool-free strict Structured Outputs
-# call; visual consistency and usability receive at most two turns each under
-# one 12-turn ceiling. A validator failure stops the pipeline before the next
-# model call.
-# Do not replace this with one agent invocation over this orchestration file.
 
 # ── Pipeline setup (path pinning, eval-state init, workspace capture) ──
 bash ${CLAUDE_SKILL_DIR}/scripts/pipeline-setup.sh <KEY> <URL> <workspace> $max_iterations "" <MR_URL>
@@ -68,11 +55,6 @@ bash ${CLAUDE_SKILL_DIR}/scripts/pipeline-setup.sh <KEY> <URL> <workspace> $max_
 export UXD_PROJECT_ROOT="$(node -e "console.log(require('${CLAUDE_SKILL_DIR}/scripts/resolve-root').resolveProjectRoot())" 2>/dev/null || git rev-parse --show-toplevel 2>/dev/null || pwd)"
 KEY_DIR="${UXD_PROJECT_ROOT}/.artifacts/<KEY>"
 ARTIFACTS_DIR="${KEY_DIR}/eval"
-
-# ── Langfuse trace ID (correlates CLI + Cursor + ledger) ─────────────
-EVAL_RUN_ID="eval-<KEY>-$(date +%Y%m%d-%H%M%S)-$(openssl rand -hex 3)"
-python3 ${CLAUDE_SKILL_DIR}/scripts/eval_state.py set ${ARTIFACTS_DIR}/eval-state.yaml \
-  eval_run_id=$EVAL_RUN_ID invocation=${AI_HELPERS_PLATFORM:-cli}
 
 # ── Read source access state (hybrid mode) ───────────────────────────
 SOURCE_AVAILABLE=$(python3 ${CLAUDE_SKILL_DIR}/scripts/eval_state.py get ${ARTIFACTS_DIR}/eval-state.yaml source_available)
@@ -195,15 +177,15 @@ python3 ${CLAUDE_SKILL_DIR}/scripts/eval_state.py set ${ARTIFACTS_DIR}/eval-stat
   consistency_source_start=$(python3 ${CLAUDE_SKILL_DIR}/scripts/eval_state.py timestamp)
 
 # ── Deterministic source consistency ────────────────────────────────
-python3 "${CLAUDE_SKILL_DIR}/scripts/run_evaluator.py" \
-  --key "${KEY}" \
-  --workspace "${UXD_PROJECT_ROOT}" \
-  --jira-context "${JIRA_CONTEXT_FILE}" \
-  --benchmark-dir "${BENCHMARK_DIR}"
+if SOURCE_AVAILABLE == "true":
+  python3 "${CLAUDE_SKILL_DIR}/scripts/run_evaluator.py" \
+    --key "${KEY}" \
+    --workspace "${SOURCE_DIR}" \
+    --jira-context "${JIRA_CONTEXT_FILE}" \
+    --artifacts-dir "${ARTIFACTS_DIR}"
 # Runs ONCE and validates its JSON before model-assisted phases begin.
-# Produces: consistency-report.json, deterministic-source-result.json, and a
-# schema-valid five-file bundle under eval/shadow/consistency-source/<run-id>/.
-# The legacy report remains authoritative; shadow failure is non-blocking.
+# Produces: consistency-report.json. With no source access, skip source mode
+# as directed by eval-consistency.md; visual mode still uses browser evidence.
 # Visual-mode deferred to after eval-journey when screenshots exist.
 # Do not ask a model to discover the checker, choose commands, or rerun source mode.
 
@@ -503,12 +485,6 @@ if --no-report:
 
 else:
   node "${EVALUATOR_SKILL_DIR}/scripts/run-report.js" "${ARTIFACTS_DIR}"
-
-# ═══════════════════════════════════════════════════════════════════
-# LANGFUSE LOGGING (opt-in)
-# ═══════════════════════════════════════════════════════════════════
-# Record metadata-only phase events through langfuse_trace.py when credentials
-# are configured. Local artifacts and the cost ledger remain authoritative.
 
 # ═══════════════════════════════════════════════════════════════════
 # NOTIFY (open report + present summary)

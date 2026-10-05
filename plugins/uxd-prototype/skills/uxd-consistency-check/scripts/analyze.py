@@ -15,11 +15,6 @@ import re
 import json
 import subprocess
 import argparse
-import importlib.util
-import uuid
-import urllib.error
-import urllib.parse
-import urllib.request
 from datetime import datetime
 from pathlib import Path
 from typing import Dict, List, Optional, Set, Tuple
@@ -36,164 +31,6 @@ class Colors:
     BOLD = '\033[1m'
 
 BASE_URL = 'http://localhost:4010'
-SCRIPT_PATH = Path(__file__).resolve()
-EVALUATOR_VERIFY_PATH = (
-    SCRIPT_PATH.parents[2] / 'uxd-prototype-evaluate' / 'scripts' / 'verify-langfuse.py'
-)
-
-
-def evaluator_verifier():
-    """Load the evaluator's dotenv and read-only Langfuse preflight helpers."""
-    spec = importlib.util.spec_from_file_location('consistency_langfuse_verifier', EVALUATOR_VERIFY_PATH)
-    if not spec or not spec.loader:
-        raise RuntimeError('shared Langfuse verifier could not be loaded')
-    module = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(module)
-    return module
-
-
-def validated_url(value, flag):
-    if not value:
-        return None
-    parsed = urllib.parse.urlparse(value)
-    if parsed.scheme not in {'http', 'https'} or not parsed.netloc:
-        raise RuntimeError(f'{flag} must be an http(s) URL')
-    return value
-
-
-def normalized_gitlab_project(value):
-    """Normalize HTTPS and GitLab SCP-style remotes to host/path identity."""
-    parsed = urllib.parse.urlparse(value)
-    if parsed.scheme in {'http', 'https', 'ssh'} and parsed.hostname:
-        host, path = parsed.hostname, parsed.path
-    else:
-        match = re.fullmatch(r'(?:[^@]+@)?([^:]+):(.+)', value)
-        if not match:
-            return None
-        host, path = match.groups()
-    return f"{host.lower()}/{path.strip('/').removesuffix('.git')}"
-
-
-def validate_trace_context(args, workspace):
-    """Validate that real-case URLs identify the checkout and live prototype."""
-    args.jira_url = validated_url(args.jira_url, '--jira-url')
-    args.gitlab_url = validated_url(args.gitlab_url, '--gitlab-url')
-    args.prototype_url = validated_url(args.prototype_url, '--prototype-url')
-    if args.jira_url and args.trace_key and not args.jira_url.rstrip('/').endswith('/' + args.trace_key):
-        raise RuntimeError('--jira-url does not match --trace-key')
-    if args.gitlab_url:
-        remote = subprocess.run(
-            ['git', '-C', str(workspace), 'remote', 'get-url', 'origin'],
-            capture_output=True, text=True, check=False,
-        )
-        if (
-            remote.returncode
-            or normalized_gitlab_project(remote.stdout.strip())
-            != normalized_gitlab_project(args.gitlab_url)
-        ):
-            raise RuntimeError('workspace origin does not match --gitlab-url')
-    if args.source_revision:
-        revision = subprocess.run(
-            ['git', '-C', str(workspace), 'rev-parse', 'HEAD'],
-            capture_output=True, text=True, check=False,
-        )
-        if revision.returncode or revision.stdout.strip() != args.source_revision:
-            raise RuntimeError('workspace revision does not match --source-revision')
-    if args.prototype_url:
-        try:
-            with urllib.request.urlopen(args.prototype_url, timeout=10) as response:
-                if not 200 <= response.status < 400:
-                    raise RuntimeError(f'prototype URL returned HTTP {response.status}')
-        except urllib.error.HTTPError as error:
-            raise RuntimeError(f'prototype URL returned HTTP {error.code}') from error
-        except urllib.error.URLError as error:
-            raise RuntimeError(f'cannot reach prototype URL: {error.reason}') from error
-
-
-def export_source_trace(args, report):
-    """Export a summary-only source span, nested in OpenCode when context is injected."""
-    if not args.env_file and not args.trace_phase:
-        return None
-    trace_id = os.environ.get('LANGFUSE_TRACE_ID', '')
-    parent_span_id = os.environ.get('LANGFUSE_PARENT_SPAN_ID', '')
-    bridge_context = None
-    if re.fullmatch(r'[0-9a-f]{32}', trace_id) and re.fullmatch(r'[0-9a-f]{16}', parent_span_id):
-        bridge_context = {'trace_id': trace_id, 'parent_span_id': parent_span_id}
-    verifier = evaluator_verifier()
-    if args.trace_phase:
-        if not bridge_context:
-            raise RuntimeError('launcher did not inject a valid OpenCode trace context for the source phase')
-        if args.env_file:
-            raise RuntimeError('do not load a separate Langfuse env file inside a traced OpenCode session')
-        if os.environ.get('UXD_TRACE_COMPONENT') != 'consistency':
-            raise RuntimeError('source trace is not running under the consistency OpenCode component')
-        required = ('LANGFUSE_BASE_URL', 'LANGFUSE_PUBLIC_KEY', 'LANGFUSE_SECRET_KEY', 'LANGFUSE_PROJECT_ID')
-        missing = [name for name in required if not os.environ.get(name)]
-        if missing:
-            raise RuntimeError(f"missing launcher-injected Langfuse settings: {', '.join(missing)}")
-    else:
-        if bridge_context:
-            raise RuntimeError('do not load a separate Langfuse env file inside an OpenCode trace')
-        env_path = verifier.load_env_file(Path(args.env_file))
-        if env_path is None:
-            raise RuntimeError(f'Langfuse environment file does not exist: {args.env_file}')
-        required = ('LANGFUSE_HOST', 'LANGFUSE_PUBLIC_KEY', 'LANGFUSE_SECRET_KEY')
-        missing = [name for name in required if not os.environ.get(name)]
-        if missing:
-            raise RuntimeError(f"missing required environment variables: {', '.join(missing)}")
-        host = os.environ['LANGFUSE_HOST']
-        verifier.check_health(host)
-        verifier.check_auth(host, os.environ['LANGFUSE_PUBLIC_KEY'], os.environ['LANGFUSE_SECRET_KEY'])
-
-    program_run_id = (
-        f"consistency-{args.trace_key}-{datetime.now().strftime('%Y%m%d-%H%M%S')}-"
-        f"{uuid.uuid4().hex[:6]}"
-    )
-    summary = report['summary']
-    sanitized_output = {
-        'status': 'completed',
-        'mode': 'source',
-        'total_guidelines_checked': summary['total_guidelines_checked'],
-        'violation_groups': summary['violations'],
-        'warning_groups': summary['warnings'],
-        'passes': summary['passes'],
-        'model_invoked': False,
-    }
-    result = verifier.langfuse_trace.log_metadata_trace(
-        root_name=f'consistency-check/{args.trace_key}',
-        run_id=program_run_id,
-        metadata={
-            'component': 'consistency',
-            'prototype_key': args.trace_key,
-            'program_run_id': program_run_id,
-            'privacy_mode': 'metadata_only',
-            'benchmark_name': args.benchmark_name,
-            'model_invoked': False,
-            'jira_url': args.jira_url,
-            'gitlab_url': args.gitlab_url,
-            'prototype_url': args.prototype_url,
-            'source_revision': args.source_revision,
-        },
-        events=[{
-            'phase': 'consistency-source',
-            'status': 'completed',
-            'source_mode': True,
-            'guideline_count': summary['total_guidelines_checked'],
-            'violation_groups': summary['violations'],
-            'warning_groups': summary['warnings'],
-            'llm_cost_usd': 0,
-            'model_invoked': False,
-            'jira_url': args.jira_url,
-            'gitlab_url': args.gitlab_url,
-            'prototype_url': args.prototype_url,
-            'source_revision': args.source_revision,
-            'output': sanitized_output,
-        }],
-        output=sanitized_output,
-    )
-    if not result.get('logged'):
-        raise RuntimeError('Langfuse did not confirm the metadata-only consistency trace')
-    return result
 
 # Route mappings for PROTOTYPE codebase (src/app/ structure)
 FILE_TO_ROUTE_PROTOTYPE = {
@@ -1666,22 +1503,7 @@ def main():
                         help='Write the evaluator consistency-report JSON to stdout')
     parser.add_argument('--json-file',
                         help='Write the evaluator consistency-report JSON to this path')
-    parser.add_argument('--env-file', help='Gitignored Langfuse dotenv file for metadata-only export')
-    parser.add_argument('--trace-phase', action='store_true',
-                        help='Attach the summary-only source phase to the active consistency trace')
-    parser.add_argument('--trace-key', help='Prototype/run ID used in consistency-check/{ID}')
-    parser.add_argument('--benchmark-name', default='consistency-source-mode')
-    parser.add_argument('--jira-url', help='Jira issue URL recorded as real-case trace metadata')
-    parser.add_argument('--gitlab-url', help='GitLab repository URL checked against workspace origin')
-    parser.add_argument('--prototype-url', help='Live prototype URL checked before tracing')
-    parser.add_argument('--source-revision', help='Full Git revision required for a real-case workspace')
     args = parser.parse_args()
-    if args.env_file and not args.trace_key:
-        parser.error('--env-file requires --trace-key')
-    if args.trace_phase and not args.trace_key:
-        parser.error('--trace-phase requires --trace-key')
-    if args.trace_phase and args.env_file:
-        parser.error('--trace-phase uses launcher-injected credentials; omit --env-file')
     evaluator_output = args.json_output or bool(args.json_file)
 
     if evaluator_output:
@@ -1706,11 +1528,6 @@ def main():
     # If project_root points to a 'src' directory, use its parent since
     # grep commands in guidelines reference 'src/' explicitly
     check_cwd = project_root.parent if project_root.name == 'src' else project_root
-    try:
-        validate_trace_context(args, check_cwd)
-    except RuntimeError as error:
-        print(f"{Colors.RED}Trace context failed: {error}{Colors.RESET}", file=sys.stderr)
-        sys.exit(2)
 
     # Guidelines are always in consistency-checker/guidelines/
     design_checker_root = Path(__file__).parent.parent.resolve()
@@ -1847,17 +1664,6 @@ def main():
                 all_affected_files.update(by_file.keys())
 
     evaluator_report = build_evaluator_report(results)
-    try:
-        trace_result = export_source_trace(args, evaluator_report)
-    except RuntimeError as error:
-        print(f'Langfuse trace failed: {error}', file=sys.stderr)
-        sys.exit(2)
-    if trace_result:
-        print(
-            f"Langfuse trace: {trace_result['langfuse_trace_url']} "
-            f"(trace_id={trace_result['trace_id']})",
-            file=sys.stderr,
-        )
 
     if evaluator_output:
         report_json = json.dumps(evaluator_report, indent=2)

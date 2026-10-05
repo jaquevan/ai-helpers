@@ -1,23 +1,9 @@
 # Per-phase defaults for uxd-prototype-evaluate.
-# OpenAI direct API is the default. These are intentionally easy to override
-# while we benchmark quality and cost against the existing Anthropic workflow.
+# Suggested routes when the host supports per-phase model selection.
+# Otherwise use the host assistant's configured session model.
 # Do not put secrets here.
 
-default_platform: api
-
 platforms:
-  # Codex and direct API currently share the same OpenAI model tiers. Keeping
-  # separate maps lets us tune them independently without changing skills.
-  api:
-    provider: openai
-    phases:
-      eval-extract: gpt-6-luna
-      eval-classify: gpt-6-luna
-      eval-journey: gpt-6-sol
-      eval-fix: gpt-6-sol
-      eval-usability: gpt-6-sol
-      eval-consistency: gpt-6-luna
-      eval-report: gpt-6-luna
   codex:
     provider: openai
     phases:

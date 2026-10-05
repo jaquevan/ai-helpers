@@ -5,7 +5,6 @@
 # Discovers fixture directories and runs each validator against them.
 #
 # Output protocol: "Test <name> (<fixture>):\n{PASS|FAIL}"
-# This matches what langfuse-eval.py's run_script_tests() parser expects.
 #
 # Exit codes:
 #   0 = all tests pass
@@ -65,11 +64,11 @@ run_python_test() {
   local script_path="$SCRIPT_DIR/$script_name"
 
   if python3 "$script_path" > /dev/null 2>&1; then
-    echo "Test $script_name (Langfuse phases): "
+    echo "Test $script_name (local evaluator): "
     echo "PASS"
     PASS_COUNT=$((PASS_COUNT + 1))
   else
-    echo "Test $script_name (Langfuse phases): "
+    echo "Test $script_name (local evaluator): "
     echo "FAIL"
     FAIL_COUNT=$((FAIL_COUNT + 1))
   fi
@@ -96,25 +95,11 @@ echo ""
 
 run_shell_test "test-consistency-resolution.sh"
 run_shell_test "test-consistency-validator.sh"
-run_python_test "test-langfuse-trace.py"
-run_python_test "test-openai-api-agent.py"
-run_python_test "test-usage-journal.py"
-run_python_test "test-benchmark-preflight.py"
 run_python_test "test-deterministic-evaluator.py"
 run_python_test "test-deterministic-extract.py"
-run_python_test "test-bounded-phase-pipeline.py"
-run_python_test "test-bounded-fix-artifact-contract.py"
-run_python_test "test-portable-deterministic-phases.py"
-run_python_test "test-structured-journey.py"
-run_python_test "test-structured-visual.py"
-run_python_test "test-structured-heuristic.py"
-run_python_test "test-live-usability-adapter.py"
 run_python_test "test-portable-evidence-capture.py"
-run_python_test "test-model-routing.py"
-run_python_test "test-judge-manifests.py"
 run_node_test "test-canonical-artifact-contracts.js" "canonical contracts"
 run_node_test "test-legacy-artifact-adapter.js" "legacy compatibility adapter"
-run_node_test "test-browser-persona.js" "live browser persona"
 run_node_test "test-targeted-evidence.js" "targeted evidence"
 run_node_test "test-canonical-report.js" "canonical report"
 run_node_test "test-xray-cache.js" "xray cache"

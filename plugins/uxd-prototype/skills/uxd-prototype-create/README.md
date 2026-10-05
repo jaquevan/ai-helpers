@@ -8,7 +8,7 @@ Create or refine a UX prototype from a Jira ticket, Figma design, feature descri
 
 | Requirement | When it is needed |
 |-------------|-------------------|
-| Node.js ≥ 18 and npm | Running a Node-based prototype dev server or the optional measured creator runner |
+| Node.js ≥ 18 and npm | Running a Node-based prototype dev server |
 | Python 3 | Bundled metadata and workspace scripts |
 | Git | Building in an existing workspace or using a git source/target |
 | Atlassian MCP | Live Jira lookup; otherwise provide the ticket details or configure the documented Jira REST fallback |
@@ -39,7 +39,7 @@ npm run dev
 
 Use the workspace's documented start command if it is not `npm run dev`. The standalone HTML path does not need `npm install`. For live Jira lookup, configure an authenticated Atlassian MCP in your assistant; the REST fallback requires `JIRA_SERVER`, `JIRA_USER`, and `JIRA_TOKEN`.
 
-For a measured creator phase, use the bounded runner described in [pipeline mode](references/pipeline-mode.md): request an estimate first, then explicitly approve paid execution. The creator runner uses a separate $15 cap and is optional; it is not needed for the normal conversational workflow.
+For create → evaluate → refine → publish orchestration, follow [pipeline mode](references/pipeline-mode.md) in your assistant.
 
 ## Scripts
 
@@ -48,9 +48,6 @@ For a measured creator phase, use the bounded runner described in [pipeline mode
 | `scripts/resolve_workspace.py` | Prepare a workspace clone and resolve branch/upstream details |
 | `scripts/fetch_jira.py` | Optional Jira REST fallback when MCP is unavailable |
 | `scripts/frontmatter.py` | Read and update prototype artifact metadata |
-| `scripts/pipeline_mode.py` | Run the create/evaluate/publish pipeline orchestration |
-| `scripts/creator-phase-runner.py` | Run one bounded, measured creator phase after estimate approval |
-| `tests/run-tests.sh` | Run creator bridge and bounded-phase tests |
 
 ## Related
 

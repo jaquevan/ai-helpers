@@ -8,9 +8,10 @@ the SHA-256 of the ordered JSON object containing `intent_key`, `build_key`, and
 checksum manifest. Validate checksums and canonical schemas before every
 restore; a corrupt or partial entry is an invalid miss, never a best-effort hit.
 
-Use `scripts/xray-cache.js` from deterministic orchestration code. Phase A
-entries accelerate local assembly. Full entries restore the completed result
-and bypass journey, visual, and usability model calls. Restores validate in a
+Use `scripts/xray-cache.js` from callers that explicitly manage cache identity.
+Phase A entries accelerate local assembly. Full entries restore the completed
+result; callers must decide whether that result covers the requested evaluation.
+The agent-driven workflow does not automatically skip model phases. Restores validate in a
 staging directory before atomically replacing only the five canonical files.
 
 Cache misses never reuse partial model output. Changes to criteria/personas
@@ -33,13 +34,14 @@ the local compound-key cache controls whole-phase reuse.
 
 ## Model routes
 
-`config/phase-routing.json` is authoritative:
+Use the host assistant's configured model, with suggested per-phase defaults
+from `config/model-defaults.yaml` when supported:
 
 - extract, classify, source consistency, and report: local;
 - journey and visual consistency: `gpt-6-sol` or Haiku;
 - usability: `gpt-6-sol` or Sonnet;
 - code fixes: highest reasoning tier (`gpt-6-sol` or Opus).
 
-OpenAI is the default. Anthropic-compatible routing is explicit and optional.
+Choose only models available in the host assistant's catalog.
 Never route deterministic work to a model merely because a global override was
 provided.

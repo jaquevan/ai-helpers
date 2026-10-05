@@ -50,10 +50,9 @@ Per-key eval files under `${UXD_PROJECT_ROOT}/.artifacts/<KEY>/eval/` (`ARTIFACT
 Cross-key (`.artifacts/eval/`, not deleted by `--fresh`): `runs/run-log.csv`, `pain-leaderboard.html`.
 
 The canonical contract and temporary downstream adapter are documented in
-[references/canonical-artifacts.md](references/canonical-artifacts.md). OpenAI
-uses canonical inputs and does not require `evaluation-report.csv` after local
-classification. Anthropic-compatible and unmigrated external consumers may use
-explicit disposable legacy projections during rollout.
+[references/canonical-artifacts.md](references/canonical-artifacts.md). The evaluator
+stores canonical results alongside explicit disposable legacy projections for
+phase scripts and external consumers during rollout.
 
 Create-owned (key root, not deleted by `--fresh`): `.artifacts/<KEY>/prototype-bar.json` — sync with `--artifacts ${KEY_DIR}` after the report. Local Eval browsing: export skill `export-helper.mjs` on port 9417. Static Pages: `copy-eval-for-pages.sh` / `install-prototype-bar.sh --artifacts` into `public/evals/<KEY>/`.
 
@@ -127,57 +126,17 @@ script through a user home directory, marketplace cache, or machine-specific
 absolute path. Scripts resolve their own helpers and templates from their file
 location, so the current working directory may be any consumer workspace.
 
-Before the runner starts, the Assistant uses the configured Atlassian MCP to
-fetch the requested Jira issue and writes the returned payload to the
-gitignored benchmark directory. When an MR is supplied, use the configured
-GitLab MCP to resolve the repository and revision, then pass the resulting
-checkout as `--workspace`. The packaged scripts never retrieve credentials or
-make Jira/GitLab API calls themselves.
+The Assistant uses the configured Atlassian MCP to fetch the requested Jira
+issue and stages the returned payload in the consumer's gitignored artifact
+directory. When an MR is supplied, use the configured GitLab MCP to resolve
+the repository and revision, then pass the checkout as `--workspace`.
 
-The standard direct-API entrypoint is:
-
-```bash
-python3 "${EVALUATOR_SKILL_DIR}/scripts/langfuse-trace-pipeline.py" \
-  --key "$KEY" \
-  --url "$PROTOTYPE_URL" \
-  --workspace "$WORKSPACE" \
-  --jira-context "$JIRA_CONTEXT_FILE" \
-  --iterate-flags="--no-fix --max-iterations=1"
-```
-
-For a direct-API personal run without a full OpenCode session trace, use the
-personal wrapper instead of the benchmark entrypoint. It uses the managed
-`.venv` Langfuse dependency, skips benchmark canonical-state requirements, keeps
-the `$25` evaluator cap,
-and still requires explicit approval before paid phases:
-
-```bash
-scripts/run-personal-eval.sh \
-  RHAISTRAT-1745 \
-  http://127.0.0.1:8080 \
-  /absolute/path/to/prototype \
-  --estimate-only
-
-scripts/run-personal-eval.sh \
-  RHAISTRAT-1745 \
-  http://127.0.0.1:8080 \
-  /absolute/path/to/prototype \
-  --approve-estimate
-```
-
-Run the first command, inspect its estimate, and run the second command only
-after approving that estimate. This direct-API path runs the evaluator
-pipeline; full-session OpenCode tracing is maintained separately. Trace
-consent and paid-phase approval remain distinct.
-
-The wrapper defaults to sanitized Langfuse tracing, fix enabled, and one
-Phase A iteration. Stage Jira context at
-`tmp/personal-runs/<KEY>/jira-context.json` before running it.
-
-That entrypoint always runs source consistency, Jira extraction, AC
-classification, and baseline screenshot capture locally. It invokes models only
-for journey, visual consistency, and usability; then it validates and renders
-the report locally. The local entrypoints are also independently runnable:
+Follow [references/orchestration.md](references/orchestration.md) with the
+host assistant. Source consistency, Jira extraction, AC classification,
+baseline screenshot capture, validation, and report rendering use local
+scripts. The assistant performs journey, visual consistency, heuristic, and
+persona judgments using the phase procedures. Local entrypoints are also
+independently runnable:
 
 ```bash
 node "${EVALUATOR_SKILL_DIR}/scripts/run-classification.js" "$ARTIFACTS_DIR"
@@ -185,34 +144,12 @@ node "${EVALUATOR_SKILL_DIR}/scripts/capture-prototype-evidence.js" "$ARTIFACTS_
 node "${EVALUATOR_SKILL_DIR}/scripts/run-report.js" "$ARTIFACTS_DIR"
 ```
 
-**Direct API safety:** Before a paid direct-API run, fetch the requested issue
-with the host Atlassian MCP and stage normalized JSON under the gitignored
-benchmark directory. Pass it as `--jira-context`. The runner uses this exact
-skill directory and must not discover global plugin caches. It rejects
-Keychain/credential lookup, strips secrets from the shell environment, limits
-filesystem scope to the workspace + local skill + benchmark directory, and
-allows at most 12 model turns. Use `--preflight-only` to validate inputs, then
-`--deterministic-only` to run source consistency and schema validation without
-a model. A paid OpenAI run consumes that validated report, deterministically
-extracts and classifies Jira context locally, requires `--no-fix`, and runs
-three isolated model phases. Journey and visual consistency are single,
-tool-free Responses API calls whose `text.format` uses strict `json_schema`
-Structured Outputs. Their image inputs prefer bounded component/region paths
-from `evidence.json.items`; the viewport image remains a
-local/report fallback and is sent only when no valid crop exists.
-Visual rules are loaded from the sibling bundled consistency skill. The sibling
-`uxd-research-heuristic-eval` skill runs afterward in explicit unattended mode
-(`--assume-defaults` semantics), so its suggested severities remain labeled as
-an unreviewed draft. Usability
-remains a live persona walkthrough, but its model can use only packaged browser
-observe/click/type/navigate/keyboard functions; it cannot search files, run a
-shell, inspect source, or call Jira. Fresh DOM and screenshot evidence follows
-every browser action. Persona turns send a focused component crop while
-retaining one viewport image for report provenance. Every model phase must pass
-its local validator before the
-next phase begins. Report validation and rendering then
-run locally. Fix-loop support remains with the interactive skill workflow until
-a separately bounded implementation is available.
+Visual rules are loaded from the sibling bundled consistency skill. Prefer
+bounded component/region images from `evidence.json.items` for judgments while
+retaining viewport images for report provenance. Persona walkthroughs must
+use browser evidence and the phase's source-access rules. Validate each phase's
+artifacts before continuing, and keep heuristic findings labeled as an
+unreviewed draft.
 
 **Personas:** `${CLAUDE_PLUGIN_ROOT}/knowledge/personas/catalog.yaml` + overlays. Deep YAML from `.context/usability-testing/`. Internal study URLs: `node ${CLAUDE_SKILL_DIR}/scripts/overlay-get.js --knowledge-persona <id>` when internal-ai-helpers is present.
 

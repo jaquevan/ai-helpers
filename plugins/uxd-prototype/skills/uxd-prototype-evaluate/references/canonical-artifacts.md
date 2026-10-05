@@ -2,8 +2,8 @@
 
 ## Status
 
-Version 1 is the primary OpenAI runtime and HTML report contract. Existing
-legacy artifacts remain adapter-supported until external consumers migrate.
+Version 1 is a validated JSON and HTML report contract. The agent-driven
+workflow also retains legacy phase artifacts until external consumers migrate.
 
 ## Canonical v1 files
 
@@ -19,23 +19,14 @@ Each evaluation run uses these five authoritative JSON files in its `eval/` dire
 
 Schemas are in `schemas/v1/`. Run `node scripts/validate-canonical-artifacts.js <eval-dir> --json` before a canonical artifact is consumed or cached.
 
-Source consistency can emit a pre-classification shadow bundle with
-`brief.intent.stage: consistency-source`. In that stage, acceptance criteria,
-tasks, personas, journeys, and usability results are intentionally empty. The
-bundle records only source consistency findings, deterministic identity, and
-zero-model telemetry under:
-
-```text
-.artifacts/<KEY>/eval/shadow/consistency-source/<run-id>/
-```
-
 ## CSV retirement decision
 
 `evaluation-report.csv` is retired as a canonical evaluation artifact. Its past roles—AC verdict transport, usability rows, display baseline, and publish gate—are typed data in `evaluation.json`.
 
-Until legacy consumers move, a dedicated compatibility adapter may create a CSV projection from the five canonical documents. The adapter is one-way, temporary, and cannot import or overwrite canonical values. The default OpenAI model path neither reads nor writes CSV after deterministic classification. Anthropic-compatible execution may retain it temporarily during migration.
-
-CSV may return later only as an explicit designer-requested export; it is not a pipeline requirement.
+The agent-driven phase procedures still use `evaluation-report.csv` for AC
+verdicts and publish gating. Canonical assembly consumes those phase results;
+a separate one-way compatibility adapter can export CSV for downstream consumers
+without overwriting the canonical documents.
 
 ## Temporary legacy adapter
 
@@ -57,20 +48,23 @@ evidence, journey, fix/action, iteration, and YAML state shapes. The command is
 local and deterministic: it reports `model_invoked: false`, performs no publish
 or provider operation, and never reads legacy files back into canonical JSON.
 
-Do not request or generate `persona-results.json` through the adapter. It is a
-temporary bounded-provider transport and is merged into `evaluation.json` and
-`evidence.json` before report rendering.
+Do not request or generate `persona-results.json` through the adapter. It is
+the phase procedure's persona output and can be merged into `evaluation.json`
+and `evidence.json` before canonical report rendering.
 
 ## Runtime order
 
-1. Local source consistency, Jira extraction, classification, and targeted
-   capture assemble and validate the canonical five.
-2. An exact full-cache hit restores the validated final five and bypasses every
-   model phase.
-3. On a miss, bounded model phases return strict JSON; a deterministic merger
-   updates all five atomically and stores the complete cache entry.
-4. The HTML report reads canonical JSON directly. Compatibility projections are
-   generated only for a named downstream consumer.
+1. Run the agent-driven phase procedures and validate their local artifacts.
+2. For canonical output, run `assemble-phase-a-canonical.js <eval-dir> --no-cache`
+   followed by `sync-phase-b-canonical.js <eval-dir> --provider <provider> --model <model>`
+   using the actual host provider/model. Assembly stages the classified criteria,
+   source findings, and captured evidence; synchronization merges the completed
+   journey, consistency, and persona results.
+3. Validate all five files before rendering. The HTML renderer accepts canonical
+   JSON directly and retains legacy input support for existing phase workflows.
+
+The cache helpers remain available for callers that explicitly manage cache
+identity; they do not automatically skip phases in the agent-driven workflow.
 
 ## Strict-output rules
 

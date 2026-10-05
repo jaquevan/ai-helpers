@@ -256,13 +256,12 @@ function buildDocuments(artifactsDir, cacheDecision) {
   const evaluatorFiles = [
     ...filesUnder(path.join(skillRoot, 'schemas', 'v1')),
     ...filesUnder(path.join(skillRoot, 'config')),
-    ...filesUnder(path.join(skillRoot, 'references', 'api-phases')),
+    ...filesUnder(path.join(skillRoot, 'references', 'phases')),
     ...filesUnder(path.join(consistencyRoot, 'guidelines')),
     path.join(consistencyRoot, 'VERSION'),
     ...[
       'assemble-phase-a-canonical.js', 'sync-phase-b-canonical.js',
-      'openai_structured_journey.py', 'openai_structured_visual.py',
-      'openai-browser-persona.js', 'targeted-evidence.js',
+      'capture-prototype-evidence.js', 'targeted-evidence.js',
       'validate-canonical-artifacts.js',
     ].map(name => path.join(__dirname, name)),
   ];

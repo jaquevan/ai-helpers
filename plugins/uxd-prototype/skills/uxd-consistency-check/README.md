@@ -28,8 +28,7 @@ python3 scripts/analyze.py --src=/path/to/prototype \
 
 The deterministic source report can be supplemented with a non-deterministic
 model review. `scripts/validate_ai_review.py` validates exact source evidence
-or screenshot references against the bundled guideline IDs and can record a
-summary phase under the active consented Langfuse trace.
+or screenshot references against the bundled guideline IDs.
 
 ## Local ground truth
 

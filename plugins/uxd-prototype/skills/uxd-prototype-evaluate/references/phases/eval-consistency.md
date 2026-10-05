@@ -16,7 +16,7 @@ If `CONSISTENCY_DIR` is empty, stop and report an incomplete plugin install. Do 
 
 eval-consistency runs in two modes, invoked separately by the orchestrator:
 
-- **`--mode=source`** (Phase A setup): Runs deterministic source-code checks against changed files. The analyzer pre-filters guideline categories locally; do not spend model tokens pre-reading the corpus. Produces initial `consistency-report.json`, then projects the same result into a canonical five-file shadow bundle. Called before eval-classify.
+- **`--mode=source`** (Phase A setup): Runs deterministic source-code checks against changed files. The analyzer pre-filters guideline categories locally; do not spend model tokens pre-reading the corpus. Produces and validates initial `consistency-report.json`. Called before eval-classify.
 - **`--mode=visual`** (post-journey): Runs AI-powered visual checks against journey screenshots. Appends visual findings to the existing `consistency-report.json`. Called after eval-journey captures screenshots.
 - **`--mode=both`** (legacy): Runs source then visual sequentially. Use when both inputs are available.
 
@@ -56,18 +56,13 @@ detection in agent context, or reconstruct these commands with a model.
 python3 "${EVALUATOR_SKILL_DIR}/scripts/run_evaluator.py" \
   --key=<KEY> --workspace=<workspace> \
   --jira-context="${JIRA_CONTEXT_FILE}" \
-  --benchmark-dir="${BENCHMARK_DIR}"
+  --artifacts-dir="${ARTIFACTS_DIR}"
 ```
 
 If validation fails, stop. Do not synthesize or repair JSON manually.
 
-The analyzer runs exactly once. On a valid primary report, the entrypoint writes
-the canonical shadow bundle under
-`.artifacts/<KEY>/eval/shadow/consistency-source/<run-id>/`, validates it, and
-checks normalized parity through the legacy adapter. Shadow projection failure
-is recorded in `deterministic-source-result.json` but does not invalidate the
-authoritative legacy source report. The source shadow invokes no model and does
-not write visual findings, fixes, or legacy boundary files.
+The analyzer runs exactly once and writes only the source consistency report.
+It invokes no model and does not write visual findings or fixes.
 
 #### 1b: Consume findings
 
@@ -103,7 +98,7 @@ step:
 4. Load only each applicable guideline's `## Rule` and manual checklist.
 5. Record screenshot count, applicable guideline count, selected input bytes,
    raw image bytes, and selected pixel ratio in
-   `visual_mode.input_metrics` for Langfuse comparison.
+   `visual_mode.input_metrics` for local comparison.
 
 **Structured extraction (preferred):** If `${CONSISTENCY_DIR}/scripts/visual_analyze.py` exists, use it to extract DOM structure with bounding boxes from key pages. This gives the LLM structured visual input instead of raw PNGs:
 
