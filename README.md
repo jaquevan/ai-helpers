@@ -72,6 +72,23 @@ After installing, skills work the same way — slash commands in any project:
 
 > **Note:** Install `pf-mcp` separately for MCP server access. See the [FAQ](FAQ.md#how-do-i-test-a-skill-without-the-patternfly-mcp-server) for setup.
 
+### Codex
+
+Codex can load skills from `~/.agents/skills/` for your user or `.agents/skills/` in a project. ai-helpers marketplace installation is planned — see [UXDOPS-3080](https://issues.redhat.com/browse/UXDOPS-3080). Until then, copy the complete skill folders from the repository root:
+
+```bash
+mkdir -p ~/.agents/skills
+cp -R plugins/uxd-prototype/skills/uxd-prototype-create ~/.agents/skills/
+cp -R plugins/uxd-prototype/skills/uxd-prototype-evaluate ~/.agents/skills/
+cp -R plugins/uxd-prototype/skills/uxd-prototype-export ~/.agents/skills/
+cp -R plugins/uxd-prototype/skills/uxd-prototype-publish ~/.agents/skills/
+if [ -d plugins/uxd-prototype/skills/uxd-consistency-check ]; then
+  cp -R plugins/uxd-prototype/skills/uxd-consistency-check ~/.agents/skills/
+fi
+```
+
+In Codex CLI or the IDE extension, use `/skills` to find skills or `$uxd-prototype-create` to invoke the prototype workflow. Evaluation and browser export need Node.js 18+, Python 3, and Playwright Chromium; see the [evaluator setup](plugins/uxd-prototype/skills/uxd-prototype-evaluate/README.md#prerequisites) and [export setup](plugins/uxd-prototype/skills/uxd-prototype-export/README.md#setup). For the full install, Jira/Figma connections, and first-run walkthrough, see the [Codex setup guide](docs/codex-setup.md), the [official Codex skills guide](https://developers.openai.com/codex/skills/), and [Chai Bot MCP setup](#chai-bot-uxd-persona).
+
 ## Plugins
 
 <!-- BEGIN PLUGIN TABLE -->
@@ -144,6 +161,19 @@ Use the [skill discovery matrix](PLUGINS.md#skill-discovery-matrix) to compare a
 ## PatternFly MCP Server
 
 The [PatternFly MCP server](https://github.com/patternfly/patternfly-mcp) gives AI tools access to component documentation, prop schemas, and design guidelines. On Claude Code, `pf-mcp` is included automatically when you install `patternfly`. On Cursor, the MCP server requires [separate setup](FAQ.md#how-do-i-test-a-skill-without-the-patternfly-mcp-server).
+
+## Chai Bot (UXD Persona)
+
+Chai Bot is available as an MCP server for Claude Code, Codex, Cursor, and Claude Desktop. The **UXD persona** provides access to ai-helpers source code, PatternFly documentation, UXD Jira projects (UXDOPS, UXDSTRAT, UXDR), the UXD Confluence space, and team Slack discussions. This is separate from the PatternFly MCP server, which serves PatternFly component documentation and design-token information.
+
+Use Chai Bot when you need help with:
+
+- Choosing an ai-helpers skill for a task
+- PatternFly component usage and best practices
+- UXD team processes and workflows
+- Troubleshooting skill setup or flags
+
+**Setup:** In Slack, open Chai Bot's **Home** tab, select **🔑 MCP Server Tokens**, and choose the **UXD** persona. The dialog provides the MCP server URL and setup instructions for your editor. VPN is required.
 
 ## Contributing
 

@@ -1,6 +1,6 @@
 # uxd-prototype-evaluate
 
-Evaluate a running prototype against a Jira ticket's acceptance criteria, optionally fix failures, then run persona usability walkthroughs. Writes an HTML evidence report.
+Evaluate a running prototype against a Jira ticket's acceptance criteria, optionally fix failures, then run persona usability walkthroughs and produce an HTML evidence report.
 
 **Contract (inputs, outputs, flags, two-phase flow, artifact paths):** [SKILL.md](SKILL.md)
 
@@ -8,14 +8,29 @@ Evaluate a running prototype against a Jira ticket's acceptance criteria, option
 
 | Requirement | How to get it | Required? |
 |-------------|---------------|-----------|
-| Node.js >= 18 | `brew install node` or `nvm install 18` | Yes |
+| Node.js ≥ 18 | `brew install node` or `nvm install 18` | Yes |
 | Python 3 | `brew install python3` | Yes |
-| Atlassian MCP | Configure in your IDE | Yes (for live Jira) |
-| Playwright Chromium | `npm install` then `npx playwright install chromium` in the skill dir (marketplace install does not run `postinstall`) | Yes |
+| Atlassian MCP | Configure in your assistant | For live Jira lookup |
+| Playwright Chromium | Install with the commands below | Yes for browser evaluation |
+
+Run the preflight check from this skill directory:
 
 ```bash
 bash scripts/preflight-check.sh
 ```
+
+## Quick start
+
+```text
+/uxd-prototype:uxd-prototype-evaluate PROJ-298 http://localhost:3000 --workspace=/path/to/prototype
+/uxd-prototype:uxd-prototype-evaluate review PROJ-298
+```
+
+The first example evaluates a reachable prototype and enables the workspace fix loop; `review` opens the existing report without rerunning the pipeline.
+
+## Setup
+
+From the repository root, install the evaluator dependencies and Chromium before the first browser evaluation:
 
 ```bash
 cd plugins/uxd-prototype/skills/uxd-prototype-evaluate
@@ -23,37 +38,16 @@ npm install
 npx playwright install chromium
 ```
 
-Context repos (`.context/consistency-checker/` and `.context/usability-testing/`) bootstrap on first pipeline run when a git URL is set:
+Marketplace/manual skill-file installation does not install Node dependencies or Chromium. Optional context repositories bootstrap on first pipeline run when configured:
 
 ```bash
 export USABILITY_TESTING_REPO="git@example.com:org/usability-testing.git"
 export CONSISTENCY_CHECKER_REPO="git@example.com:org/consistency-checker.git"
 ```
 
-Product-specific remotes, MLflow, and Pages URLs come from the `uxd-eval-config` plugin (internal marketplace). Personas: `plugins/uxd-prototype/knowledge/personas/`. Overlay details: `references/skill-overlays.md`.
+Optional Google Sheet sync: set `tracking.sheet_id` in `config/product-overlay.yaml` or `EVAL_SHEET_ID`; leave it unset to disable. Google Drive access requires `gcloud auth login --enable-gdrive-access`.
 
-## Quick start
-
-```
-/uxd-prototype-evaluate PROJ-298 http://localhost:3000 --workspace=/path/to/prototype
-/uxd-prototype-evaluate review PROJ-298
-```
-
-## Optional Google Sheet sync
-
-Set `tracking.sheet_id` in `config/product-overlay.yaml` (or `EVAL_SHEET_ID`). Leave empty to disable. Requires `gcloud auth login --enable-gdrive-access`.
-
-## Validators
-
-| Script | Purpose |
-|--------|---------|
-| `scripts/validate-phase-b-output.js` | Phase B persona output schemas and score contracts |
-| `scripts/validate-artifact-schemas.js` | Schema validation for pipeline artifacts |
-| `scripts/validate-report-rendering.js` | Report rendering quality checks |
-
-## Claude Code permissions
-
-The eval pipeline shells out to bundled Node/bash scripts and Playwright. To auto-approve them, add to the project's `.claude/settings.json` (or `~/.claude/settings.json`):
+Claude Code users may optionally auto-approve the evaluator's bundled commands by adding this project-level allowlist to `.claude/settings.json` (or `~/.claude/settings.json`). Contributors in this repository can accept the workspace trust prompt. Other assistants manage command approval through their own permission controls.
 
 ```json
 {
@@ -86,14 +80,23 @@ The eval pipeline shells out to bundled Node/bash scripts and Playwright. To aut
 }
 ```
 
-Contributors in this repo get these via `.claude/settings.json` (accepted once via the workspace trust dialog).
+Phase orchestration is documented in [SKILL.md](SKILL.md) and [references/orchestration.md](references/orchestration.md). Per-phase procedures are in `references/phases/`; `references/draft-phase-a-cli-workflow.md` is not implemented.
 
-## Phase procedures
+## Scripts
 
-Orchestration: `SKILL.md` and `references/orchestration.md`. Per-phase files live in `references/phases/`. Ignore `references/draft-phase-a-cli-workflow.md` — not implemented.
+| Script | Purpose |
+|--------|---------|
+| `scripts/preflight-check.sh` | Check evaluator prerequisites |
+| `scripts/validate-phase-b-output.js` | Validate Phase B persona output schemas and scores |
+| `scripts/validate-artifact-schemas.js` | Validate pipeline artifact schemas |
+| `scripts/validate-report-rendering.js` | Check rendered report quality |
+| `scripts/pipeline-setup.sh` | Prepare pipeline artifact directories and runtime state |
+| `scripts/publish-report.sh` | Publish the generated report when configured |
+
+Product-specific remotes and Pages URLs come from the internal `uxd-eval-config` plugin. Persona files are under `plugins/uxd-prototype/knowledge/personas/`; see `references/skill-overlays.md` for overlays.
 
 ## Related
 
-- `uxd-prototype-create` — builds the prototype; refine from eval findings
-- `uxd-prototype-export` — Prototype Bar Eval tab and `export-helper.mjs`
-- `uxd-prototype-publish` — blocked by AC FAIL unless `--force`
+- **uxd-prototype-create** — creates the prototype and artifacts; refine from evaluation findings
+- **uxd-prototype-export** — provides the Prototype Bar Eval tab and local report helper
+- **uxd-prototype-publish** — blocks publishing on AC FAIL unless `--force` is explicitly used

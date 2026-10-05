@@ -1,9 +1,3 @@
-<!-- Auto-generated — do not edit manually. -->
-
-# UXD Prototype Plugin
-
-Create UX prototypes from Jira tickets, Figma designs, or feature descriptions.
-
 ## Workflow and documentation
 
 Use **create → evaluate → publish**, with **export** whenever you need captures or implementation-ready output.
