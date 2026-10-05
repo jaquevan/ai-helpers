@@ -1,0 +1,259 @@
+{
+  "nodes": [
+    {
+      "id": "actor",
+      "type": "text",
+      "x": 260,
+      "y": 40,
+      "width": 280,
+      "height": 120,
+      "text": "**Actor**\nWhose journey this supports."
+    },
+    {
+      "id": "scenario",
+      "type": "text",
+      "x": 580,
+      "y": 40,
+      "width": 600,
+      "height": 120,
+      "text": "**Scenario**\nThe service moment this blueprint explains."
+    },
+    {
+      "id": "lane-customer",
+      "type": "text",
+      "x": 40,
+      "y": 248,
+      "width": 180,
+      "height": 140,
+      "text": "**Customer actions**"
+    },
+    {
+      "id": "lane-frontstage",
+      "type": "text",
+      "x": 40,
+      "y": 428,
+      "width": 180,
+      "height": 140,
+      "text": "**Frontstage**",
+      "color": "5"
+    },
+    {
+      "id": "lane-backstage",
+      "type": "text",
+      "x": 40,
+      "y": 608,
+      "width": 180,
+      "height": 140,
+      "text": "**Backstage**",
+      "color": "6"
+    },
+    {
+      "id": "lane-support",
+      "type": "text",
+      "x": 40,
+      "y": 788,
+      "width": 180,
+      "height": 140,
+      "text": "**Support**",
+      "color": "2"
+    },
+    {
+      "id": "lane-evidence",
+      "type": "text",
+      "x": 40,
+      "y": 968,
+      "width": 180,
+      "height": 120,
+      "text": "**Evidence**"
+    },
+    {
+      "id": "phase-before",
+      "type": "group",
+      "x": 260,
+      "y": 200,
+      "width": 280,
+      "height": 924,
+      "label": "Before"
+    },
+    {
+      "id": "phase-before-customer",
+      "type": "text",
+      "x": 280,
+      "y": 248,
+      "width": 240,
+      "height": 140,
+      "text": "What the person does in this phase."
+    },
+    {
+      "id": "phase-before-frontstage",
+      "type": "text",
+      "x": 280,
+      "y": 428,
+      "width": 240,
+      "height": 140,
+      "text": "What the person can see.",
+      "color": "5"
+    },
+    {
+      "id": "phase-before-backstage",
+      "type": "text",
+      "x": 280,
+      "y": 608,
+      "width": 240,
+      "height": 140,
+      "text": "Work the person cannot see.",
+      "color": "6"
+    },
+    {
+      "id": "phase-before-support",
+      "type": "text",
+      "x": 280,
+      "y": 788,
+      "width": 240,
+      "height": 140,
+      "text": "Systems, partners, or policy behind it.",
+      "color": "2"
+    },
+    {
+      "id": "phase-before-evidence",
+      "type": "text",
+      "x": 280,
+      "y": 968,
+      "width": 240,
+      "height": 120,
+      "text": "What the moment leaves behind."
+    },
+    {
+      "id": "phase-during",
+      "type": "group",
+      "x": 580,
+      "y": 200,
+      "width": 280,
+      "height": 924,
+      "label": "During"
+    },
+    {
+      "id": "phase-during-customer",
+      "type": "text",
+      "x": 600,
+      "y": 248,
+      "width": 240,
+      "height": 140,
+      "text": "What the person does in this phase."
+    },
+    {
+      "id": "phase-during-frontstage",
+      "type": "text",
+      "x": 600,
+      "y": 428,
+      "width": 240,
+      "height": 140,
+      "text": "What the person can see.",
+      "color": "5"
+    },
+    {
+      "id": "phase-during-backstage",
+      "type": "text",
+      "x": 600,
+      "y": 608,
+      "width": 240,
+      "height": 140,
+      "text": "Work the person cannot see.",
+      "color": "6"
+    },
+    {
+      "id": "phase-during-support",
+      "type": "text",
+      "x": 600,
+      "y": 788,
+      "width": 240,
+      "height": 140,
+      "text": "Systems, partners, or policy behind it.",
+      "color": "2"
+    },
+    {
+      "id": "phase-during-evidence",
+      "type": "text",
+      "x": 600,
+      "y": 968,
+      "width": 240,
+      "height": 120,
+      "text": "What the moment leaves behind."
+    },
+    {
+      "id": "phase-after",
+      "type": "group",
+      "x": 900,
+      "y": 200,
+      "width": 280,
+      "height": 924,
+      "label": "After"
+    },
+    {
+      "id": "phase-after-customer",
+      "type": "text",
+      "x": 920,
+      "y": 248,
+      "width": 240,
+      "height": 140,
+      "text": "What the person does in this phase."
+    },
+    {
+      "id": "phase-after-frontstage",
+      "type": "text",
+      "x": 920,
+      "y": 428,
+      "width": 240,
+      "height": 140,
+      "text": "What the person can see.",
+      "color": "5"
+    },
+    {
+      "id": "phase-after-backstage",
+      "type": "text",
+      "x": 920,
+      "y": 608,
+      "width": 240,
+      "height": 140,
+      "text": "Work the person cannot see.",
+      "color": "6"
+    },
+    {
+      "id": "phase-after-support",
+      "type": "text",
+      "x": 920,
+      "y": 788,
+      "width": 240,
+      "height": 140,
+      "text": "Systems, partners, or policy behind it.",
+      "color": "2"
+    },
+    {
+      "id": "phase-after-evidence",
+      "type": "text",
+      "x": 920,
+      "y": 968,
+      "width": 240,
+      "height": 120,
+      "text": "What the moment leaves behind."
+    }
+  ],
+  "edges": [
+    {
+      "id": "edge-before-during",
+      "fromNode": "phase-before-customer",
+      "toNode": "phase-during-customer",
+      "fromSide": "right",
+      "toSide": "left",
+      "toEnd": "arrow"
+    },
+    {
+      "id": "edge-during-after",
+      "fromNode": "phase-during-customer",
+      "toNode": "phase-after-customer",
+      "fromSide": "right",
+      "toSide": "left",
+      "toEnd": "arrow"
+    }
+  ]
+}

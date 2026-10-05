@@ -1,0 +1,6 @@
+prompt: >-
+  Using the uxd-canvas-create skill, plan a local service blueprint for
+  UIESTRAT-220, cluster access request. Phases: Before, During, After. Do not
+  contact Miro, publish, or run commands. Name the template lanes, how phases
+  are arranged, where the files go, and whether this blueprint should be stored
+  as Mermaid.

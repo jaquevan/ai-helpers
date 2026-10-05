@@ -684,4 +684,4 @@ one additional Phase A crank. See the git history for full design details.
 - **Prototype URL unreachable:** Wait 10s, retry once. If still down, stop with error.
 - **eval-fix produces no changes:** Stop Phase A — more iterations won't help. Proceed to Phase B.
 - **Dev server crashes after fix:** Stop Phase A, note which files may have caused it. Proceed to Phase B.
-- **Missing usability-testing context:** Phase B runs using the bundled plugin persona catalog with reduced behavioral fidelity. Re-run `bootstrap-usability-testing.sh` after setting `USABILITY_TESTING_REPO` (or overlay `context_repos`). Consistency guidelines and analyzer ship in `plugins/uxd-workshop/skills/uxd-consistency-check/`.
+- **Missing usability-testing context:** Phase B runs using the bundled plugin persona catalog with reduced behavioral fidelity. Re-run `bootstrap-usability-testing.sh` after setting `USABILITY_TESTING_REPO` (or overlay `context_repos`). Consistency guidelines and analyzer ship in `plugins/uxd-prototype/skills/uxd-consistency-check/`.

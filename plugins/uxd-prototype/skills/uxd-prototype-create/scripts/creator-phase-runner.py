@@ -32,9 +32,7 @@ EVALUATOR_SCRIPTS_DIR = (
     / "uxd-prototype-evaluate"
     / "scripts"
 )
-CONSISTENCY_CHECK_DIR = (
-    SKILL_DIR.parents[2] / "uxd-workshop" / "skills" / "uxd-consistency-check"
-)
+CONSISTENCY_CHECK_DIR = SKILL_DIR.parent / "uxd-consistency-check"
 PROTOTYPE_EXPORT_DIR = (
     SKILL_DIR.parents[2] / "uxd-prototype" / "skills" / "uxd-prototype-export"
 )

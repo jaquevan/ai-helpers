@@ -1,0 +1,9 @@
+case_type: source
+guideline: no-custom-css
+expected_exit: 0
+expected_summary:
+  total_guidelines_checked: 1
+  violations: 0
+  warnings: 0
+  passes: 1
+expected_findings: []

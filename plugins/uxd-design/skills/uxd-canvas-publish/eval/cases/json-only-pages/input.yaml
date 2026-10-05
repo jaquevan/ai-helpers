@@ -1,0 +1,6 @@
+prompt: >-
+  Using the uxd-canvas-publish skill with --target github, publish
+  UIESTRAT-610. The export fixture is under .artifacts/UIESTRAT-610/export/
+  and contains canvas.json only, with no index.html. The user did not ask to
+  host canvas.json by itself. Follow the skill. Do not deploy.
+fixture: .artifacts/UIESTRAT-610

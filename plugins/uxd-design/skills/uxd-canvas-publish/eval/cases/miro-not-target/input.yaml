@@ -1,0 +1,4 @@
+prompt: >-
+  Using the uxd-canvas-publish skill, publish the canvas to this Miro board:
+  https://miro.com/app/board/uXjVExample/=
+  Follow the skill. Do not write widgets or deploy.

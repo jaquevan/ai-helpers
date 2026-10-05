@@ -1,0 +1,6 @@
+prompt: >-
+  Using the uxd-canvas-publish skill with --target github, publish
+  UIESTRAT-410. The fixture under .artifacts/UIESTRAT-410/ has a canvas/
+  directory and no export/. Follow the skill. Do not invent a bundle and do
+  not publish.
+fixture: .artifacts/UIESTRAT-410

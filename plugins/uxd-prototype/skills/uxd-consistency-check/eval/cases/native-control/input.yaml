@@ -1,0 +1,5 @@
+prompt: >-
+  Use uxd-consistency-check to audit prototype/ against patternfly-component-usage
+  only. Save the bundled analyzer's JSON to artifacts/consistency-report.json
+  in this workspace and suggest a PatternFly-aligned correction. Do not edit
+  source, enable tracing, install dependencies, or run visual checks.

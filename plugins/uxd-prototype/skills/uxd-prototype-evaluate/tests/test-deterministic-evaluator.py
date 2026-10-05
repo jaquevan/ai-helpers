@@ -11,10 +11,9 @@ from pathlib import Path
 
 
 EVALUATOR_DIR = Path(__file__).resolve().parents[1]
-WORKSHOP_DIR = EVALUATOR_DIR.parents[2] / "uxd-workshop"
+PROTOTYPE_SKILLS_DIR = EVALUATOR_DIR.parent
 FIXTURE = (
-    WORKSHOP_DIR
-    / "skills"
+    PROTOTYPE_SKILLS_DIR
     / "uxd-consistency-check"
     / "tests"
     / "fixtures"

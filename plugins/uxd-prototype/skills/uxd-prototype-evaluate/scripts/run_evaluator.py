@@ -17,7 +17,7 @@ from project_consistency_shadow import write_consistency_shadow
 
 SCRIPT_DIR = Path(__file__).resolve().parent
 SKILL_DIR = SCRIPT_DIR.parent
-CONSISTENCY_DIR = SKILL_DIR.parents[2] / "uxd-workshop" / "skills" / "uxd-consistency-check"
+CONSISTENCY_DIR = SKILL_DIR.parent / "uxd-consistency-check"
 ANALYZER = CONSISTENCY_DIR / "scripts" / "analyze.py"
 VALIDATOR = SCRIPT_DIR / "validate-consistency.js"
 

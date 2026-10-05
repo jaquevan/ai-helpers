@@ -1,0 +1,6 @@
+prompt: >-
+  Using the uxd-canvas-publish skill with --dry-run --target gitlab, validate
+  publishing UIESTRAT-510. The export fixture is under
+  .artifacts/UIESTRAT-510/export/ and includes index.html. Describe what would
+  happen. Do not push or deploy.
+fixture: .artifacts/UIESTRAT-510

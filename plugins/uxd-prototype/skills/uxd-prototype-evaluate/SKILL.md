@@ -117,7 +117,7 @@ cd "${UXD_PROJECT_ROOT}"
 
 Stop if Chromium install fails; do not start Playwright without it.
 
-Design guidelines and the analyzer ship in `plugins/uxd-workshop/skills/uxd-consistency-check/`. Consistency runs without a project checkout, bootstrap clone, or network access. Usability-testing still bootstraps into `.context/usability-testing/` when `USABILITY_TESTING_REPO` (or overlay `context_repos`) is set; otherwise that phase degrades. Product overlay: [references/skill-overlays.md](references/skill-overlays.md).
+Design guidelines and the analyzer ship in `plugins/uxd-prototype/skills/uxd-consistency-check/`. Consistency runs without a project checkout, bootstrap clone, or network access. Usability-testing still bootstraps into `.context/usability-testing/` when `USABILITY_TESTING_REPO` (or overlay `context_repos`) is set; otherwise that phase degrades. Product overlay: [references/skill-overlays.md](references/skill-overlays.md).
 
 ## Portable execution contract
 

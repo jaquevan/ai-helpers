@@ -1,0 +1,87 @@
+{
+  "nodes": [
+    {
+      "id": "center",
+      "type": "text",
+      "x": 560,
+      "y": 280,
+      "width": 280,
+      "height": 120,
+      "text": "**Topic**\nThe question this map answers.",
+      "textAlign": "center",
+      "verticalAlign": "middle"
+    },
+    {
+      "id": "branch-1",
+      "type": "text",
+      "x": 80,
+      "y": 80,
+      "width": 240,
+      "height": 100,
+      "text": "**Branch**\nOne part of the topic."
+    },
+    {
+      "id": "branch-2",
+      "type": "text",
+      "x": 1080,
+      "y": 80,
+      "width": 240,
+      "height": 100,
+      "text": "**Branch**\nOne part of the topic."
+    },
+    {
+      "id": "branch-3",
+      "type": "text",
+      "x": 80,
+      "y": 480,
+      "width": 240,
+      "height": 100,
+      "text": "**Branch**\nOne part of the topic."
+    },
+    {
+      "id": "branch-4",
+      "type": "text",
+      "x": 1080,
+      "y": 480,
+      "width": 240,
+      "height": 100,
+      "text": "**Branch**\nOne part of the topic."
+    },
+    {
+      "id": "branch-1a",
+      "type": "text",
+      "x": 80,
+      "y": 220,
+      "width": 240,
+      "height": 80,
+      "text": "A smaller part of that branch."
+    }
+  ],
+  "edges": [
+    {
+      "id": "edge-center-1",
+      "fromNode": "center",
+      "toNode": "branch-1"
+    },
+    {
+      "id": "edge-center-2",
+      "fromNode": "center",
+      "toNode": "branch-2"
+    },
+    {
+      "id": "edge-center-3",
+      "fromNode": "center",
+      "toNode": "branch-3"
+    },
+    {
+      "id": "edge-center-4",
+      "fromNode": "center",
+      "toNode": "branch-4"
+    },
+    {
+      "id": "edge-1-1a",
+      "fromNode": "branch-1",
+      "toNode": "branch-1a"
+    }
+  ]
+}

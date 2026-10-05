@@ -1,8 +1,22 @@
-# PatternFly plugins
-plugins/patternfly/                 @jpuzz0 @nicolethoen @dlabaj
+# Plugin ownership — last matching pattern wins.
+# GitHub requests reviews from these teams on PRs that touch the path.
+# Teams need write access for required code-owner reviews to apply.
+# Membership lives on the team, so this file stays put when someone joins or leaves.
+#
+# Proposed teams to create under rh-uxd (reviews will not route until they exist):
+#   ai-pf-reviewers, ai-pf-a11y-reviewers, ai-uxd-reviewers
 
-# UXD plugins
-plugins/uxd-*/                      @jpuzz0 @maryctucker @andybraren
+# Default for anything not matched below
+*                                   @rh-uxd/ai-helpers-maintainers
+
+# --- PatternFly plugins ---
+# Sub-plugins inherit plugins/patternfly/. pf-a11y is the only separate route.
+plugins/patternfly/                 @rh-uxd/ai-pf-reviewers
+plugins/patternfly/pf-a11y/         @rh-uxd/ai-pf-a11y-reviewers
+plugins/pf-assist/                  @rh-uxd/ai-pf-reviewers
+
+# --- UXD plugins ---
+plugins/uxd-*/                      @rh-uxd/ai-uxd-reviewers
 
 # Shared infrastructure
 .claude-plugin/marketplace.json     @rh-uxd/ai-helpers-maintainers
@@ -20,6 +34,6 @@ CONTRIBUTING-SKILLS.md              @rh-uxd/ai-helpers-maintainers
 .coderabbit.yaml                    @rh-uxd/ai-helpers-maintainers
 
 # Repo-level config
-AGENTS.md                            @rh-uxd/ai-helpers-maintainers
+AGENTS.md                           @rh-uxd/ai-helpers-maintainers
 CLAUDE.md                           @rh-uxd/ai-helpers-maintainers
 .agents/                            @rh-uxd/ai-helpers-maintainers

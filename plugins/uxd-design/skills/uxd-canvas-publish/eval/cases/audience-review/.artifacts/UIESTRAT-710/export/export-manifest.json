@@ -1,0 +1,5 @@
+{
+  "title": "Access review",
+  "flags": { "viewer": "html" },
+  "files": ["index.html"]
+}

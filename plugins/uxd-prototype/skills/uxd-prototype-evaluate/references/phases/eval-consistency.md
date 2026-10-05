@@ -1,6 +1,6 @@
 # eval-consistency
 
-Runs PatternFly design consistency checks against the prototype using `plugins/uxd-workshop/skills/uxd-consistency-check/`. It never clones a checker, reads a project `.context/` checker, or requires network access.
+Runs PatternFly design consistency checks against the prototype using `plugins/uxd-prototype/skills/uxd-consistency-check/`. It never clones a checker, reads a project `.context/` checker, or requires network access.
 
 **Resolve `CONSISTENCY_DIR` before any skip or check:**
 

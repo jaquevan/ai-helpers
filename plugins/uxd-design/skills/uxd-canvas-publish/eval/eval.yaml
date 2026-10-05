@@ -1,0 +1,254 @@
+name: uxd-canvas-publish-eval
+description: >-
+  Evaluate uxd-canvas-publish's target prompt, export gate, Miro refusal,
+  dry-run, and public-host checks
+
+skill: uxd-design:uxd-canvas-publish
+
+execution:
+  mode: case
+  arguments: "{prompt}"
+
+runner:
+  type: claude-code
+  plugin_dirs:
+    - plugins/uxd-design
+
+models:
+  skill: claude-sonnet-4-6
+  judge: claude-sonnet-4-6
+  hook: claude-haiku-4-5-20251001
+
+permissions:
+  allow: []
+  deny:
+    - "mcp__*"
+
+inputs:
+  tools:
+    - match: Questions asked to the user via AskUserQuestion.
+      prompt: |
+        Answer based on the test case context in input.yaml and answers.yaml.
+        If the case is only asking where to publish, do not pick a target.
+
+dataset:
+  path: cases
+  # Missing paths are skipped (asks-target has no export tree).
+  workspace:
+    files:
+      - .artifacts
+  schema: |
+    Each case directory contains:
+    - input.yaml: prompt field with a realistic user request
+    - annotations.yaml: case_type for conditional judges
+    - Optional answers.yaml for AskUserQuestion auto-answer guidance
+    - Optional .artifacts/ fixture tree the prompt references
+
+outputs:
+  - path: artifacts
+    schema: |
+      Judges check conversation text for destination prompts, missing-export
+      stops, Miro refusal, dry-run behavior, JSON-only host limits, and
+      audience review. Cases must not push or deploy.
+
+traces:
+  stdout: true
+  stderr: true
+  events: true
+  metrics: true
+
+judges:
+  - name: asks_publish_target
+    description: Asks which external host to use and does not offer local or Miro
+    if: "annotations.get('case_type') == 'asks-target'"
+    check: |
+      import re
+
+      text = outputs.get("conversation", "")
+      tool_calls = outputs.get("tool_calls") or []
+      for call in tool_calls:
+          text += "\n" + str(call.get("input", ""))
+
+      options = ["merge request", "github pages", "gitlab pages", "vercel"]
+      missing = [option for option in options if not re.search(option, text, re.IGNORECASE)]
+      if missing:
+          return False, f"Publish targets missing: {', '.join(missing)}"
+
+      offers_local = re.search(
+          r"\*\*local\*\*|target local|--target local|publish locally",
+          text,
+          re.IGNORECASE,
+      )
+      if offers_local and not re.search(
+          r"no --target local|not a publish target|uxd-canvas-export",
+          text,
+          re.IGNORECASE,
+      ):
+          return False, "Offered local output as a publish target"
+
+      offers_miro = re.search(
+          r"\*\*miro\*\*|publish to miro|miro board",
+          text,
+          re.IGNORECASE,
+      )
+      if offers_miro and not re.search(
+          r"not a --target|uxd-canvas-create|not a publish",
+          text,
+          re.IGNORECASE,
+      ):
+          return False, "Offered Miro as a publish target"
+
+      deployed = re.search(r"\b(pushed|deployed|published to)\b", text, re.IGNORECASE)
+      if deployed and not re.search(r"do not|don't|not yet|will not|won't", text, re.IGNORECASE):
+          return False, "Published before a target was chosen"
+
+      return True, "Asked for an external publish target"
+
+  - name: stops_without_export
+    description: Stops when the export bundle is missing
+    if: "annotations.get('case_type') == 'missing-export'"
+    check: |
+      import re
+
+      text = outputs.get("conversation", "")
+      for path, content in outputs.get("files", {}).items():
+          text += "\n" + content
+
+      stops = re.search(
+          r"uxd-canvas-export|run export|export first|no export|missing export|export directory",
+          text,
+          re.IGNORECASE,
+      )
+      if not stops:
+          return False, "Did not stop and require uxd-canvas-export first"
+
+      invented = re.search(
+          r"(created|wrote|invented|generated).{0,40}index\.html|here is the bundle",
+          text,
+          re.IGNORECASE,
+      )
+      if invented:
+          return False, "Invented an export bundle inside the publish skill"
+
+      deployed = re.search(r"\b(pushed|deployed)\b", text, re.IGNORECASE)
+      if deployed and not re.search(r"do not|don't|not |will not|won't|did not", text, re.IGNORECASE):
+          return False, "Published without an export"
+
+      return True, "Stopped because the export was missing"
+
+  - name: rejects_miro_as_target
+    description: Refuses a Miro board URL as a publish target
+    if: "annotations.get('case_type') == 'miro-not-target'"
+    check: |
+      import re
+
+      text = outputs.get("conversation", "")
+      for path, content in outputs.get("files", {}).items():
+          text += "\n" + content
+
+      refused = re.search(
+          r"not a --target|isn't a --target|not a publish target|board url is not",
+          text,
+          re.IGNORECASE,
+      )
+      create = re.search(r"uxd-canvas-create", text, re.IGNORECASE)
+      if not refused or not create:
+          return False, "Did not refuse the board URL and point to uxd-canvas-create"
+
+      wrote = re.search(r"wrote widgets|updated the board|created the board", text, re.IGNORECASE)
+      if wrote and not re.search(r"do not|don't|will not|won't|did not", text, re.IGNORECASE):
+          return False, "Updated the Miro board from the publish skill"
+
+      return True, "Refused Miro as a publish target"
+
+  - name: dry_run_does_not_push
+    description: Describes a GitLab Pages publish without pushing
+    if: "annotations.get('case_type') == 'dry-run-gitlab'"
+    check: |
+      import re
+
+      text = outputs.get("conversation", "")
+      for path, content in outputs.get("files", {}).items():
+          text += "\n" + content
+
+      dry = re.search(r"dry-run|dry run", text, re.IGNORECASE)
+      gitlab = re.search(r"gitlab pages", text, re.IGNORECASE)
+      html = re.search(r"index\.html", text, re.IGNORECASE)
+      if not dry or not gitlab or not html:
+          return False, "Did not describe a dry-run GitLab Pages publish of index.html"
+
+      pushed = re.search(r"\b(pushed|deployed|created the pipeline)\b", text, re.IGNORECASE)
+      hypothetical = re.search(r"would|without (pushing|deploying)|did not|do not|not actually", text, re.IGNORECASE)
+      if pushed and not hypothetical:
+          return False, "Pushed or deployed during dry-run"
+
+      return True, "Described the GitLab Pages dry-run without publishing"
+
+  - name: blocks_json_only_pages
+    description: Does not deploy a JSON-only export to GitHub Pages
+    if: "annotations.get('case_type') == 'json-only-pages'"
+    check: |
+      import re
+
+      text = outputs.get("conversation", "")
+      for path, content in outputs.get("files", {}).items():
+          text += "\n" + content
+
+      needs_html = re.search(r"index\.html", text, re.IGNORECASE)
+      json_only = re.search(r"canvas\.json", text, re.IGNORECASE)
+      blocked = re.search(
+          r"not deploy|won't deploy|will not deploy|cannot deploy|do not deploy|unless.{0,40}canvas\.json",
+          text,
+          re.IGNORECASE | re.DOTALL,
+      )
+      if not needs_html or not json_only or not blocked:
+          return False, "Did not block GitHub Pages for a JSON-only export"
+
+      deployed = re.search(r"\b(deployed|published to github)\b", text, re.IGNORECASE)
+      if deployed and not re.search(r"did not|will not|won't|not deploy", text, re.IGNORECASE):
+          return False, "Deployed a JSON-only export to GitHub Pages"
+
+      return True, "Blocked GitHub Pages for a JSON-only export"
+
+  - name: requires_audience_review
+    description: Holds a public deploy when the export contains personal or secret data
+    if: "annotations.get('case_type') == 'audience-review'"
+    check: |
+      import re
+
+      text = outputs.get("conversation", "")
+      for path, content in outputs.get("files", {}).items():
+          text += "\n" + content
+
+      flagged = re.search(
+          r"password|confidential|personal|audience|secret|credential",
+          text,
+          re.IGNORECASE,
+      )
+      held = re.search(
+          r"do not|don't|will not|won't|stop|before|hold|require|review",
+          text,
+          re.IGNORECASE,
+      )
+      if not flagged or not held:
+          return False, "Did not hold the public deploy for an audience-safe review"
+
+      deployed = re.search(r"\b(deployed|published to github pages)\b", text, re.IGNORECASE)
+      if deployed and not re.search(r"did not|will not|won't|not publish|not deploy", text, re.IGNORECASE):
+          return False, "Published confidential canvas content"
+
+      return True, "Required an audience-safe review before a public deploy"
+
+thresholds:
+  asks_publish_target:
+    min_pass_rate: 1.0
+  stops_without_export:
+    min_pass_rate: 1.0
+  rejects_miro_as_target:
+    min_pass_rate: 1.0
+  dry_run_does_not_push:
+    min_pass_rate: 1.0
+  blocks_json_only_pages:
+    min_pass_rate: 1.0
+  requires_audience_review:
+    min_pass_rate: 1.0

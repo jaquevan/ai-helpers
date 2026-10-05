@@ -1,0 +1,5 @@
+prompt: >-
+  Use uxd-consistency-check to audit prototype/ against no-custom-css only.
+  Write the bundled analyzer's JSON report to artifacts/consistency-report.json
+  in this workspace and summarize the findings. Do not modify the prototype,
+  enable tracing, install dependencies, or perform a visual review.

@@ -35,7 +35,7 @@ def main() -> int:
         benchmark = root / "benchmark"
         for path in (workspace, skill, benchmark):
             path.mkdir()
-        consistency = root / "uxd-workshop" / "skills" / "uxd-consistency-check"
+        consistency = root / "uxd-consistency-check"
         consistency.mkdir(parents=True)
         allowed = tuple(str(path) for path in (workspace, skill, benchmark))
 
