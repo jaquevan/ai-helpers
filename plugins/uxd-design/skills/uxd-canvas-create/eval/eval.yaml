@@ -1,0 +1,313 @@
+name: uxd-canvas-create-eval
+description: >-
+  Evaluate uxd-canvas-create's template choice, location rules, Mermaid
+  boundary, and local canvas file contract
+
+skill: uxd-design:uxd-canvas-create
+
+execution:
+  mode: case
+  arguments: "{prompt}"
+
+runner:
+  type: claude-code
+  plugin_dirs:
+    - plugins/uxd-design
+
+models:
+  skill: claude-sonnet-4-6
+  judge: claude-sonnet-4-6
+  hook: claude-haiku-4-5-20251001
+
+permissions:
+  allow: []
+  deny:
+    - "mcp__*"
+
+inputs:
+  tools:
+    - match: Questions asked to the user via AskUserQuestion.
+      prompt: |
+        Answer based on the test case context in input.yaml and answers.yaml.
+        If answers.yaml says not to supply the missing brief, do not invent one.
+
+dataset:
+  path: cases
+  schema: |
+    Each case directory contains:
+    - input.yaml: prompt field with a realistic user request
+    - annotations.yaml: case_type for conditional judges
+    - Optional answers.yaml for AskUserQuestion auto-answer guidance
+    Cases ask the skill to plan the canvas. They must not publish, deploy,
+    or contact Miro.
+
+outputs:
+  - path: artifacts
+    schema: |
+      Judges check conversation text and any written canvas files for template
+      lanes, Mermaid boundaries, local file layout, and Miro snapshot rules.
+
+traces:
+  stdout: true
+  stderr: true
+  events: true
+  metrics: true
+
+judges:
+  - name: local_journey_uses_template
+    description: Starts a local journey map from the template lanes and file contract
+    if: "annotations.get('case_type') == 'local-journey'"
+    check: |
+      import re
+
+      text = outputs.get("conversation", "")
+      for path, content in outputs.get("files", {}).items():
+          text += "\n" + content
+
+      lanes = ["actions", "mindsets", "emotions", "pain points", "opportunities"]
+      missing = [lane for lane in lanes if not re.search(re.escape(lane), text, re.IGNORECASE)]
+      if missing:
+          return False, f"Journey template lanes missing: {', '.join(missing)}"
+
+      columns = re.search(
+          r"left to right|columns|phases are columns|phase column",
+          text,
+          re.IGNORECASE,
+      )
+      if not columns:
+          return False, "Did not keep journey phases as left-to-right columns"
+
+      local_files = re.search(
+          r"\.artifacts/.{0,40}canvas/|canvas\.json",
+          text,
+          re.IGNORECASE,
+      )
+      metadata = all(
+          re.search(field, text) for field in ("metadata.json", "title", "description", "createdAt", "updatedAt")
+      )
+      if not local_files or not metadata:
+          return False, "Did not describe local canvas.json and metadata.json fields"
+
+      validated = re.search(r"validate-canvas|validator", text, re.IGNORECASE)
+      if not validated:
+          return False, "Did not validate the local canvas.json"
+
+      declines_mermaid = re.search(
+          r"(do not|don't|not|avoid|instead).{0,80}mermaid|mermaid.{0,60}(drop|lose|not for|avoid)|spatial",
+          text,
+          re.IGNORECASE | re.DOTALL,
+      )
+      if not declines_mermaid:
+          return False, "Did not keep the journey map out of Mermaid"
+
+      published = re.search(
+          r"(deploy|publish|push).{0,40}(pages|vercel|github|gitlab)|wrote widgets",
+          text,
+          re.IGNORECASE,
+      )
+      if published and not re.search(r"do not|don't|not |will not|won't", text, re.IGNORECASE):
+          return False, "Published or wrote a board while creating a local canvas"
+
+      return True, "Planned a local journey map from the template contract"
+
+  - name: flowchart_stays_mermaid
+    description: Stores a local flowchart as Mermaid instead of a journey template
+    if: "annotations.get('case_type') == 'flowchart-mermaid'"
+    check: |
+      import re
+
+      text = outputs.get("conversation", "")
+      for path, content in outputs.get("files", {}).items():
+          text += "\n" + content
+
+      mermaid = re.search(
+          r'subtype.{0,20}mermaid|mermaid',
+          text,
+          re.IGNORECASE,
+      )
+      if not mermaid:
+          return False, "Did not store the flowchart as Mermaid"
+
+      shows_source = re.search(
+          r"source|does not render|not render|viewer shows",
+          text,
+          re.IGNORECASE,
+      )
+      if not shows_source:
+          return False, "Did not state that the local viewer shows Mermaid source"
+
+      journey = re.search(
+          r"mindsets|pain points|opportunities|journey-map",
+          text,
+          re.IGNORECASE,
+      )
+      declines_journey = re.search(
+          r"(not a journey|do not use the journey|no journey template|stays mermaid|instead of)",
+          text,
+          re.IGNORECASE,
+      )
+      if journey and not declines_journey:
+          return False, "Applied the journey-map template to a flowchart"
+
+      return True, "Kept the flowchart as local Mermaid source"
+
+  - name: miro_board_is_canonical
+    description: Treats the Miro board as canonical and a local file as a snapshot
+    if: "annotations.get('case_type') == 'miro-snapshot'"
+    check: |
+      import re
+
+      text = outputs.get("conversation", "")
+      for path, content in outputs.get("files", {}).items():
+          text += "\n" + content
+
+      canonical = re.search(
+          r"(board|miro).{0,40}(canonical|source of truth)|(canonical|source of truth).{0,40}(board|miro)",
+          text,
+          re.IGNORECASE | re.DOTALL,
+      )
+      if not canonical:
+          return False, "Did not treat the Miro board as the source of truth"
+
+      snapshot = re.search(r"snapshot", text, re.IGNORECASE)
+      not_truth = re.search(
+          r"snapshot.{0,80}(not|isn't|is not).{0,40}source of truth|not the source of truth",
+          text,
+          re.IGNORECASE | re.DOTALL,
+      )
+      if not snapshot or not not_truth:
+          return False, "Did not describe the local file as a snapshot rather than the source of truth"
+
+      ids = re.search(r"miroId", text) and re.search(r"source", text, re.IGNORECASE)
+      if not ids:
+          return False, "Did not record source and miroId on the snapshot"
+
+      confirm = re.search(
+          r"confirm",
+          text,
+          re.IGNORECASE,
+      )
+      if not confirm:
+          return False, "Did not confirm before writing or deleting board items"
+
+      via_publish = re.search(
+          r"uxd-canvas-publish.{0,40}(update|write|board)|publish.{0,30}(the|this) board",
+          text,
+          re.IGNORECASE,
+      )
+      if via_publish:
+          return False, "Routed a board update through canvas publish"
+
+      return True, "Kept the board canonical and the local file a snapshot"
+
+  - name: asks_for_missing_brief
+    description: Asks for a missing purpose, audience, or source before authoring
+    if: "annotations.get('case_type') == 'asks-missing-brief'"
+    check: |
+      import re
+
+      text = outputs.get("conversation", "")
+      tool_calls = outputs.get("tool_calls") or []
+      for call in tool_calls:
+          text += "\n" + str(call.get("input", ""))
+      asked_via_tool = any(c.get("name") == "AskUserQuestion" for c in tool_calls)
+      asks = asked_via_tool or re.search(
+          r"(what|who|which|purpose|audience|source|brief|where should).{0,40}\?",
+          text,
+          re.IGNORECASE | re.DOTALL,
+      )
+      if not asks:
+          return False, "Did not ask for the missing brief"
+
+      covers = sum(
+          bool(re.search(pattern, text, re.IGNORECASE))
+          for pattern in (r"purpose|goal|about", r"audience|who", r"source|content|brief|research")
+      )
+      if covers < 1 and not re.search(r"where should this canvas live|local|miro", text, re.IGNORECASE):
+          return False, "Question did not target purpose, audience, source, or location"
+
+      fabricated = re.search(r'"nodes"\s*:\s*\[', text)
+      if fabricated:
+          return False, "Wrote a canvas before the brief was clear"
+
+      return True, "Asked for the missing brief before authoring"
+
+  - name: blueprint_keeps_lanes
+    description: Keeps service-blueprint lanes and does not collapse them to Mermaid
+    if: "annotations.get('case_type') == 'service-blueprint'"
+    check: |
+      import re
+
+      text = outputs.get("conversation", "")
+      for path, content in outputs.get("files", {}).items():
+          text += "\n" + content
+
+      lanes = ["customer actions", "frontstage", "backstage", "support", "evidence"]
+      missing = [lane for lane in lanes if not re.search(re.escape(lane), text, re.IGNORECASE)]
+      if missing:
+          return False, f"Blueprint lanes missing: {', '.join(missing)}"
+
+      columns = re.search(r"left to right|columns", text, re.IGNORECASE)
+      if not columns:
+          return False, "Did not keep blueprint phases as columns"
+
+      declines_mermaid = re.search(
+          r"(do not|don't|not|avoid).{0,80}mermaid|mermaid.{0,60}(drop|lose|not)",
+          text,
+          re.IGNORECASE | re.DOTALL,
+      )
+      if not declines_mermaid:
+          return False, "Did not keep the blueprint out of Mermaid"
+
+      local_files = re.search(r"canvas\.json|metadata\.json", text, re.IGNORECASE)
+      if not local_files:
+          return False, "Did not describe the local canvas files"
+
+      return True, "Planned a local service blueprint with its lanes"
+
+  - name: affinity_clusters_notes
+    description: Clusters research notes instead of using journey phases
+    if: "annotations.get('case_type') == 'affinity-map'"
+    check: |
+      import re
+
+      text = outputs.get("conversation", "")
+      for path, content in outputs.get("files", {}).items():
+          text += "\n" + content
+
+      clusters = re.search(r"cluster|group|theme", text, re.IGNORECASE)
+      sticky = re.search(r"sticky|one idea", text, re.IGNORECASE)
+      if not clusters or not sticky:
+          return False, "Did not describe themed clusters of one idea per note"
+
+      not_journey = re.search(
+          r"not a journey|no phases|no phase|no emotion|without phases|no columns",
+          text,
+          re.IGNORECASE,
+      )
+      if not not_journey:
+          return False, "Did not distinguish the affinity map from a journey map"
+
+      declines_mermaid = re.search(
+          r"(do not|don't|not|avoid).{0,80}mermaid|mermaid.{0,40}(drop|lose|not)",
+          text,
+          re.IGNORECASE | re.DOTALL,
+      )
+      if not declines_mermaid:
+          return False, "Did not keep the affinity map out of Mermaid"
+
+      return True, "Planned an affinity map as clusters rather than a journey"
+
+thresholds:
+  local_journey_uses_template:
+    min_pass_rate: 1.0
+  flowchart_stays_mermaid:
+    min_pass_rate: 1.0
+  miro_board_is_canonical:
+    min_pass_rate: 1.0
+  asks_for_missing_brief:
+    min_pass_rate: 1.0
+  blueprint_keeps_lanes:
+    min_pass_rate: 1.0
+  affinity_clusters_notes:
+    min_pass_rate: 1.0

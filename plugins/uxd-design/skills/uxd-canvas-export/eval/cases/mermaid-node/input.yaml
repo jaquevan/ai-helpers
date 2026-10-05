@@ -1,0 +1,6 @@
+prompt: >-
+  Using the uxd-canvas-export skill, export a local canvas that already has
+  a text node with subtype "mermaid" containing a checkout flowchart. Use
+  --mermaid. Do not run the command or deploy. Say what the HTML viewer shows
+  for that node, whether it loads a Mermaid library, and whether diagram.mmd
+  is written.

@@ -1,0 +1,110 @@
+{
+  "nodes": [
+    {
+      "id": "start",
+      "type": "text",
+      "x": 40,
+      "y": 160,
+      "width": 200,
+      "height": 80,
+      "text": "**Start**\nWhere the task begins."
+    },
+    {
+      "id": "step",
+      "type": "text",
+      "x": 320,
+      "y": 150,
+      "width": 240,
+      "height": 100,
+      "text": "**Step**\nOne action toward the goal."
+    },
+    {
+      "id": "decision",
+      "type": "text",
+      "x": 640,
+      "y": 140,
+      "width": 240,
+      "height": 120,
+      "text": "**Decision**\nOne question with more than one answer."
+    },
+    {
+      "id": "yes-path",
+      "type": "text",
+      "x": 960,
+      "y": 40,
+      "width": 240,
+      "height": 100,
+      "text": "**Yes**\nWhat happens on this branch."
+    },
+    {
+      "id": "no-path",
+      "type": "text",
+      "x": 960,
+      "y": 240,
+      "width": 240,
+      "height": 100,
+      "text": "**No**\nWhat happens on this branch."
+    },
+    {
+      "id": "end",
+      "type": "text",
+      "x": 1280,
+      "y": 150,
+      "width": 200,
+      "height": 100,
+      "text": "**End**\nThe outcome of the task."
+    }
+  ],
+  "edges": [
+    {
+      "id": "edge-start-step",
+      "fromNode": "start",
+      "toNode": "step",
+      "fromSide": "right",
+      "toSide": "left",
+      "toEnd": "arrow"
+    },
+    {
+      "id": "edge-step-decision",
+      "fromNode": "step",
+      "toNode": "decision",
+      "fromSide": "right",
+      "toSide": "left",
+      "toEnd": "arrow"
+    },
+    {
+      "id": "edge-decision-yes",
+      "fromNode": "decision",
+      "fromSide": "top",
+      "toNode": "yes-path",
+      "toSide": "left",
+      "toEnd": "arrow",
+      "label": "Yes"
+    },
+    {
+      "id": "edge-decision-no",
+      "fromNode": "decision",
+      "fromSide": "bottom",
+      "toNode": "no-path",
+      "toSide": "left",
+      "toEnd": "arrow",
+      "label": "No"
+    },
+    {
+      "id": "edge-yes-end",
+      "fromNode": "yes-path",
+      "fromSide": "right",
+      "toNode": "end",
+      "toSide": "top",
+      "toEnd": "arrow"
+    },
+    {
+      "id": "edge-no-end",
+      "fromNode": "no-path",
+      "fromSide": "right",
+      "toNode": "end",
+      "toSide": "bottom",
+      "toEnd": "arrow"
+    }
+  ]
+}

@@ -1,0 +1,338 @@
+{
+  "nodes": [
+    {
+      "id": "actor",
+      "type": "text",
+      "x": 260,
+      "y": 40,
+      "width": 280,
+      "height": 120,
+      "text": "**Actor**\nOne persona. One point of view."
+    },
+    {
+      "id": "scenario",
+      "type": "text",
+      "x": 580,
+      "y": 40,
+      "width": 600,
+      "height": 120,
+      "text": "**Scenario**\nCurrent-state or future-state. The situation this map covers."
+    },
+    {
+      "id": "expectations",
+      "type": "text",
+      "x": 1220,
+      "y": 40,
+      "width": 280,
+      "height": 120,
+      "text": "**Expectations**\nWhat the actor expects to happen."
+    },
+    {
+      "id": "lane-actions",
+      "type": "text",
+      "x": 40,
+      "y": 248,
+      "width": 180,
+      "height": 140,
+      "text": "**Actions**"
+    },
+    {
+      "id": "lane-mindsets",
+      "type": "text",
+      "x": 40,
+      "y": 428,
+      "width": 180,
+      "height": 140,
+      "text": "**Mindsets**",
+      "color": "6"
+    },
+    {
+      "id": "lane-emotions",
+      "type": "text",
+      "x": 40,
+      "y": 608,
+      "width": 180,
+      "height": 100,
+      "text": "**Emotions**",
+      "color": "2"
+    },
+    {
+      "id": "lane-pain",
+      "type": "text",
+      "x": 40,
+      "y": 748,
+      "width": 180,
+      "height": 140,
+      "text": "**Pain points**",
+      "color": "1"
+    },
+    {
+      "id": "lane-opportunities",
+      "type": "text",
+      "x": 40,
+      "y": 928,
+      "width": 180,
+      "height": 160,
+      "text": "**Opportunities**",
+      "color": "4"
+    },
+    {
+      "id": "phase-discover",
+      "type": "group",
+      "x": 260,
+      "y": 200,
+      "width": 280,
+      "height": 924,
+      "label": "Discover"
+    },
+    {
+      "id": "phase-discover-actions",
+      "type": "text",
+      "x": 280,
+      "y": 248,
+      "width": 240,
+      "height": 140,
+      "text": "What the actor does in this phase."
+    },
+    {
+      "id": "phase-discover-mindsets",
+      "type": "text",
+      "x": 280,
+      "y": 428,
+      "width": 240,
+      "height": 140,
+      "text": "Thoughts, questions, or motivations.",
+      "color": "6"
+    },
+    {
+      "id": "phase-discover-emotions",
+      "type": "text",
+      "x": 280,
+      "y": 608,
+      "width": 240,
+      "height": 100,
+      "text": "High or low, in a few words.",
+      "color": "2"
+    },
+    {
+      "id": "phase-discover-pain",
+      "type": "text",
+      "x": 280,
+      "y": 748,
+      "width": 240,
+      "height": 140,
+      "text": "Where this phase breaks down.",
+      "color": "1"
+    },
+    {
+      "id": "phase-discover-opportunities",
+      "type": "text",
+      "x": 280,
+      "y": 928,
+      "width": 240,
+      "height": 160,
+      "text": "What should change after this phase.",
+      "color": "4"
+    },
+    {
+      "id": "phase-evaluate",
+      "type": "group",
+      "x": 580,
+      "y": 200,
+      "width": 280,
+      "height": 924,
+      "label": "Evaluate"
+    },
+    {
+      "id": "phase-evaluate-actions",
+      "type": "text",
+      "x": 600,
+      "y": 248,
+      "width": 240,
+      "height": 140,
+      "text": "What the actor does in this phase."
+    },
+    {
+      "id": "phase-evaluate-mindsets",
+      "type": "text",
+      "x": 600,
+      "y": 428,
+      "width": 240,
+      "height": 140,
+      "text": "Thoughts, questions, or motivations.",
+      "color": "6"
+    },
+    {
+      "id": "phase-evaluate-emotions",
+      "type": "text",
+      "x": 600,
+      "y": 608,
+      "width": 240,
+      "height": 100,
+      "text": "High or low, in a few words.",
+      "color": "2"
+    },
+    {
+      "id": "phase-evaluate-pain",
+      "type": "text",
+      "x": 600,
+      "y": 748,
+      "width": 240,
+      "height": 140,
+      "text": "Where this phase breaks down.",
+      "color": "1"
+    },
+    {
+      "id": "phase-evaluate-opportunities",
+      "type": "text",
+      "x": 600,
+      "y": 928,
+      "width": 240,
+      "height": 160,
+      "text": "What should change after this phase.",
+      "color": "4"
+    },
+    {
+      "id": "phase-use",
+      "type": "group",
+      "x": 900,
+      "y": 200,
+      "width": 280,
+      "height": 924,
+      "label": "Use"
+    },
+    {
+      "id": "phase-use-actions",
+      "type": "text",
+      "x": 920,
+      "y": 248,
+      "width": 240,
+      "height": 140,
+      "text": "What the actor does in this phase."
+    },
+    {
+      "id": "phase-use-mindsets",
+      "type": "text",
+      "x": 920,
+      "y": 428,
+      "width": 240,
+      "height": 140,
+      "text": "Thoughts, questions, or motivations.",
+      "color": "6"
+    },
+    {
+      "id": "phase-use-emotions",
+      "type": "text",
+      "x": 920,
+      "y": 608,
+      "width": 240,
+      "height": 100,
+      "text": "High or low, in a few words.",
+      "color": "2"
+    },
+    {
+      "id": "phase-use-pain",
+      "type": "text",
+      "x": 920,
+      "y": 748,
+      "width": 240,
+      "height": 140,
+      "text": "Where this phase breaks down.",
+      "color": "1"
+    },
+    {
+      "id": "phase-use-opportunities",
+      "type": "text",
+      "x": 920,
+      "y": 928,
+      "width": 240,
+      "height": 160,
+      "text": "What should change after this phase.",
+      "color": "4"
+    },
+    {
+      "id": "phase-support",
+      "type": "group",
+      "x": 1220,
+      "y": 200,
+      "width": 280,
+      "height": 924,
+      "label": "Support"
+    },
+    {
+      "id": "phase-support-actions",
+      "type": "text",
+      "x": 1240,
+      "y": 248,
+      "width": 240,
+      "height": 140,
+      "text": "What the actor does in this phase."
+    },
+    {
+      "id": "phase-support-mindsets",
+      "type": "text",
+      "x": 1240,
+      "y": 428,
+      "width": 240,
+      "height": 140,
+      "text": "Thoughts, questions, or motivations.",
+      "color": "6"
+    },
+    {
+      "id": "phase-support-emotions",
+      "type": "text",
+      "x": 1240,
+      "y": 608,
+      "width": 240,
+      "height": 100,
+      "text": "High or low, in a few words.",
+      "color": "2"
+    },
+    {
+      "id": "phase-support-pain",
+      "type": "text",
+      "x": 1240,
+      "y": 748,
+      "width": 240,
+      "height": 140,
+      "text": "Where this phase breaks down.",
+      "color": "1"
+    },
+    {
+      "id": "phase-support-opportunities",
+      "type": "text",
+      "x": 1240,
+      "y": 928,
+      "width": 240,
+      "height": 160,
+      "text": "What should change after this phase.",
+      "color": "4"
+    }
+  ],
+  "edges": [
+    {
+      "id": "edge-discover-evaluate",
+      "fromNode": "phase-discover-actions",
+      "toNode": "phase-evaluate-actions",
+      "fromSide": "right",
+      "toSide": "left",
+      "toEnd": "arrow"
+    },
+    {
+      "id": "edge-evaluate-use",
+      "fromNode": "phase-evaluate-actions",
+      "toNode": "phase-use-actions",
+      "fromSide": "right",
+      "toSide": "left",
+      "toEnd": "arrow"
+    },
+    {
+      "id": "edge-use-support",
+      "fromNode": "phase-use-actions",
+      "toNode": "phase-support-actions",
+      "fromSide": "right",
+      "toSide": "left",
+      "toEnd": "arrow"
+    }
+  ]
+}

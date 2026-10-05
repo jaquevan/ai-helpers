@@ -1,0 +1,100 @@
+{
+  "nodes": [
+    {
+      "id": "cluster-a",
+      "type": "group",
+      "x": 40,
+      "y": 40,
+      "width": 680,
+      "height": 460,
+      "label": "Theme"
+    },
+    {
+      "id": "note-a1",
+      "type": "text",
+      "subtype": "sticky",
+      "x": 80,
+      "y": 100,
+      "width": 200,
+      "height": 160,
+      "color": "3",
+      "text": "One idea from the research."
+    },
+    {
+      "id": "note-a2",
+      "type": "text",
+      "subtype": "sticky",
+      "x": 320,
+      "y": 100,
+      "width": 200,
+      "height": 160,
+      "color": "3",
+      "text": "A second idea in the same theme."
+    },
+    {
+      "id": "note-a3",
+      "type": "text",
+      "subtype": "sticky",
+      "x": 80,
+      "y": 300,
+      "width": 200,
+      "height": 160,
+      "color": "3",
+      "text": "A third idea in the same theme."
+    },
+    {
+      "id": "cluster-b",
+      "type": "group",
+      "x": 780,
+      "y": 40,
+      "width": 680,
+      "height": 460,
+      "label": "Another theme"
+    },
+    {
+      "id": "note-b1",
+      "type": "text",
+      "subtype": "sticky",
+      "x": 820,
+      "y": 100,
+      "width": 200,
+      "height": 160,
+      "color": "3",
+      "text": "One idea from the research."
+    },
+    {
+      "id": "note-b2",
+      "type": "text",
+      "subtype": "sticky",
+      "x": 1060,
+      "y": 100,
+      "width": 200,
+      "height": 160,
+      "color": "3",
+      "text": "A second idea in the same theme."
+    },
+    {
+      "id": "note-b3",
+      "type": "text",
+      "subtype": "sticky",
+      "x": 820,
+      "y": 300,
+      "width": 200,
+      "height": 160,
+      "color": "3",
+      "text": "A third idea in the same theme."
+    },
+    {
+      "id": "unsorted",
+      "type": "text",
+      "subtype": "sticky",
+      "x": 40,
+      "y": 560,
+      "width": 200,
+      "height": 160,
+      "color": "3",
+      "text": "A note that does not fit a theme yet."
+    }
+  ],
+  "edges": []
+}
