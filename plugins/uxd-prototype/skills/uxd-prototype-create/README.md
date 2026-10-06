@@ -1,56 +1,58 @@
 # uxd-prototype-create
 
-Create or refine a UX prototype from a Jira ticket, Figma design, feature description, or idea—standalone or in an existing codebase.
+Create or refine a runnable prototype from a Jira issue, Figma design, feature description, or idea. Build standalone HTML or work in an existing codebase, with journeys and scenarios for later evaluation.
 
-**Contract (inputs, outputs, flags, steps):** [SKILL.md](SKILL.md)
+## Codex quick start
 
-## Prerequisites
+Enable the available UXD prototype plugin in Codex, then open the project where you want to save the prototype. See [Codex setup](../../../../docs/codex-setup.md) if the skill is missing.
 
-| Requirement | When it is needed |
-|-------------|-------------------|
-| Node.js ≥ 18 and npm | Running a Node-based prototype dev server |
-| Python 3 | Bundled metadata and workspace scripts |
-| Git | Building in an existing workspace or using a git source/target |
-| Atlassian MCP | Live Jira lookup; otherwise provide the ticket details or configure the documented Jira REST fallback |
-
-Standalone HTML generation does not require build tools. A workspace may have its own additional requirements.
-
-## Quick start
+Select `$uxd-prototype-create` and describe what you need:
 
 ```text
-/uxd-prototype:uxd-prototype-create Prototype PROJ-298
-/uxd-prototype:uxd-prototype-create Create a prototype from this Figma design: https://figma.com/design/...
-/uxd-prototype:uxd-prototype-create Build on the existing project at /path/to/project
+$uxd-prototype-create Prototype PROJ-298 --workspace standalone
+$uxd-prototype-create Build from this Figma design: https://figma.com/design/...
+$uxd-prototype-create Prototype PROJ-298 --workspace /path/to/project --decisions human
 ```
 
-`--workspace` is the codebase to build in; `--target` only controls where a later MR/PR lands.
+The skill asks about the source, workspace, and design decisions, then presents a Prototype Plan for confirmation. While it builds, watch the local preview and Codex activity; steer it early if a page or component needs to follow PatternFly guidance.
 
-> **What to expect:** Before creating or changing files, the skill asks about the source, whether to use an existing workspace or standalone HTML, and how to handle design decisions. It asks a fourth question about decision depth only when relevant, then shows a Prototype Plan for confirmation.
+## Common options
 
-## Setup
+| Option | What it controls |
+|--------|------------------|
+| `--workspace <path-or-git-url-or-standalone>` | Codebase to build in; defaults to `standalone`. |
+| `--workspace-branch <branch>` | Branch to clone for the workspace. |
+| `--decisions skip\|auto\|human` | Skip a decision kit, let the agent recommend choices, or choose them yourself; defaults to `skip`. |
+| `--depth under\|normal\|over` | Number of decisions when using `auto` or `human`; defaults to `normal`. |
+| `--target <destination>` | Where a later PR/MR or deployment goes; does not select the build workspace. |
+| `--pipeline` | Continue through evaluation, refinement, and publishing. |
+| `--export` | Export journey steps; supply the running prototype with `--url <URL>`. |
+| `--no-prototype-bar` | Omit the Prototype Bar, which is installed by default. |
+| `--dry-run` | Skip Git and external writes; local artifacts are still written. |
 
-For an existing Node-based workspace, install that project's dependencies and start its documented dev server:
+[Usage and full options](SKILL.md#flags)
 
-```bash
-cd /path/to/workspace
-npm install
-npm run dev
-```
+## Requirements and setup
 
-Use the workspace's documented start command if it is not `npm run dev`. The standalone HTML path does not need `npm install`. For live Jira lookup, configure an authenticated Atlassian MCP in your assistant; the REST fallback requires `JIRA_SERVER`, `JIRA_USER`, and `JIRA_TOKEN`.
+| Requirement | When needed |
+|-------------|-------------|
+| Git | Building in an existing workspace or using a Git source/target. |
+| Node.js ≥ 18 and npm | Running a Node-based prototype's dev server. |
+| Python 3 | Bundled metadata and workspace helpers. |
+| Authenticated Atlassian or Figma connection | Reading live Jira issues or Figma designs. You can provide requirements and screenshots instead. |
 
-For create → evaluate → refine → publish orchestration, follow [pipeline mode](references/pipeline-mode.md) in your assistant.
+Standalone HTML generation needs no Node build tools. For an existing workspace, ask Codex to install its dependencies and start its documented dev server. Live Jira lookup needs an authenticated connection; the [Jira REST fallback](SKILL.md#step-1-fetch-rfe-source) is optional.
 
-## Scripts
+## Expected output
 
-| Script | Purpose |
-|--------|---------|
-| `scripts/resolve_workspace.py` | Prepare a workspace clone and resolve branch/upstream details |
-| `scripts/fetch_jira.py` | Optional Jira REST fallback when MCP is unavailable |
-| `scripts/frontmatter.py` | Read and update prototype artifact metadata |
+The prototype and supporting files are saved under `.artifacts/{ID}/` in your project. Standalone HTML goes in `prototype/`; workspace code goes in `code/`. The skill also writes journeys, scenarios, source snapshots, and a summary. Design-decision pages and exports are included when requested.
 
-## Related
+Open the prototype and review the planned journeys and alternate states before evaluation. See [output formats](references/output-formats.md) for the artifact contract.
 
-- **uxd-prototype-evaluate** — validate acceptance criteria and run persona usability walkthroughs
-- **uxd-prototype-export** — capture pages or journey steps; install the Prototype Bar
-- **uxd-prototype-publish** — submit an MR or publish a sanitized prototype
+## Related guides
+
+- [Scenario planning](references/scenario-brainstorm.md) — define empty, error, and alternate states.
+- [Pipeline mode](references/pipeline-mode.md) — orchestrate create → evaluate → refine → publish.
+- [Prototype evaluation](../uxd-prototype-evaluate/README.md) — check acceptance criteria and usability.
+- [Prototype export](../uxd-prototype-export/README.md) — capture pages and journey steps.
+- [Prototype publishing](../uxd-prototype-publish/README.md) — share the finished prototype.

@@ -2,7 +2,7 @@
 
 Publish a completed prototype as a merge request, or deploy a sanitized copy to GitHub Pages, GitLab Pages, or Vercel.
 
-**Contract (inputs, outputs, flags, steps):** [SKILL.md](SKILL.md)
+[Usage and full options](SKILL.md#flags)
 
 ## Prerequisites
 
@@ -17,24 +17,26 @@ Publish a completed prototype as a merge request, or deploy a sanitized copy to 
 
 A prototype ID must have the artifacts required by `SKILL.md`. Publishing can be blocked when evaluation has AC failures; `--force` overrides that safeguard.
 
-## Quick start
+## Codex quick start
+
+Enable the available UXD prototype plugin and open your prototype project in Codex. See [Codex setup](../../../../docs/codex-setup.md) if the skill is missing.
 
 Open a merge request for a workspace prototype:
 
 ```text
-/uxd-prototype:uxd-prototype-publish PROJ-298 --target repo
+$uxd-prototype-publish PROJ-298 --target repo
 ```
 
 Publish a sanitized GitHub Pages site:
 
 ```text
-/uxd-prototype:uxd-prototype-publish PROJ-298 --target github --repo owner/repo
+$uxd-prototype-publish PROJ-298 --target github --repo owner/repo
 ```
 
 Deploy to Vercel:
 
 ```text
-/uxd-prototype:uxd-prototype-publish PROJ-298 --target vercel
+$uxd-prototype-publish PROJ-298 --target vercel
 ```
 
 ## Setup

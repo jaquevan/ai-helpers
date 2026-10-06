@@ -7,15 +7,21 @@
 [![Agents](https://img.shields.io/badge/agents-8-teal)](./PLUGINS.md)
 [![skillsaw grade](https://img.shields.io/endpoint?url=https%3A%2F%2Fraw.githubusercontent.com%2Frh-uxd%2Fai-helpers%2Fmain%2F.skillsaw-badge.json)](https://github.com/rh-uxd/ai-helpers/blob/main/.skillsaw-baseline.json)
 
-AI skills for PatternFly and UXD teams — component development, design, accessibility, and migration. Skills work in both **Claude Code** and **Cursor**; the `patternfly` meta-plugin is Claude Code-only.
+AI skills for PatternFly and UXD teams — component development, design, accessibility, and migration. Start with **Codex** for UX prototyping. Skills also work in **Claude Code** and **Cursor**; the `patternfly` meta-plugin is Claude Code-only.
+
+## Quick Start
+
+### Codex — start here for prototyping
+
+Sign into the Codex app through your organization's approved route, including SSO when offered. Enable the available UXD prototype plugin, check its app connections, then select `$uxd-prototype-create` to build a prototype.
+
+Start with the [Codex setup guide](docs/codex-setup.md) for plugin access and the manual installation fallback. For the workflow and individual skill guides, see [UXD prototyping](plugins/uxd-prototype/README.md).
+
+### Claude Code
 
 <p align="center">
   <img src="assets/install-plugins-terminal.gif" alt="Browsing and installing plugins interactively in Claude Code" width="600">
 </p>
-
-## Quick Start
-
-### Claude Code
 
 Add the marketplace and install the `patternfly` meta-plugin — it auto-installs all PatternFly sub-plugins in one step:
 
@@ -72,20 +78,6 @@ After installing, skills work the same way — slash commands in any project:
 
 > **Note:** Install `pf-mcp` separately for MCP server access. See the [FAQ](FAQ.md#how-do-i-test-a-skill-without-the-patternfly-mcp-server) for setup.
 
-### Codex
-
-Codex can load skills from `~/.agents/skills/` for your user or `.agents/skills/` in a project. ai-helpers marketplace installation is planned — see [UXDOPS-3080](https://issues.redhat.com/browse/UXDOPS-3080). Until then, copy the complete skill folders from the repository root:
-
-```bash
-mkdir -p ~/.agents/skills
-cp -R plugins/uxd-prototype/skills/uxd-prototype-create ~/.agents/skills/
-cp -R plugins/uxd-prototype/skills/uxd-prototype-evaluate ~/.agents/skills/
-cp -R plugins/uxd-prototype/skills/uxd-prototype-export ~/.agents/skills/
-cp -R plugins/uxd-prototype/skills/uxd-prototype-publish ~/.agents/skills/
-```
-
-In Codex CLI or the IDE extension, use `/skills` to find skills or `$uxd-prototype-create` to invoke the prototype workflow. Evaluation and browser export need Node.js 18+, Python 3, and Playwright Chromium; see the [evaluator setup](plugins/uxd-prototype/skills/uxd-prototype-evaluate/README.md#prerequisites) and [export setup](plugins/uxd-prototype/skills/uxd-prototype-export/README.md#setup). For the full install, Jira/Figma connections, and first-run walkthrough, see the [Codex setup guide](docs/codex-setup.md), the [official Codex skills guide](https://developers.openai.com/codex/skills/), and [Chai Bot MCP setup](#chai-bot-uxd-persona).
-
 ## Plugins
 
 <!-- BEGIN PLUGIN TABLE -->
@@ -118,8 +110,8 @@ Start with the skill that matches the artifact or decision in front of you:
 |---|---|---|
 | Frame a feature before design or development | `uxd-discovery` | A focused brief with the problem, users, decisions, constraints, and success measures. |
 | Explore a design, screenshot, or mockup | `uxd-evaluate-design-heuristics` | A structured critique of accessibility, hierarchy, content, and state coverage. |
-| Build an interactive concept | `uxd-prototype-create` | A runnable prototype with user journeys, scenarios, and reusable artifacts. |
-| Validate a prototype against a ticket | `uxd-prototype-evaluate` | Acceptance-criteria results and persona-based usability evidence. |
+| Build an interactive concept | [uxd-prototype-create](plugins/uxd-prototype/skills/uxd-prototype-create/README.md) | A runnable prototype with user journeys, scenarios, and reusable artifacts. |
+| Validate a prototype against a ticket | [uxd-prototype-evaluate](plugins/uxd-prototype/skills/uxd-prototype-evaluate/README.md) | Acceptance-criteria results and persona-based usability evidence. |
 | Prepare a design for implementation | `uxd-design-handoff` | Components, interaction states, decisions, and testable acceptance criteria. |
 | Review PatternFly code before merging | `pf-review` | A consolidated check for PatternFly structure, imports, tokens, migration, and security issues. |
 | Check accessibility in a PatternFly interface | `pf-a11y-audit` | WCAG and ARIA findings with evidence and remediation guidance. |
@@ -128,9 +120,9 @@ Use the [skill discovery matrix](PLUGINS.md#skill-discovery-matrix) to compare a
 
 ## How It Works
 
-1. You add this repo as a **marketplace** in Claude Code or Cursor
-2. You install plugins — on Claude Code, `patternfly` auto-installs all PF sub-plugins; on Cursor, install them individually
-3. Skills become available as `/<plugin>:<skill>` slash commands in any project
+1. Enable the available plugins in Codex, or install this marketplace in Claude Code or Cursor.
+2. Verify the skills and required app connections are available; see [Codex setup](docs/codex-setup.md) for fallback installation.
+3. Invoke a skill in the assistant's picker. Codex supports `$skill-name`; Claude Code and Cursor use plugin-qualified slash commands.
 
 ## Repository Structure
 
@@ -159,23 +151,9 @@ Use the [skill discovery matrix](PLUGINS.md#skill-discovery-matrix) to compare a
 
 The [PatternFly MCP server](https://github.com/patternfly/patternfly-mcp) gives AI tools access to component documentation, prop schemas, and design guidelines. On Claude Code, `pf-mcp` is included automatically when you install `patternfly`. On Cursor, the MCP server requires [separate setup](FAQ.md#how-do-i-test-a-skill-without-the-patternfly-mcp-server).
 
-## Chai Bot (UXD Persona)
-
-Chai Bot is available as an MCP server for Claude Code, Codex, Cursor, and Claude Desktop. The **UXD persona** provides access to ai-helpers source code, PatternFly documentation, UXD Jira projects (UXDOPS, UXDSTRAT, UXDR), the UXD Confluence space, and team Slack discussions. This is separate from the PatternFly MCP server, which serves PatternFly component documentation and design-token information.
-
-Use Chai Bot when you need help with:
-
-- Choosing an ai-helpers skill for a task
-- PatternFly component usage and best practices
-- UXD team processes and workflows
-- Troubleshooting skill setup or flags
-
-**Setup:** In Slack, open Chai Bot's **Home** tab, select **🔑 MCP Server Tokens**, and choose the **UXD** persona. The dialog provides the MCP server URL and setup instructions for your editor. VPN is required.
-
 ## Cost Savings & Best Practices
 
-For model selection, focused context, acceptance criteria, and included versus
-metered tools, see [Cost Savings & Best Practices](docs/prototype-cost-best-practices.md).
+For model selection, focused context, acceptance criteria, and spend tracking, see [Cost Savings & Best Practices](docs/prototype-cost-best-practices.md).
 
 ## Contributing
 

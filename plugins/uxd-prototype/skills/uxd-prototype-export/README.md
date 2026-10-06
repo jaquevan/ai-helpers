@@ -2,7 +2,7 @@
 
 Export prototype pages as static HTML, a component tree, or a PatternFly implementation spec. Also installs the Prototype Bar.
 
-**Contract (inputs, outputs, flags, steps):** [SKILL.md](SKILL.md)
+[Usage and full options](SKILL.md#flags)
 
 ## Prerequisites
 
@@ -13,24 +13,26 @@ Export prototype pages as static HTML, a component tree, or a PatternFly impleme
 | A reachable prototype URL | Current-page capture and batch export |
 | `journeys.json` and `scenarios.json` | Batch export; typically produced by `uxd-prototype-create` |
 
-## Quick start
+## Codex quick start
+
+Enable the available UXD prototype plugin and open your prototype project in Codex. See [Codex setup](../../../../docs/codex-setup.md) if the skill is missing.
 
 Install the Prototype Bar in a prototype:
 
 ```text
-/uxd-prototype:uxd-prototype-export --install-bar --source /path/to/prototype --mode standalone
+$uxd-prototype-export --install-bar --source /path/to/prototype --mode standalone
 ```
 
 Capture the currently running page:
 
 ```text
-/uxd-prototype:uxd-prototype-export --base-url http://localhost:3000
+$uxd-prototype-export --base-url http://localhost:3000
 ```
 
 Batch-export journey steps and scenarios:
 
 ```text
-/uxd-prototype:uxd-prototype-export --base-url http://localhost:3000 --journeys .artifacts/PROJ-298/journeys.json --scenarios .artifacts/PROJ-298/scenarios.json --formats html,pf-spec
+$uxd-prototype-export --base-url http://localhost:3000 --journeys .artifacts/PROJ-298/journeys.json --scenarios .artifacts/PROJ-298/scenarios.json --formats html,pf-spec
 ```
 
 ## Setup

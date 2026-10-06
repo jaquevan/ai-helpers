@@ -4,7 +4,9 @@ Use clear criteria, focused context, small iterations, and the most cost-effecti
 approved tool/model for the task. Optimize the **total cost of finishing the
 work**, not just the price of one model call.
 
-This guide reflects RHAI UXD recommendations. Model availability, prices,
+Start in Codex for the prototyping workflow; see [Codex setup](codex-setup.md)
+for plugin access and connections. This guide reflects UXD recommendations.
+Model availability, prices,
 included-tool access, and usage controls can change; check your approved catalog
 and budget before a large run. Screenshots illustrate controls and example usage,
 not guaranteed workflow costs or recommended default settings.
@@ -74,7 +76,7 @@ cheaper individual request; effort, context size, retries, and iterations matter
 These are starting points, not requirements for every workflow. Model labels and
 effort controls vary by harness. If GPT-6 or GPT-6.1 models are missing from your
 approved catalog, try updating Codex or restarting the harness. For setup help,
-visit **RHAI UXD AI Office Hours** or ask in **`#forum-rhai-uxd-ai-enablement`**.
+ask your team's AI enablement contact.
 
 ### Reserve Astra for budgeted, very complex work
 
@@ -100,6 +102,10 @@ that goal; a large context window is capacity, not a target to fill.
 - Turn off MCP servers you do not need, and verify that required servers are
   authenticated before the run starts. Tool definitions and unnecessary calls
   can add context and work.
+- In Codex, check plugin/app connections before each session. An installed plugin
+  can still have an expired Jira/Atlassian connection. Verify a small lookup first.
+  If it fails, pause, reconnect or re-authenticate, and retry the lookup before
+  continuing the full workflow.
 
 ![MCP server settings showing authentication controls and enabled/disabled server switches](assets/prototype-costs/mcp-server-controls.png)
 
@@ -112,14 +118,6 @@ a concise handoff rather than dragging an unrelated conversation into the next t
 
 ### Watch context and usage indicators
 
-**OpenCode CLI:** when configured, the status area can show token counts,
-context-window percentage, and session cost. Check the fields your setup exposes
-as the run progresses; cost displays may be estimates rather than invoices.
-
-![OpenCode CLI status showing tokens, percentage of context used, and session spend](assets/prototype-costs/opencode-session-usage.png)
-
-*Example OpenCode usage display; these numbers are not a prototype-workflow cost estimate.*
-
 **Codex:** look for the usage indicator in the input area near the model selector.
 Hover over it to see more detail about tokens used and remaining context.
 
@@ -130,6 +128,20 @@ Hover over it to see more detail about tokens used and remaining context.
 ![Codex hover details showing context-window percentage used and used-versus-total tokens](assets/prototype-costs/codex-usage-details.png)
 
 *Hovering reveals context-window details; placement and available fields can vary by version.*
+
+Codex's context display does not establish billed spend. Check the approved team
+Slack spend-tracking bot or usage dashboard before a large run and after
+substantial work; follow your organization's current access and budget policy.
+
+#### Optional: OpenCode usage display
+
+**OpenCode CLI:** when configured, the status area can show token counts,
+context-window percentage, and session cost. Check the fields your setup exposes
+as the run progresses; cost displays may be estimates rather than invoices.
+
+![OpenCode CLI status showing tokens, percentage of context used, and session spend](assets/prototype-costs/opencode-session-usage.png)
+
+*Example OpenCode usage display; these numbers are not a prototype-workflow cost estimate.*
 
 ## Set scope and stopping conditions
 
@@ -151,6 +163,23 @@ or another agent without copying the full conversation.
 intended goal, repeats failed work without new evidence, or reaches the agreed
 stopping condition.
 
+## Watch the preview and steer live
+
+Keep the localhost preview beside Codex while it builds. Watch page updates,
+activity messages, tool results, and build logs. Interrupt or send a steering
+message as soon as the work diverges from the intended design; review the first
+working screen before expanding the scope.
+
+For example:
+
+```text
+Use PatternFly components and design tokens for this screen. Check the available
+PatternFly guidance before continuing, then update the preview for review.
+```
+
+A steering message can prevent a long correction loop after the build finishes.
+Use visible activity and output to assess progress.
+
 ## Use included tooling where it fits
 
 Use included AI tooling for suitable research, drafting, summarization, and
@@ -171,5 +200,4 @@ and model availability can change; follow the current approved access route.*
 
 ChatGPT-linked Codex access and API-key billing are different paths. Confirm what
 is included or metered for your sign-in method; see [Codex setup](codex-setup.md).
-For access and budget-policy questions, use the **AI Budget Help** Slack bot or
-**`#forum-rhai-uxd-ai-enablement`**.
+For access and budget-policy questions, consult your team's approved guidance.

@@ -1,23 +1,73 @@
-# Setting Up Codex with ai-helpers Skills
+# Set up Codex for UX prototyping
 
-Codex marketplace integration for ai-helpers is planned, but manual skill-folder installation is the path available today. See [UXDOPS-3080](https://issues.redhat.com/browse/UXDOPS-3080) for marketplace progress.
+Start in the Codex app using your organization's approved account and available plugins. Manual skill copying is a fallback for workspaces without the required plugins.
 
-## Prerequisites
+## 1. Sign in and enable plugins
 
-- Node.js ≥ 18 and Python 3 for the prototype workflow.
-- Playwright Chromium for prototype evaluation and browser-based export. Install it during setup in the evaluator/export skill folders below.
-- Approved AI access: request it through the **AI Budget Help** Slack bot before running model-backed workflows.
-- Budget context: up to **$300/month per associate**. This is the available monthly budget, not a target to spend.
+1. Install the app using the [official Codex quickstart](https://developers.openai.com/codex/quickstart/).
+2. Sign in through your organization's approved route, including SSO when offered, and select the intended workspace.
+3. Open the plugin directory and enable or install the UXD plugins available to you. For prototyping, look for **uxd-prototype**; **uxd-assist** helps find workflows and **uxd-design** provides related design tools.
+4. Review the included skills and complete any app-connection prompts. If the prototype skill is absent, ask your workspace administrator about availability or use the [manual fallback](#manual-installation-fallback).
 
-## 1. Install and authenticate Codex
+**Sign-in, plugin access, and updates are separate.** SSO authenticates your account. Workspace policy controls which plugins you can use. An administrator-managed GitHub marketplace can keep plugin packages synced, so users do not need to pull the repository manually. Connected apps still need their own authorization. Availability and controls vary by workspace and rollout; see [OpenAI's plugin guidance](https://help.openai.com/en/articles/20001256-plugins-in-codex).
 
-Install Codex using the [official Codex installation guide](https://developers.openai.com/codex/cli/), then sign in using the supported method for your organization.
+## 2. Check connections before a run
 
-**ChatGPT sign-in is not API-key billing.** ChatGPT account access and API-key authentication are separate billing paths; do not assume a ChatGPT sign-in authorizes API usage or that API usage is included in your ChatGPT plan. Follow your team's approved access and billing setup.
+Enable only the services the task needs:
 
-## 2. Install skills manually
+| Service | When needed |
+|---------|-------------|
+| Atlassian/Jira | Live issue lookup. If unavailable, provide the issue details and acceptance criteria yourself. |
+| Figma | Reading a design directly. Screenshots and supplied design requirements are an alternative. |
+| PatternFly MCP | Looking up component documentation, properties, and design guidance; see [PatternFly MCP setup](../FAQ.md#how-do-i-test-a-skill-without-the-patternfly-mcp-server). |
+| GitHub, GitLab, or Vercel | Publishing to the chosen destination; see [publish setup](../plugins/uxd-prototype/skills/uxd-prototype-publish/README.md#setup). |
 
-From the ai-helpers repository root, copy complete skill folders—not only `SKILL.md`—so scripts, references, configuration, and templates are available. Install globally for your user:
+Check required connections in the plugin/app settings before each session and after an authentication error. A plugin can remain installed while an app connection has expired. For Jira work, first ask Codex to retrieve the issue title and acceptance criteria; verify the result before starting a build or evaluation.
+
+If a lookup fails, pause the workflow, reconnect or re-authenticate the affected app, and retry the small lookup. Repeated authentication failures are a reason to fix the connection rather than retry the full workflow. Never paste access tokens into prompts or repository files.
+
+## 3. Run a prototype skill
+
+Open the project where you want to save the prototype. Select the skill from the picker, or type `$` and its name when supported:
+
+```text
+$uxd-prototype-create Prototype PROJ-298 --workspace standalone
+```
+
+The creator asks about your source, workspace, and design decisions, then presents a Prototype Plan for confirmation. `--workspace` selects the codebase to build in; `--target` selects a later publishing destination.
+
+| Next step | Skill-specific guide |
+|-----------|----------------------|
+| Create or refine a prototype | [Create README](../plugins/uxd-prototype/skills/uxd-prototype-create/README.md) |
+| Evaluate acceptance criteria and usability | [Evaluate README](../plugins/uxd-prototype/skills/uxd-prototype-evaluate/README.md) |
+| Capture pages or export journey steps | [Export README](../plugins/uxd-prototype/skills/uxd-prototype-export/README.md) |
+| Share a reviewed prototype | [Publish README](../plugins/uxd-prototype/skills/uxd-prototype-publish/README.md) |
+
+The skill READMEs list their requirements and options. Evaluation and browser export need dependencies and Playwright Chromium installed in the corresponding skill directory; plugin installation does not perform that setup for you.
+
+## 4. Watch and steer the work
+
+Keep the localhost preview beside Codex while the prototype is running. Watch the page updates, activity messages, tool results, and build logs as work progresses. Interrupt or send a steering message as soon as the implementation drifts from your requirements.
+
+For example:
+
+```text
+Use PatternFly components and design tokens for this screen. Check the available PatternFly guidance before continuing, then update the preview so I can review it.
+```
+
+For larger work, agree on a plan and checkpoints before execution. Review the first working page before expanding to the rest of the journey.
+
+## 5. Track context and spend
+
+Codex's context indicator helps you see how much conversation context is in use; it does not establish the billed cost of a workflow. Check the approved team Slack spend-tracking bot or usage dashboard before a large run and after substantial work. Follow your organization's access and budget policy.
+
+ChatGPT-linked access and API-key authentication have different billing paths. Some bundled scripts need separately approved API credentials; signing into Codex does not supply those credentials or authorize paid API execution.
+
+Keep each chat focused on one goal. Use specific acceptance criteria and bounded evaluator iterations, and stop repeated failed work early. See [Cost Savings & Best Practices](prototype-cost-best-practices.md) for examples and screenshots.
+
+## Manual installation fallback
+
+Use this only when the needed skills are unavailable through your workspace's plugins. From an updated ai-helpers checkout, copy complete skill folders so bundled scripts and references come with them:
 
 ```bash
 mkdir -p ~/.agents/skills
@@ -27,57 +77,6 @@ cp -R plugins/uxd-prototype/skills/uxd-prototype-export ~/.agents/skills/
 cp -R plugins/uxd-prototype/skills/uxd-prototype-publish ~/.agents/skills/
 ```
 
-For a project-local installation, replace `~/.agents/skills/` with `.agents/skills/`.
-See the [Codex skills guide](https://developers.openai.com/codex/skills/) for supported locations.
+For a project-local install, use `.agents/skills/` instead. See the [Codex skills guide](https://developers.openai.com/codex/skills/) for supported locations and invocation. Review local customizations before recopying; manually copied skills require manual updates. Avoid keeping a manual copy alongside an installed plugin that provides the same skill.
 
-Some optional skill configuration and reference files contain `YOUR_*` example values. Replace those only in your local copy when configuring the matching integration; do not commit credentials. The four core prototype `SKILL.md` files do not require replacing generic input examples such as `{ID}` or `<URL>`.
-
-Marketplace installation is planned, not available today; manual copying is the current route. Repeat the copy commands from an updated checkout to update the installed skill files, after reviewing any local customizations.
-
-## 3. Verify skills are available
-
-In Codex CLI or the IDE extension, use `/skills` to inspect available skills or type `$` to select one (for example, `$uxd-prototype-create`). In the ChatGPT desktop app, open **Skills** in the sidebar. Codex detects local skill changes automatically; restart if an update does not appear.
-
-Invocation differs by assistant: Claude Code and Cursor commonly use plugin-qualified slash commands such as `/uxd-prototype:uxd-prototype-create`; Codex CLI and the IDE extension use `/skills` or `$skill-name` instead.
-
-## 4. Connect required services
-
-- **Jira:** configure an authenticated Atlassian MCP for direct issue lookup. If MCP is unavailable, provide the ticket details yourself or configure the REST fallback with `JIRA_SERVER`, `JIRA_USER`, and `JIRA_TOKEN` in your local environment. Never put tokens in a prompt, skill file, or repository.
-- **Figma:** connect an approved Figma MCP when the workflow needs to inspect design files directly, or provide an accessible Figma URL and any required screenshots/assets.
-- **Publishing:** connect only the GitHub, GitLab, or Vercel account needed for your chosen destination. See [publish setup](../plugins/uxd-prototype/skills/uxd-prototype-publish/README.md#setup).
-
-Before a run, turn off MCP servers unrelated to the goal and verify that the
-required ones are authenticated. See the [MCP controls example](prototype-cost-best-practices.md#provide-targeted-context-and-tools).
-
-For Chai Bot's UXD persona MCP setup, see [Chai Bot (UXD Persona)](../README.md#chai-bot-uxd-persona). VPN is required.
-
-## 5. Run your first prototype
-
-Select `$uxd-prototype-create` and try:
-
-```text
-Create a prototype for Jira issue UXDOPS-1234. Start with a standalone HTML prototype.
-```
-
-The skill asks about the source, workspace choice, and design-decision handling before it builds. It asks a fourth question about decision depth only when relevant, then presents a plan for confirmation.
-
-- **Workspace** is the codebase to build in (or `standalone` for a self-contained prototype).
-- **Target** is only where a later merge/pull request will land; it is not the workspace to clone or build in.
-
-For live Jira lookup, connect Atlassian MCP first. Without it, provide the issue details in your prompt or configure the Jira REST fallback.
-
-## 6. Migrating from Cursor or Claude Code
-
-Use your existing migration prompt to inventory the current setup, then verify the result against this guide. Copying complete skill folders transfers skill instructions and bundled scripts, references, templates, and configuration. It does **not** transfer MCP connections, credentials, editor permissions, local settings, or other assistant-specific integrations; configure those separately in Codex. Review customized skill files before copying so local changes are not overwritten.
-
-## Cost savings and model choice
-
-- Review Jira acceptance criteria before evaluation; use clear, observable outcomes instead of broad goals or full meeting transcripts.
-- Use focused changes and optional `--max-iterations=1` / `--no-iterate` controls. Use `--no-report` when a full report is not needed; see the [evaluator flags](../plugins/uxd-prototype/skills/uxd-prototype-evaluate/SKILL.md#flags).
-- Choose the latest approved OpenAI model appropriate to the task. A more capable model can be cheaper overall when it finishes in fewer turns; effort and context size also affect cost.
-- If GPT-6/6.1 options are missing, update Codex or restart the harness. Ask **RHAI UXD AI Office Hours** or **`#forum-rhai-uxd-ai-enablement`** for help.
-- Watch the usage indicator near Codex's model selector; hover for context details. Keep one goal per chat and use plan checkpoints for broad work.
-- Follow the current team budget and access policy; ask the **AI Budget Help** Slack bot when unsure.
-
-See [Cost Savings & Best Practices](prototype-cost-best-practices.md) for the
-model/effort recommendations, screenshots, criteria examples, and tool comparison.
+Copying skills from Cursor or Claude Code transfers the skill files and bundled resources. Configure app connections, credentials, permissions, and assistant-specific settings separately in Codex.
