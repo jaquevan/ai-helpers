@@ -18,25 +18,25 @@ Active scenario on the page: `?scenario=<id>` (default when absent: `default`). 
 {
   "id": "PROJ-298",
   "title": "API Key Management",
-  "jiraBaseUrl": "https://issues.redhat.com/browse/",
+  "jiraBaseUrl": "https://issues.example.com/browse/",
   "sources": [
     {
       "kind": "outcome",
       "key": "OUT-12",
       "label": "Outcome",
-      "url": "https://issues.redhat.com/browse/OUT-12"
+      "url": "https://issues.example.com/browse/OUT-12"
     },
     {
       "kind": "rfe",
       "key": "PROJ-298",
       "label": "RFE",
-      "url": "https://issues.redhat.com/browse/PROJ-298"
+      "url": "https://issues.example.com/browse/PROJ-298"
     },
     {
       "kind": "rfe",
       "key": "PROJ-301",
       "label": "RFE",
-      "url": "https://issues.redhat.com/browse/PROJ-301"
+      "url": "https://issues.example.com/browse/PROJ-301"
     },
     {
       "kind": "figma",
