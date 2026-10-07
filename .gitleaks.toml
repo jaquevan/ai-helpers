@@ -3,4 +3,7 @@
 
   paths = [
     '''examples\/token-mappings\.json$''',
+    '''eval\/''',
+    '''metrics\/''',
+    '''.github\/workflows\/security-scan\.yml$''',
   ]

@@ -74,7 +74,7 @@ Written during Step 9. Tracks prototype state across creation and refinement. Us
       "kind": "rfe",
       "key": "PROJ-298",
       "label": "RFE",
-      "url": "https://issues.redhat.com/browse/PROJ-298"
+      "url": "https://issues.example.com/browse/PROJ-298"
     }
   ],
   "build_mode": "existing-codebase",
@@ -117,13 +117,13 @@ Or write it directly from `metadata.json` fields. Schema: see `uxd-prototype-exp
 {
   "id": "PROJ-298",
   "title": "API Key Management",
-  "jiraBaseUrl": "https://issues.redhat.com/browse/",
+  "jiraBaseUrl": "https://issues.example.com/browse/",
   "sources": [
     {
       "kind": "rfe",
       "key": "PROJ-298",
       "label": "RFE",
-      "url": "https://issues.redhat.com/browse/PROJ-298"
+      "url": "https://issues.example.com/browse/PROJ-298"
     }
   ],
   "views": {
