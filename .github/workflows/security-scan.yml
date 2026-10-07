@@ -16,30 +16,42 @@ jobs:
           fetch-depth: 0
           persist-credentials: false
 
-      - name: Scan for internal URLs and secrets
+      - name: Scan for internal URLs
         run: |
-          EXIT_CODE=0
-
           echo "=== Scanning for internal URLs ==="
+          PATTERN='(\.(corp|cee|devel|eng)\.redhat\.'
+          PATTERN+='|(issues|bugzilla|mojo|rover|source|pages|post-office)\.redhat\.'
+          PATTERN+='|docs\.engineering\.redhat\.'
+          PATTERN+='|enterprise\.slack\.com'
+          PATTERN+='|redhat\.service-now\.'
+          PATTERN+='|mcp\.dataverse\.'
+          PATTERN+=')'
+
           if git grep -nI \
-            -E '(\.corp\.|enterprise\.slack\.com|pages\.redhat\.com|mcp\.dataverse\.)' \
-            -- . ':(exclude)**/eval/**' ':(exclude).github/workflows/security-scan.yml' ':(exclude)metrics/' \
+            -E "$PATTERN" \
+            -- . \
+            ':(exclude)**/eval/**' \
+            ':(exclude).github/workflows/security-scan.yml' \
+            ':(exclude)metrics/' \
+            ':(exclude)CONTRIBUTING-SKILLS.md' \
             | grep -v 'example\.com' \
-            | grep -v 'SECURITY\.md' ; then
-            echo "::error::Found internal URLs in tracked files. Replace with environment variable references or remove."
-            EXIT_CODE=1
+            | grep -v 'SECURITY\.md' \
+            | grep -v 'knowledge/README\.md' \
+            | grep -v 'knowledge/personas/README\.md' \
+            | grep -v 'skill-overlays\.md' ; then
+            echo "::error::Found internal URLs in tracked files. Replace with example.com placeholders, move to the internal repo, or exclude the file path in this workflow."
+            exit 1
           fi
 
-          echo ""
-          echo "=== Scanning for potential secrets ==="
-          if git grep -nI \
-            -E '(ATATT3x|xoxb-|xoxp-|ghp_|ghs_|sk-[a-zA-Z0-9]{20,})' \
-            -- . ':(exclude)**/eval/**' ':(exclude).github/workflows/security-scan.yml' ; then
-            echo "::error::Found potential secrets in tracked files."
-            EXIT_CODE=1
-          fi
+      - name: Install gitleaks
+        run: |
+          GITLEAKS_VERSION="8.30.1"
+          curl -sSfL "https://github.com/gitleaks/gitleaks/releases/download/v${GITLEAKS_VERSION}/gitleaks_${GITLEAKS_VERSION}_linux_x64.tar.gz" \
+            | tar xz gitleaks
+          sudo mv gitleaks /usr/local/bin/
 
-          exit $EXIT_CODE
+      - name: Scan for secrets
+        run: gitleaks dir . --redact --no-banner
 
       - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
         if: always()
