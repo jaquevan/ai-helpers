@@ -5,9 +5,10 @@ approved tool/model for the task. Optimize the **total cost of finishing the
 work**, not just the price of one model call.
 
 Start in Codex for the prototyping workflow; see [Codex setup](codex-setup.md)
-for plugin access and connections. This guide reflects UXD recommendations.
-Model availability, prices,
-included-tool access, and usage controls can change; check your approved catalog
+for plugin access and connections. This guide accompanies the prototyping skills
+created by the **UX RHAI First team**.
+See the [working document](https://docs.google.com/document/d/14eVN5kyDNWaS1M8cR-p8DQ9BDQOn73fcq8PZvy_WQAo/edit?tab=t.0#heading=h.7bxejv31jp0w) for ongoing guidance.
+Model availability, prices, included-tool access, and usage controls can change; check your approved catalog
 and budget before a large run. Screenshots illustrate controls and example usage,
 not guaranteed workflow costs or recommended default settings.
 
@@ -76,7 +77,7 @@ cheaper individual request; effort, context size, retries, and iterations matter
 These are starting points, not requirements for every workflow. Model labels and
 effort controls vary by harness. If GPT-6 or GPT-6.1 models are missing from your
 approved catalog, try updating Codex or restarting the harness. For setup help,
-ask your team's AI enablement contact.
+ask for help in `#forum-rhai-uxd-ai-enablement` on Slack.
 
 ### Reserve Astra for budgeted, very complex work
 

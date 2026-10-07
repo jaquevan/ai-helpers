@@ -1,6 +1,6 @@
 # uxd-prototype-publish
 
-Publish a completed prototype as a merge request, or deploy a sanitized copy to GitHub Pages, GitLab Pages, or Vercel.
+Publish a completed prototype as a merge request, or deploy a sanitized copy to GitHub Pages or GitLab Pages.
 
 [Usage and full options](SKILL.md#flags)
 
@@ -13,7 +13,6 @@ Publish a completed prototype as a merge request, or deploy a sanitized copy to 
 | `glab` authenticated to GitLab plus Git push access | `--target repo` (merge request) |
 | `gh` authenticated to GitHub | `--target github` (GitHub Pages) |
 | Git push access and optionally `GITLAB_TOKEN` with `api` scope | GitLab Pages; token is needed when the script must create a project |
-| Node.js and npm, plus a Vercel account | `--target vercel`; the script installs the Vercel CLI if needed and prompts for login |
 
 A prototype ID must have the artifacts required by `SKILL.md`. Publishing can be blocked when evaluation has AC failures; `--force` overrides that safeguard.
 
@@ -33,12 +32,6 @@ Publish a sanitized GitHub Pages site:
 $uxd-prototype-publish PROJ-298 --target github --repo owner/repo
 ```
 
-Deploy to Vercel:
-
-```text
-$uxd-prototype-publish PROJ-298 --target vercel
-```
-
 ## Setup
 
 Authenticate only for the destination you plan to use:
@@ -48,7 +41,6 @@ Authenticate only for the destination you plan to use:
 | Merge request (`repo`) | Install `glab`, run `glab auth login`, and make sure Git can push to the workspace remote. |
 | GitHub Pages (`github`) | Install `gh`, run `gh auth login`, and confirm access to the target repository. |
 | GitLab Pages (`gitlab`) | Ensure Git can push to the project. Set `GITLAB_TOKEN` with `api` scope only if the publishing flow needs to create a project. For a self-hosted instance, provide its URL. |
-| Vercel (`vercel`) | The script installs the Vercel CLI through npm if missing; run `vercel login` when prompted. |
 
 Keep access tokens out of source files and chat transcripts. For a dry run that previews changes without external writes, add `--dry-run`.
 
@@ -59,7 +51,6 @@ Keep access tokens out of source files and chat transcripts. For a dry run that 
 | `scripts/submit_to_repo.py` | Submit a workspace prototype as a fork-aware GitLab merge request using `glab` |
 | `scripts/publish-github-pages.sh` | Sanitize and deploy a copy to GitHub Pages |
 | `scripts/publish-gitlab-pages.sh` | Sanitize and deploy a copy to GitLab Pages |
-| `scripts/publish-vercel.sh` | Sanitize and deploy a copy to Vercel |
 
 Frontmatter updates use `uxd-prototype-create/scripts/frontmatter.py`. The publish sanitizer's sensitive-file list is in `references/sensitive-files.md`.
 

@@ -4,7 +4,9 @@
 
 Create UX prototypes from Jira tickets, Figma designs, or feature descriptions.
 
-## Start in Codex
+The prototyping skills are created by the **UX RHAI First team**. See the [working document](https://docs.google.com/document/d/14eVN5kyDNWaS1M8cR-p8DQ9BDQOn73fcq8PZvy_WQAo/edit?tab=t.0#heading=h.7bxejv31jp0w) for ongoing guidance.
+
+## Codex
 
 Sign into the Codex app through your organization's approved route, including SSO when offered. Enable the available UXD prototype plugin and check its app connections before starting. A workspace-managed marketplace can keep plugins synced; manual copying is a fallback when the skills are unavailable.
 

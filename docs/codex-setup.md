@@ -2,12 +2,14 @@
 
 Start in the Codex app using your organization's approved account and available plugins. Manual skill copying is a fallback for workspaces without the required plugins.
 
+The prototyping skills are created by the **UX RHAI First team**. See the [working document](https://docs.google.com/document/d/14eVN5kyDNWaS1M8cR-p8DQ9BDQOn73fcq8PZvy_WQAo/edit?tab=t.0#heading=h.7bxejv31jp0w) for ongoing guidance.
+
 ## 1. Sign in and enable plugins
 
 1. Install the app using the [official Codex quickstart](https://developers.openai.com/codex/quickstart/).
 2. Sign in through your organization's approved route, including SSO when offered, and select the intended workspace.
 3. Open the plugin directory and enable or install the UXD plugins available to you. For prototyping, look for **uxd-prototype**; **uxd-assist** helps find workflows and **uxd-design** provides related design tools.
-4. Review the included skills and complete any app-connection prompts. If the prototype skill is absent, ask your workspace administrator about availability or use the [manual fallback](#manual-installation-fallback).
+4. Review the included skills and complete any app-connection prompts. If the prototype skill is absent, ask for help in `#forum-rhai-uxd-ai-enablement` on Slack. You can also use the [manual fallback](#manual-installation-fallback).
 
 **Sign-in, plugin access, and updates are separate.** SSO authenticates your account. Workspace policy controls which plugins you can use. An administrator-managed GitHub marketplace can keep plugin packages synced, so users do not need to pull the repository manually. Connected apps still need their own authorization. Availability and controls vary by workspace and rollout; see [OpenAI's plugin guidance](https://help.openai.com/en/articles/20001256-plugins-in-codex).
 
@@ -20,7 +22,7 @@ Enable only the services the task needs:
 | Atlassian/Jira | Live issue lookup. If unavailable, provide the issue details and acceptance criteria yourself. |
 | Figma | Reading a design directly. Screenshots and supplied design requirements are an alternative. |
 | PatternFly MCP | Looking up component documentation, properties, and design guidance; see [PatternFly MCP setup](../FAQ.md#how-do-i-test-a-skill-without-the-patternfly-mcp-server). |
-| GitHub, GitLab, or Vercel | Publishing to the chosen destination; see [publish setup](../plugins/uxd-prototype/skills/uxd-prototype-publish/README.md#setup). |
+| GitHub or GitLab | Publishing to the chosen destination; see [publish setup](../plugins/uxd-prototype/skills/uxd-prototype-publish/README.md#setup). |
 
 Check required connections in the plugin/app settings before each session and after an authentication error. A plugin can remain installed while an app connection has expired. For Jira work, first ask Codex to retrieve the issue title and acceptance criteria; verify the result before starting a build or evaluation.
 

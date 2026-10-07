@@ -11,11 +11,11 @@ AI skills for PatternFly and UXD teams — component development, design, access
 
 ## Quick Start
 
-### Codex — start here for prototyping
+### Codex
 
 Sign into the Codex app through your organization's approved route, including SSO when offered. Enable the available UXD prototype plugin, check its app connections, then select `$uxd-prototype-create` to build a prototype.
 
-Start with the [Codex setup guide](docs/codex-setup.md) for plugin access and the manual installation fallback. For the workflow and individual skill guides, see [UXD prototyping](plugins/uxd-prototype/README.md).
+Start with the [Codex setup guide](docs/codex-setup.md) for plugin access and the manual installation fallback. For the workflow and individual skill guides, see [UXD prototyping](plugins/uxd-prototype/README.md). These prototyping skills are created by the **UX RHAI First team**; see the [working document](https://docs.google.com/document/d/14eVN5kyDNWaS1M8cR-p8DQ9BDQOn73fcq8PZvy_WQAo/edit?tab=t.0#heading=h.7bxejv31jp0w) for ongoing guidance.
 
 ### Claude Code
 
