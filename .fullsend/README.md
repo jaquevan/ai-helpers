@@ -7,7 +7,8 @@ status handling outside that review role.
 ## What is configured
 
 - `config.yaml` enables the `review` role and selects the Pi runtime.
-- `harness/review.yaml` uses the pinned upstream Fullsend review harness.
+- `harness/review.yaml` uses the review harness tagged for the pinned Fullsend
+  release; the runtime and harness are updated together.
 - `skills/ai-helpers-review/` adds ai-helpers-specific contribution and
   architecture context without replacing the upstream review.
 - `lock.yaml` pins the harness dependencies used by the workflow.
@@ -29,15 +30,15 @@ cross-repository issue-creation targets.
 
 ## Maintainer notes
 
-- `.github/workflows/fullsend.yaml` is managed by Fullsend; do not edit it
-  directly.
+- `.github/workflows/fullsend.yaml` and `prioritize.yml` are managed by
+  Fullsend; do not edit them directly.
 - Keep the local review skill aligned with changes to contribution and
   governance documents.
-- `update-fullsend-review.yml` checks monthly and can be run manually to open a
-  maintenance PR when the upstream review harness changes. It updates the
-  pinned `base:` commit and hash, then regenerates `lock.yaml`.
-- Refresh the lockfile manually with
-  `fullsend lock --all --update --fullsend-dir .fullsend` after intentionally
-  changing the pinned upstream harness.
+- The Fullsend runtime, upstream review harness, and lockfile are pinned as a
+  compatible set. Upgrade them together only when intentionally adopting a
+  newer Fullsend release, using Fullsend's setup or scaffold-sync command.
+- Regenerate the lockfile with
+  `fullsend lock --all --update --fullsend-dir .fullsend` as part of that
+  deliberate upgrade.
 - Fullsend findings are advisory. Whether the review is a required merge check
   is controlled by repository branch protection.
