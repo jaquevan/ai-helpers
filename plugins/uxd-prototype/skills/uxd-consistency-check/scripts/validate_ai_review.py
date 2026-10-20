@@ -19,7 +19,9 @@ def _load_manifest(path: Path | None) -> dict[str, dict[str, Any]]:
         raise ValueError("guideline manifest must be a regular file")
     manifest = json.loads(Path(path).read_text(encoding="utf-8"))
     validate_manifest(manifest, manifest.get("design_system") if isinstance(manifest, dict) else None)
-    return {document["id"]: document for document in manifest["documents"]}
+    # Supplemental judgments share deterministic applicability, not its coverage.
+    return {document["id"]: document for document in manifest["documents"]
+            if document["design_system"] in {manifest["design_system"], "any"}}
 
 
 def _workspace_file(value: Any, root: Path, *, absolute: bool = False) -> Path:
@@ -121,7 +123,7 @@ def validate_review(raw: Any, *, mode: str, source_root: Path,
     seen = set()
     for finding in raw["findings"]:
         if not isinstance(finding.get("guideline_id"), str) or finding["guideline_id"] not in guidelines:
-            raise ValueError("unknown guideline_id")
+            raise ValueError("unknown guideline_id or guideline not applicable to the selected design system")
         item = {field: finding[field] for field in ("guideline_id", "rationale", "suggestion", "confidence")}
         if mode == "visual":
             screenshot = finding.get("screenshot")

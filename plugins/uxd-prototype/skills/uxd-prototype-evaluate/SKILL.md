@@ -111,7 +111,7 @@ cd "${UXD_PROJECT_ROOT}"
 
 Stop if Chromium install fails; do not start Playwright without it.
 
-Consistency uses the installed sibling `uxd-consistency-check` without cloning or network access. Missing product guidelines does not prevent internal checks; PatternFly remains the default design-system baseline. The optional usability context (`.context/usability-testing/`) is configured separately through `USABILITY_TESTING_REPO` or its overlay. Product overlay: [references/skill-overlays.md](references/skill-overlays.md).
+Consistency uses the installed sibling `uxd-consistency-check` without cloning or network access. Select guidance explicitly: `--design-system patternfly` opts into the bundled baseline; repeated `--guidelines [NAMESPACE=]PATH` selects local guidance for any system or product. Without selected sources, only internal comparisons run; no guideline compliance is implied. Stage requested remote guidance locally before analysis, following the sibling skill's provenance rules. The optional usability context (`.context/usability-testing/`) is configured separately through `USABILITY_TESTING_REPO` or its overlay. Product overlay: [references/skill-overlays.md](references/skill-overlays.md).
 
 **Personas:** `${CLAUDE_PLUGIN_ROOT}/knowledge/personas/catalog.yaml` + overlays. Deep YAML from `.context/usability-testing/`. Internal study URLs: `node ${CLAUDE_SKILL_DIR}/scripts/overlay-get.js --knowledge-persona <id>` when internal-ai-helpers is present.
 

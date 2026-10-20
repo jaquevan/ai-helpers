@@ -19,6 +19,12 @@ def digest(text):
     return hashlib.sha256(text.encode("utf-8")).hexdigest()
 
 
+def manifest_version(manifest):
+    """Fingerprint frozen content AND provenance; this is integrity, not a signature."""
+    payload = {key: value for key, value in manifest.items() if key != "version"}
+    return "sha256:" + digest(json.dumps(payload, sort_keys=True, separators=(",", ":"), ensure_ascii=False))
+
+
 def safe_source_url(value):
     if not value:
         return None
@@ -30,6 +36,8 @@ def safe_source_url(value):
 
 def metadata(text):
     """Read documented scalar frontmatter only; never interpret YAML tags/code."""
+    # Normalize only this parsing view, never the frozen document or its hash.
+    text = text.removeprefix("\ufeff").replace("\r\n", "\n")
     result = {}
     if text.startswith("---\n"):
         header, separator, _ = text[4:].partition("\n---\n")
@@ -39,48 +47,60 @@ def metadata(text):
             if not line.strip() or line.lstrip().startswith("#"):
                 continue
             key, separator, value = line.partition(":")
-            if not separator or not re.fullmatch(r"[a-z_]+", key.strip()):
+            # Never flatten nested YAML into executable top-level check fields.
+            if line != line.lstrip() or not separator or not re.fullmatch(r"[a-z_]+", key.strip()):
                 raise ValueError("guideline frontmatter supports scalar key: value entries only")
+            if key.strip() in result:
+                raise ValueError("duplicate guideline frontmatter key: " + key.strip())
             result[key.strip()] = value.strip().strip("\"'")
     return result
 
 
-def load_guidelines(workspace, provided=(), design_system="patternfly"):
+def load_guidelines(workspace, provided=(), design_system=None):
+    design_system = "custom" if design_system is None else design_system
     workspace = Path(workspace).expanduser().resolve()
     if not workspace.is_dir():
         raise ValueError("workspace must be an existing directory")
-    default = workspace / GUIDELINE_PATH
-    # Bundled baseline guidelines only ship for PatternFly; other design systems rely solely on workspace guidelines.
-    requested = [(SKILL / "guidelines", "baseline")] if design_system == "patternfly" else []
-    if default.is_dir():
-        requested.append((default, "workspace"))
-    requested.extend((value, "explicit") for value in provided)
+    # Sources are opt-in. Merely running in a product checkout selects no policy.
+    requested = [(str(SKILL / "guidelines"), "baseline", "patternfly")] if design_system == "patternfly" else []
+    for value in provided:
+        value = str(value)
+        if re.match(r"^[A-Za-z][A-Za-z0-9+.-]*://", value):
+            raise ValueError("analyzer is offline: stage remote guidelines locally")
+        namespace, separator, path = value.partition("=")
+        if not separator:
+            namespace, path = "local", value
+        if not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9._-]*", namespace) or not path:
+            raise ValueError("guidelines must be a local PATH or NAMESPACE=PATH")
+        requested.append((path, "explicit", namespace))
     documents = {}
     sources = []
-    for value, kind in requested:
+    for value, kind, namespace in requested:
         if re.match(r"^[A-Za-z][A-Za-z0-9+.-]*://", str(value)):
             raise ValueError("analyzer is offline: stage explicitly requested remote guidelines locally in the assistant layer")
         path = local_path(value, workspace)
         if not path.exists():
             raise ValueError(f"guideline source not found: {path}")
         paths = sorted(path.rglob("*.md")) if path.is_dir() else [path]
-        source = {"kind": kind, "location": str(path), "document_ids": []}
+        source = {"kind": kind, "namespace": namespace, "location": str(path), "document_ids": []}
         for document_path in paths:
             document_path = local_path(document_path, workspace)
             if not document_path.is_file():
                 raise ValueError("guideline source must be a regular file")
-            text = document_path.read_text(encoding="utf-8-sig")
+            text = document_path.read_bytes().decode("utf-8")
             info = metadata(text)
             if not text.strip() or (document_path.name.lower() == "readme.md" and not info.get("id")):
                 continue
-            identity = info.get("id", document_path.stem)
-            if not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9._-]*", identity):
-                raise ValueError(f"invalid guideline ID: {identity}")
+            original_id = info.get("id", document_path.stem)
+            if not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9._-]*", original_id):
+                raise ValueError(f"invalid guideline ID: {original_id}")
+            identity = namespace + ":" + original_id
             location = str(document_path)
             source_url = safe_source_url(info.get("source_url"))
             if info.get("severity", "warning") not in {"error", "warning"}:
                 raise ValueError("guideline severity must be error or warning")
-            document = {"id": identity, "title": info.get("title", identity),
+            document = {"id": identity, "original_id": original_id, "namespace": namespace,
+                        "title": info.get("title", original_id),
                         "category": info.get("category", "provided"),
                         "severity": info.get("severity", "warning"),
                         "check": info.get("check"), "text": text,
@@ -96,18 +116,19 @@ def load_guidelines(workspace, provided=(), design_system="patternfly"):
                 documents[identity]["sources"] = sorted(set(documents[identity]["sources"] + [location]))
             else:
                 documents[identity] = document
-            source["document_ids"].append(identity)
+            if identity not in source["document_ids"]:
+                source["document_ids"].append(identity)
         if kind == "explicit" and not source["document_ids"]:
             raise ValueError("explicit guideline source contains no usable Markdown")
         sources.append(source)
     values = sorted(documents.values(), key=lambda item: item["id"])
-    version = digest(json.dumps([(d["id"], d["sha256"]) for d in values]))
-    return {"schema_version": "1.0.0", "workspace": str(workspace),
-            "design_system": design_system, "version": "sha256:" + version,
-            "sources": sources, "documents": values}
+    manifest = {"schema_version": "1.1.0", "workspace": str(workspace),
+                "design_system": design_system, "sources": sources, "documents": values}
+    manifest["version"] = manifest_version(manifest)
+    return validate_manifest(manifest, design_system)
 
 
-def load_manifest(value, workspace, design_system):
+def load_manifest(value, workspace, design_system=None):
     path = local_path(value, workspace)
     if not path.is_file():
         raise ValueError("guideline manifest must be a regular file")
@@ -115,16 +136,20 @@ def load_manifest(value, workspace, design_system):
     return validate_manifest(manifest, design_system)
 
 
-def validate_manifest(manifest, design_system):
+def validate_manifest(manifest, design_system=None):
     """Validate frozen bytes and execution metadata without rereading originals."""
-    if not isinstance(manifest, dict) or manifest.get("schema_version") != "1.0.0":
+    if not isinstance(manifest, dict) or manifest.get("schema_version") not in {"1.0.0", "1.1.0"}:
         raise ValueError("unsupported guideline manifest schema")
+    namespaced = manifest["schema_version"] == "1.1.0"
+    if namespaced and manifest.get("version") != manifest_version(manifest):
+        raise ValueError("guideline manifest content/provenance hash mismatch")
     if not isinstance(manifest.get("design_system"), str) or not manifest["design_system"].strip():
         raise ValueError("guideline manifest design system must be a nonempty string")
     if not isinstance(manifest.get("workspace"), str) or not manifest["workspace"].strip():
         raise ValueError("guideline manifest workspace provenance must be a nonempty string")
-    if manifest.get("design_system") != design_system:
+    if design_system is not None and manifest.get("design_system") != design_system:
         raise ValueError("manifest design system does not match selected design system")
+    design_system = manifest["design_system"]
     documents = manifest.get("documents")
     if not isinstance(documents, list):
         raise ValueError("manifest documents must be an array")
@@ -132,21 +157,30 @@ def validate_manifest(manifest, design_system):
     for document in documents:
         if not isinstance(document, dict) or not isinstance(document.get("text"), str) or digest(document["text"]) != document.get("sha256"):
             raise ValueError("guideline document hash mismatch")
+        required = {"id", "title", "category", "version", "design_system", "severity", "check", "parameters", "sources", "kind", "source_url", "retrieved_at"}
+        if not required <= document.keys():
+            raise ValueError("missing guideline manifest metadata")
+        if namespaced and (not isinstance(document.get("namespace"), str) or not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9._-]*", document["namespace"])):
+            raise ValueError("invalid guideline namespace")
         for field in ("id", "title", "category", "version", "design_system"):
             if not isinstance(document.get(field), str) or not document[field].strip():
                 raise ValueError(f"guideline manifest metadata requires {field}")
-        if not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9._-]*", document["id"]):
+        identity_pattern = r"[A-Za-z0-9][A-Za-z0-9._-]*(?::[A-Za-z0-9][A-Za-z0-9._-]*)?" if namespaced else r"[A-Za-z0-9][A-Za-z0-9._-]*"
+        if not re.fullmatch(identity_pattern, document["id"]):
             raise ValueError("invalid guideline manifest metadata ID")
         info = metadata(document["text"])
         if not isinstance(document.get("sources"), list) or not document["sources"] or not all(isinstance(source, str) for source in document["sources"]):
             raise ValueError("invalid guideline manifest metadata sources")
+        original_id = info.get("id", Path(document["sources"][0]).stem)
         expected_metadata = {"severity": info.get("severity", "warning"), "check": info.get("check"),
-                             "id": info.get("id", Path(document["sources"][0]).stem),
-                             "title": info.get("title", document["id"]), "category": info.get("category", "provided"),
+                             "id": document.get("namespace", "") + ":" + original_id if namespaced else original_id,
+                             "title": info.get("title", original_id), "category": info.get("category", "provided"),
                              "source_url": safe_source_url(info.get("source_url")),
                              "parameters": {"required_class": info.get("required_class")},
                              "design_system": info.get("design_system", design_system),
                              "version": info.get("version", "unspecified"), "retrieved_at": info.get("retrieved_at")}
+        if namespaced:
+            expected_metadata["original_id"] = original_id
         if any(document.get(field) != value for field, value in expected_metadata.items()):
             raise ValueError("guideline manifest metadata differs from fingerprinted text")
 
@@ -155,7 +189,7 @@ def validate_manifest(manifest, design_system):
         ids.add(document.get("id"))
         if not isinstance(document.get("kind"), str) or document["kind"] not in {"baseline", "workspace", "explicit"} or document.get("severity") not in {"warning", "error"}:
             raise ValueError("invalid guideline manifest metadata")
-    expected = "sha256:" + digest(json.dumps(sorted((d["id"], d["sha256"]) for d in documents)))
+    expected = manifest_version(manifest) if namespaced else "sha256:" + digest(json.dumps(sorted((d["id"], d["sha256"]) for d in documents)))
     if manifest.get("version") != expected:
         raise ValueError("guideline manifest corpus hash mismatch")
     if not isinstance(manifest.get("sources"), list):
@@ -164,10 +198,15 @@ def validate_manifest(manifest, design_system):
     for source in manifest["sources"]:
         if not isinstance(source, dict) or not isinstance(source.get("kind"), str) or source["kind"] not in {"baseline", "workspace", "explicit"}:
             raise ValueError("invalid guideline source metadata")
+        if namespaced and (not isinstance(source.get("namespace"), str) or not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9._-]*", source["namespace"])):
+            raise ValueError("invalid guideline source namespace")
         if not isinstance(source.get("location"), str) or not isinstance(source.get("document_ids"), list):
             raise ValueError("invalid guideline source location or IDs")
         if not all(isinstance(identity, str) and identity in ids for identity in source["document_ids"]):
             raise ValueError("guideline source references unknown document IDs")
+        # Legacy producers repeated membership for identical files in one source.
+        if namespaced and len(source["document_ids"]) != len(set(source["document_ids"])):
+            raise ValueError("duplicate guideline source document IDs")
         location = Path(source["location"])
         if not location.is_absolute() or ".." in location.parts:
             raise ValueError("guideline source location must be an absolute provenance path")
@@ -181,7 +220,7 @@ def validate_manifest(manifest, design_system):
                     raise ValueError("guideline document location must be an absolute provenance path")
                 # Use frozen lexical locations, not this installation's baseline
                 # path or live filesystem: original sources may have moved.
-                if path == location or (path.suffix == ".md" and path.is_relative_to(location)):
+                if (not namespaced or document["namespace"] == source.get("namespace")) and (path == location or (path.suffix == ".md" and path.is_relative_to(location))):
                     members.add(document["id"])
                     attributed[document["id"]].add(value)
         if set(source["document_ids"]) != members:
@@ -198,8 +237,8 @@ def validate_manifest(manifest, design_system):
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--workspace", required=True)
-    parser.add_argument("--guidelines", action="append", default=[])
-    parser.add_argument("--design-system", default="patternfly")
+    parser.add_argument("--guidelines", action="append", default=[], help="Repeat local [NAMESPACE=]PATH (default namespace: local)")
+    parser.add_argument("--design-system", help="Optional system label; patternfly opts into its bundled baseline")
     parser.add_argument("--manifest", help="Reuse a frozen local manifest, without rereading sources")
     parser.add_argument("--output", help="Write snapshot inside workspace .artifacts")
     args = parser.parse_args()

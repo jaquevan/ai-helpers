@@ -24,31 +24,39 @@ def evaluate(documents, files, changed_lines=None):
     evaluated = []
     for document in documents:
         check = document.get("check")
-        # Unknown check types and empty file sets are silently skipped, not errored.
+        # Unsupported checks remain unevaluated; prose never authorizes execution.
         if check not in {"patternfly-component-usage", "no-custom-css", "css-token-usage", "required-html-class"} or not files:
             continue
-        if check == "required-html-class" and not any(Path(file).suffix in {".html", ".htm"} for file in files):
+        # A stylesheet cannot supply component evidence or a root HTML element.
+        suffixes = {"required-html-class": {".html", ".htm"},
+                    "patternfly-component-usage": {".html", ".htm", ".jsx", ".tsx", ".js", ".ts"}}.get(check)
+        targets = {file: text for file, text in files.items()
+                   if suffixes is None or Path(file).suffix.lower() in suffixes}
+        if not targets:
             continue
         # Mark as evaluated before the file loop: zero matches is still a pass, not a skip.
         evaluated.append(document["id"])
-        for file, text in files.items():
+        for file, text in targets.items():
             text = mask_comments(text)
+            suffix = Path(file).suffix.lower()
             matches = []
             if check == "patternfly-component-usage":
                 matches = [(match.start(), match.group()) for match in
                            re.finditer(r"<(?:button|input|select|textarea)\b[^>]*>", text)
                            if not re.search(r"pf-v\d+-", match.group())]
             elif check == "no-custom-css":
-                if Path(file).suffix in {".css", ".scss"}:
+                if suffix in {".css", ".scss"}:
                     matches.append((0, "Authored stylesheet: " + file))
                 else:
+                    # Legacy PatternFly asset exemptions are not generic policy.
                     matches = [(match.start(), match.group()) for match in re.finditer(
                         r"\bstyle\s*=|<style\b|<link\b[^>]*rel\s*=\s*[\"']stylesheet[\"'][^>]*>", text)
-                        if "patternfly" not in match.group() and "uxd-prototype-bar" not in match.group()]
+                        if document.get("design_system") != "patternfly" or
+                        ("patternfly" not in match.group() and "uxd-prototype-bar" not in match.group())]
             elif check == "css-token-usage":
                 matches = [(match.start(), match.group()) for match in re.finditer(
                     r"\b(?:color|background(?:-color|Color)?|border(?:-color|Color)?|fill|stroke)\s*:\s*['\"]?(?:#[0-9a-fA-F]{3,8}\b|(?:rgb|hsl)a?\([^)]*\))", text)]
-            elif check == "required-html-class" and Path(file).suffix in {".html", ".htm"}:
+            elif check == "required-html-class" and suffix in {".html", ".htm"}:
                 required = document.get("parameters", {}).get("required_class")
                 if not isinstance(required, str) or not re.fullmatch(r"[A-Za-z0-9_-]+", required):
                     raise ValueError("required-html-class needs a required_class scalar")
@@ -62,7 +70,7 @@ def evaluate(documents, files, changed_lines=None):
                 line = text.count("\n", 0, offset) + 1
                 end_line = line + value.count("\n")
                 # CSS/SCSS files flag the whole file when they appear in the diff at all (no per-line granularity).
-                whole_file = check == "no-custom-css" and Path(file).suffix in {".css", ".scss"}
+                whole_file = check == "no-custom-css" and suffix in {".css", ".scss"}
                 if changed_lines is not None and not (bool(changed_lines.get(file)) if whole_file else any(number in changed_lines.get(file, set()) for number in range(line, end_line + 1))):
                     continue
                 severity = "warning" if candidate else document["severity"]
@@ -72,7 +80,7 @@ def evaluate(documents, files, changed_lines=None):
                                  "confidence": "low" if candidate else "high", "review_candidate": candidate,
                                  "file": file, "line": None if whole_file else line,
                                  "property": document["id"], "value": value,
-                                 "description": "Source pattern requires review against the selected guideline." if candidate else "Authored styling conflicts with an explicit product policy.",
+                                 "description": "Source pattern requires review against the selected guideline." if candidate else "Source does not satisfy the selected guideline's explicit policy.",
                                  "suggestion": document["text"].split("## Rule", 1)[-1].strip(),
                                  "check_method": "automated_candidate" if candidate else "automated",
                                  "pf_doc_url": document.get("source_url")})
@@ -93,13 +101,13 @@ def guideline_coverage(documents, evaluated, sources):
 def main():
     parser = argparse.ArgumentParser(description=__doc__, allow_abbrev=False)
     parser.add_argument("--workspace", "--src", "--source-dir", dest="workspace", required=True)
-    parser.add_argument("--design-system", default="patternfly")
+    parser.add_argument("--design-system", help="Optional system label; patternfly opts into its bundled baseline")
     parser.add_argument("--design-system-version", default="unspecified")
     parser.add_argument("--json-output", action="store_true", help="Print JSON (also the default)")
     parser.add_argument("--json-file", help="Explicit workspace .artifacts JSON destination")
-    parser.add_argument("--guidelines", action="append", default=[], help="Additional local guideline file or directory")
+    parser.add_argument("--guidelines", action="append", default=[], help="Repeat local [NAMESPACE=]PATH (default namespace: local)")
     parser.add_argument("--guideline-manifest", help="Frozen offline source manifest")
-    parser.add_argument("--guideline", help="Check one exact rule ID")
+    parser.add_argument("--guideline", help="Check one exact namespace:original-id (raw ID for legacy replay)")
     parser.add_argument("--category", help="Check one category")
     parser.add_argument("--report-dir", help="Compatibility alias for a JSON-only .artifacts run directory")
     parser.add_argument("--verbose", "-v", action="store_true")
@@ -114,6 +122,7 @@ def main():
     if args.guideline_manifest and args.guidelines:
         parser.error("a frozen manifest cannot be combined with new guidelines")
     context = load_manifest(args.guideline_manifest, workspace, args.design_system) if args.guideline_manifest else load_guidelines(workspace, args.guidelines, args.design_system)
+    args.design_system = context["design_system"]
     documents = context["documents"]
     for key in ("guideline", "category"):
         selected = getattr(args, key)
