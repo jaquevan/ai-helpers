@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+# AI-generated script by GPT-6 Luna.
 """Ground local supplemental review JSON; never execute a model or merge reports."""
 from __future__ import annotations
 

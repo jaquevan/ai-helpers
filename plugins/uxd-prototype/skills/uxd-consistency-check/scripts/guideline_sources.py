@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+# AI-generated script by GPT-6 Luna.
 """Resolve local guideline snapshots. Remote retrieval belongs to the assistant."""
 import argparse
 import hashlib
@@ -49,6 +50,7 @@ def load_guidelines(workspace, provided=(), design_system="patternfly"):
     if not workspace.is_dir():
         raise ValueError("workspace must be an existing directory")
     default = workspace / GUIDELINE_PATH
+    # Bundled baseline guidelines only ship for PatternFly; other design systems rely solely on workspace guidelines.
     requested = [(SKILL / "guidelines", "baseline")] if design_system == "patternfly" else []
     if default.is_dir():
         requested.append((default, "workspace"))

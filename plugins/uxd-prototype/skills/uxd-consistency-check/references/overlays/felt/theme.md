@@ -11,10 +11,11 @@ version: 1
 
 ## Rule
 
-For projects explicitly adopting this example theme contract, the root HTML
-element must include the `felt-theme` class. Select `--design-system felt` and
-pass this file explicitly with `--guidelines`; it is not a global default or an
-automatically inferred product dependency.
+This is a product-specific example overlay — opt-in and not a general
+requirement. For projects explicitly adopting this example theme contract, the
+root HTML element must include the `felt-theme` class. Select `--design-system
+felt` and pass this file explicitly with `--guidelines`; it is not a global
+default or an automatically inferred product dependency.
 
 This uses the generic required-root-class check and scalar `required_class`
 parameter. It only checks static HTML root class presence, not whether a theme

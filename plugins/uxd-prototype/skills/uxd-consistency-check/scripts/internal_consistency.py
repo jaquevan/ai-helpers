@@ -1,3 +1,4 @@
+# AI-generated script by GPT-6 Luna.
 """Conservative same-label peer comparisons; never infer a normative rule."""
 from collections import defaultdict
 import re

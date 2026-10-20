@@ -16,5 +16,6 @@ stylesheets, inline styling, or style blocks. Review flagged evidence against
 the actual policy scope before changing source; deterministic matching is not
 a full CSS or JavaScript parser.
 
-This overlay is opt-in. PatternFly alone does not prohibit custom CSS; never
-apply this product policy merely because PatternFly is the selected baseline.
+This is a product-specific example overlay — opt-in and not a general
+requirement. PatternFly alone does not prohibit custom CSS; never apply this
+product policy merely because PatternFly is the selected baseline.

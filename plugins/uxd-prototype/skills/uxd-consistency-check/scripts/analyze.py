@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+# AI-generated script by GPT-6 Luna.
 """Offline, workspace-owned consistency reports. No model or network imports."""
 import argparse
 from datetime import datetime, timezone
@@ -23,10 +24,12 @@ def evaluate(documents, files, changed_lines=None):
     evaluated = []
     for document in documents:
         check = document.get("check")
+        # Unknown check types and empty file sets are silently skipped, not errored.
         if check not in {"patternfly-component-usage", "no-custom-css", "css-token-usage", "required-html-class"} or not files:
             continue
         if check == "required-html-class" and not any(Path(file).suffix in {".html", ".htm"} for file in files):
             continue
+        # Mark as evaluated before the file loop: zero matches is still a pass, not a skip.
         evaluated.append(document["id"])
         for file, text in files.items():
             text = mask_comments(text)
@@ -53,10 +56,12 @@ def evaluate(documents, files, changed_lines=None):
                 classes = re.search(r"\bclass\s*=\s*['\"]([^'\"]*)['\"]", root.group()) if root else None
                 if not classes or required not in classes.group(1).split():
                     matches = [(root.start() if root else 0, "Missing required root HTML class: " + required)]
+            # Regex matches can't confirm PatternFly compliance or token origin, only flag for human review.
             candidate = check in {"patternfly-component-usage", "css-token-usage"}
             for offset, value in matches:
                 line = text.count("\n", 0, offset) + 1
                 end_line = line + value.count("\n")
+                # CSS/SCSS files flag the whole file when they appear in the diff at all (no per-line granularity).
                 whole_file = check == "no-custom-css" and Path(file).suffix in {".css", ".scss"}
                 if changed_lines is not None and not (bool(changed_lines.get(file)) if whole_file else any(number in changed_lines.get(file, set()) for number in range(line, end_line + 1))):
                     continue
@@ -120,7 +125,9 @@ def main():
     if (args.tracked_only or args.merge_base) and not args.changed:
         parser.error("--tracked-only and --merge-base require --changed")
     files, changed_lines, inputs = read_sources(workspace, args.changed, args.base_ref, args.tracked_only, args.merge_base)
+    # In changed mode, skip files that had no lines in the diff (changed_lines maps to empty set for unchanged files).
     targets = files if changed_lines is None else {file: text for file, text in files.items() if changed_lines.get(file)}
+    # "any" is the wildcard design_system sentinel; guidelines with it apply to every design system.
     applicable_documents = [doc for doc in documents if doc.get("design_system") in {args.design_system, "any"}]
     findings, evaluated = evaluate(applicable_documents, targets, changed_lines)
     error_ids = {finding["guideline_id"] for finding in findings if finding["severity"] == "error"}

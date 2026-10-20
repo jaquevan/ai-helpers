@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+# AI-generated script by GPT-6 Luna.
 """Package workspace-local visual evidence; offline use requires only Python."""
 import argparse
 import hashlib

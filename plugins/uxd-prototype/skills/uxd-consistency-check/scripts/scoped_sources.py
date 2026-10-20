@@ -1,3 +1,4 @@
+# AI-generated script by GPT-6 Luna.
 """Read source snapshots and exact Git delta lines without modifying a checkout."""
 import hashlib
 import json

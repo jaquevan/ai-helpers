@@ -1,3 +1,4 @@
+# AI-generated script by GPT-6 Luna.
 """Local artifact safety and atomic JSON publication; no external side effects."""
 import json
 import os
@@ -8,6 +9,7 @@ import tempfile
 def local_path(value, root):
     path = Path(value).expanduser()
     path = path if path.is_absolute() else Path(root) / path
+    # Ancestors are checked too: a symlink higher in the tree can redirect the entire subtree outside the workspace.
     if ".." in path.parts or any(part.is_symlink() for part in [path, *path.parents]):
         raise ValueError("path traversal and symlinks are not allowed")
     return path.resolve()
@@ -30,6 +32,9 @@ def protect_inputs(destination, sources):
 def write_json(path, value):
     path = Path(path)
     path.parent.mkdir(parents=True, exist_ok=True)
+    # Write to a sibling temp file, fsync, then atomically replace the destination.
+    # The finally unlink is a no-op after a successful os.replace (file moved); it
+    # only removes the temp when the replace itself fails.
     with tempfile.NamedTemporaryFile(mode="w", encoding="utf-8", dir=path.parent, delete=False) as stream:
         temporary = Path(stream.name)
         try:

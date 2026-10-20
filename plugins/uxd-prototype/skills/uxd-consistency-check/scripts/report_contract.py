@@ -1,3 +1,4 @@
+# AI-generated script by GPT-6 Luna.
 """Stdlib producer invariants; full JSON Schemas live under schemas/v1."""
 
 
