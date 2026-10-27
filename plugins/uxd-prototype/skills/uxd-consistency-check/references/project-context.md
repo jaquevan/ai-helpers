@@ -20,13 +20,7 @@ python3 "${SKILL_DIR}/scripts/analyze.py" --workspace "${WORKSPACE}" \
   --design-system product-a --guidelines "product-a=${WORKSPACE}/selected-product-policy"
 ```
 
-No official design-system corpus is bundled. `tests/fixtures/unofficial-mui/` is illustrative local product policy, not verified MUI guidance or evidence of product adoption. It demonstrates a generic root-class rule plus unsupported contextual prose. Do not report fixture success as system compliance.
-
-Choose example overlays only when the requester/project establishes applicability; they are not a supported-product list or proof of adoption:
-
-- `overlays/rhoai/no-custom-css.md`: explicit executable example policy.
-- `overlays/rhoai/product-conventions.md`: contextual prose, deterministically unevaluated.
-- `overlays/felt/theme.md`: generic `required-html-class` with scalar `required_class`.
+No design-system corpus or product-policy overlays are bundled. Use only the product-owned guidance explicitly selected for the review.
 
 Product prose may legitimately mention PatternFly. Preserve it without inferring a PF-specific check or adding a baseline.
 
@@ -92,4 +86,4 @@ Only selected explicit product rules establish normative policy here; peer major
 
 For a **separately requested** PatternFly component/token review, use the dedicated `pf-*` skills outside this checker. Those are not a missing-guidance fallback, implicit source, or substitute compliance result. This checker does not require MCP or fetch documentation automatically.
 
-Keep source product corpora intact. Example overlays are not a replacement for owner-confirmed versioned policy; never publish to product repositories automatically.
+Keep source product corpora intact; never publish to product repositories automatically.

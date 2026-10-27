@@ -52,20 +52,11 @@ Set `tracking.sheet_id` in `config/product-overlay.yaml` (or `EVAL_SHEET_ID`). L
 | `scripts/validate-artifact-schemas.js` | Schema validation for pipeline artifacts |
 | `scripts/validate-report-rendering.js` | Report rendering quality checks |
 
-Run the offline validator and consistency-integration regressions:
+Run the existing offline validator fixtures:
 
 ```bash
 bash tests/run-script-tests.sh
 ```
-
-The integration tests execute sibling discovery, missing-checker diagnostics,
-index → confirmed selection/staging receipt → scoped analyzer → validator → HTML,
-prose-only zero-pass coverage, unknown currentness/unavailable evidence, frozen
-replay after original/staged cleanup with surviving evidence links, and retained
-usability bootstrap selection. Browser/provider calls are not required. Approval
-and capability events are synthetic fixtures, not proof of live consent or
-provider access. Git transport in the usability test is recorded locally, not
-sent to a remote.
 
 ### Consume confirmed product guidance
 

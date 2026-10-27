@@ -98,7 +98,6 @@ Legacy reports remain replayable evidence. New semantic validation uses 1.1 and 
 ## References and verification
 
 - [Project context, source safety and metadata](references/project-context.md)
-- `references/overlays/` contains named-product examples, not verified adoption or a support list. Pass only individually requested files.
-- Run `python3 -S -m unittest discover -s "${SKILL_DIR}/tests" -v`; see [test scope and migration](tests/README.md). Run repository `make validate` for contributions, without generating docs. The MUI fixture is unofficial illustrative product policy, not verified MUI guidance.
+- Run repository `make validate` for contributions, without generating docs.
 
 No publishing, issue creation, MR/PR writes, posts, or auto-merge occurs here. Those require separate authorization.

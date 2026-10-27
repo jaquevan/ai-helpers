@@ -317,7 +317,6 @@ manual/model findings cite selected sources and exact quotes/nodes/screenshots
 and method. Keep channels and coverage separate; cross-link related findings
 without destructive deduplication. Supplemental validation is not model execution.
 
-Offline unit tests and protocol event fixtures verify the local interfaces,
-receipts, exact calls and abstention. They do not verify live provider access,
-current product adoption, model quality or live eval performance. No live-provider
-verification is claimed. See [tests](../tests/README.md).
+Local receipt and citation validation does not establish live provider access,
+current product adoption, model quality or live eval performance. Report those
+limits separately from local artifact integrity.
