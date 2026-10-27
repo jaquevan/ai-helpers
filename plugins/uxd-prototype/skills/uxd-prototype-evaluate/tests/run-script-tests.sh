@@ -82,6 +82,17 @@ if [ -d "$FIXTURES_DIR/minimal" ]; then
   echo ""
 fi
 
+# Focused consumer regressions execute the renderer, availability scripts, and
+# checker reports; the minimal JSON validator fixtures alone do not cover them.
+echo "Test consistency integration (offline): "
+if python3 -S -m unittest discover -s "$SCRIPT_DIR" -p 'test_consistency_integration.py' -v; then
+  echo "PASS"
+  PASS_COUNT=$((PASS_COUNT + 1))
+else
+  echo "FAIL"
+  FAIL_COUNT=$((FAIL_COUNT + 1))
+fi
+
 echo "=== Summary ==="
 TOTAL=$((PASS_COUNT + FAIL_COUNT))
 echo "$PASS_COUNT/$TOTAL passed"

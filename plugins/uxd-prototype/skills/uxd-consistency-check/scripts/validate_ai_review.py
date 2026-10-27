@@ -21,7 +21,7 @@ def _load_manifest(path: Path | None) -> dict[str, dict[str, Any]]:
     validate_manifest(manifest, manifest.get("design_system") if isinstance(manifest, dict) else None)
     # Supplemental judgments share deterministic applicability, not its coverage.
     return {document["id"]: document for document in manifest["documents"]
-            if document["design_system"] in {manifest["design_system"], "any"}}
+            if document["kind"] != "baseline" and document["design_system"] in {manifest["design_system"], "any"}}
 
 
 def _workspace_file(value: Any, root: Path, *, absolute: bool = False) -> Path:
@@ -56,7 +56,7 @@ def validate_review(raw: Any, *, mode: str, source_root: Path,
     """Return an independent supplemental report from frozen local evidence."""
     if not isinstance(raw, dict) or raw.get("status") != "completed":
         raise ValueError("review must be a completed JSON object")
-    if mode not in ("source", "visual", "internal") or raw.get("mode") != mode:
+    if mode not in ("source", "visual") or raw.get("mode") != mode:
         raise ValueError("review mode must match requested mode")
     if model is not None and raw.get("model") != model:
         raise ValueError("review model must match requested model")
@@ -72,45 +72,6 @@ def validate_review(raw: Any, *, mode: str, source_root: Path,
                 raise ValueError(f"finding requires non-empty {field}")
         if finding.get("confidence") not in ("high", "medium", "low"):
             raise ValueError("invalid finding confidence")
-    if mode == "internal":
-        findings = []
-        seen = set()
-        root = Path(source_root).resolve()
-        for finding in raw["findings"]:
-            item = _excerpt(finding, root)
-            item.update({field: finding[field] for field in ("rationale", "suggestion", "confidence")})
-            if not isinstance(finding.get("peers"), list):
-                raise ValueError("internal findings require a peers array (may be empty)")
-            path = _workspace_file(item["file"], root)
-            stat = path.stat()
-            key = (stat.st_dev, stat.st_ino, item["line_start"], item["line_end"])
-            if key in seen:
-                raise ValueError("duplicate internal finding")
-            seen.add(key)
-            peers = [_excerpt(peer, root) for peer in finding["peers"]]
-            previous = [item]
-            for peer in peers:
-                path = _workspace_file(peer["file"], root)
-                for other in previous:
-                    if (path.samefile(_workspace_file(other["file"], root))
-                            and peer["line_start"] <= other["line_end"]
-                            and other["line_start"] <= peer["line_end"]):
-                        raise ValueError("internal evidence ranges overlap (self or repeated peer evidence)")
-                previous.append(peer)
-            item.update(peers=peers,
-                        severity="warning", review_candidate=True, verdict="FLAGGED",
-                        check_method="internal_comparison")
-            item["comparison_state"] = "review_candidate" if peers else "insufficient_comparable_examples"
-            if not peers:
-                item["confidence"] = "low"
-            findings.append(item)
-        return {"schema_version": "1.0.0", "source_basis": "current_workspace",
-                "status": "completed", "report_type": "supplemental_review", "mode": mode,
-                "model": model or raw.get("model"), "non_deterministic": True,
-                "guideline_compliance": "not_evaluated",
-                "coverage": "reviewed" if findings and all(item["peers"] for item in findings)
-                            else "insufficient_comparable_examples", "findings": findings,
-                "summary": {"finding_count": len(findings), "error_count": 0, "warning_count": len(findings)}}
     guidelines = _load_manifest(guideline_manifest)
     root = Path(source_root).resolve()
     allowed = screenshots or []
@@ -176,7 +137,7 @@ class _JsonParser(argparse.ArgumentParser):
 
 def _main(argv: list[str] | None = None) -> int:
     parser = _JsonParser(description=__doc__)
-    parser.add_argument("--mode", choices=("source", "visual", "internal"), required=True)
+    parser.add_argument("--mode", choices=("source", "visual"), required=True)
     parser.add_argument("--input", required=True)
     parser.add_argument("--output", help="Workspace JSON output; defaults to .artifacts/consistency-MODE-review.json")
     parser.add_argument("--source-root", "--workspace", dest="source_root", required=True)

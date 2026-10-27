@@ -167,11 +167,15 @@ python3 ${CLAUDE_SKILL_DIR}/scripts/eval_state.py set ${ARTIFACTS_DIR}/eval-stat
 
 # ── Pre-flight: resolve installed sibling checker (no network) ──────
 bash "${CLAUDE_SKILL_DIR}/scripts/bootstrap-consistency-checker.sh"
-# Absence permits the phase's explicit degraded fallback. Missing product
-# guidelines does not skip internal consistency or the default PF baseline.
+# Absence records an unavailable check; install/restore the sibling, then rerun.
+# Only explicitly selected product guidelines run; no default audit or PF fallback.
 
 Read ${CLAUDE_SKILL_DIR}/references/phases/eval-consistency.md and execute it with --mode=source
-# Runs ONCE (source-mode only). Produces: consistency-report.json, appends to refinement-suggestions.json
+# Runs ONCE (source-mode only). Confirm indexed product selection/staging first;
+# consume the receipt with run-consistency-selection.py, preserving its narrow
+# analysis_workspace. Outputs consistency-report.json + consistency-selection.json;
+# append actionable findings to refinement-suggestions.json separately.
+# Unknown currentness/manual evidence never become deterministic passes.
 # Visual-mode requires separate explicit selection and authorization.
 # Uses the offline analyzer's JSON directly; never execute guideline commands.
 
@@ -350,8 +354,8 @@ python3 ${CLAUDE_SKILL_DIR}/scripts/eval_state.py set ${ARTIFACTS_DIR}/eval-stat
 #
 # TASK 1: eval-consistency --mode=visual (only if explicitly selected and authorized)
 #   Uses journey screenshots for visual guideline checks.
-#   Appends visual findings to consistency-report.json.
-#   Informational for report — does NOT re-trigger fix loop.
+#   Writes a separately validated visual supplement; source JSON stays unchanged.
+#   Link it in the human summary; the aggregate renderer does not load supplements.
 #   ERROR HANDLING: If fails, consistency-report.json keeps visual_mode.ran=false. Non-blocking.
 #
 # TASK 2: eval-extract --phase=enrichment
@@ -653,4 +657,4 @@ one additional Phase A crank. See the git history for full design details.
 - **Prototype URL unreachable:** Wait 10s, retry once. If still down, stop with error.
 - **eval-fix produces no changes:** Stop Phase A — more iterations won't help. Proceed to Phase B.
 - **Dev server crashes after fix:** Stop Phase A, note which files may have caused it. Proceed to Phase B.
-- **Missing local consistency skill:** Phase A uses the optional pf-css-token-check fallback or records a skip; do not clone a checker or invent a pass. Missing workspace guidelines still permits internal checking. **Missing usability context:** Phase B uses the bundled plugin persona catalog with reduced behavioral fidelity; usability context can be configured separately through `USABILITY_TESTING_REPO` or its overlay.
+- **Missing local consistency skill:** Record checks as unavailable; install or restore sibling `uxd-consistency-check` beside this evaluator with `SKILL.md` and `scripts/analyze.py`, then rerun evaluation. Do not clone a checker, substitute another audit, or invent a pass. Without selected product guidelines, no policy or peer audit runs and no compliance pass is implied. **Missing usability context:** Phase B uses the bundled plugin persona catalog with reduced behavioral fidelity; usability context can be configured separately through `USABILITY_TESTING_REPO` or its overlay.

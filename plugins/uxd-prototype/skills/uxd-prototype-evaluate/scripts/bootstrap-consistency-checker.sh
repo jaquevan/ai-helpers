@@ -12,5 +12,5 @@ if [ -f "$CHECKER_DIR/SKILL.md" ] && [ -f "$CHECKER_DIR/scripts/analyze.py" ]; t
 else
   echo "CONSISTENCY_AVAILABLE=false"
   echo "Consistency checker unavailable: $CHECKER_DIR (requires SKILL.md and scripts/analyze.py)"
-  echo "Use the pf-css-token-check fallback when available; otherwise record a skipped report."
+  echo "Install or restore the sibling uxd-consistency-check beside this evaluator with SKILL.md and scripts/analyze.py, then rerun evaluation. Record checks as unavailable until restored; do not run a substitute audit."
 fi

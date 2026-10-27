@@ -1,8 +1,9 @@
 #!/usr/bin/env python3
 # AI-generated script by GPT-6 Luna.
-"""Offline, workspace-owned consistency reports. No model or network imports."""
+"""Check explicitly selected product policy offline; no baseline or peer audit."""
 import argparse
 from datetime import datetime, timezone
+from html.parser import HTMLParser
 import json
 from pathlib import Path
 import re
@@ -11,61 +12,133 @@ import uuid
 
 from artifact_io import local_path, output_path, protect_inputs, write_json
 from guideline_sources import load_guidelines, load_manifest
-from internal_consistency import compare_internal
 from scoped_sources import read_sources, mask_comments
 from report_contract import validate_report
 
 SCHEMA_VERSION = "1.0.0"
 
 
+class RootHTMLParser(HTMLParser):
+    """Read the first actual HTML tag, excluding attribute-value lookalikes."""
 
-def evaluate(documents, files, changed_lines=None):
+    def __init__(self):
+        super().__init__()
+        self.classes = []
+        self.position = None
+
+    def handle_starttag(self, tag, attrs):
+        if tag == "html" and self.position is None:
+            self.position = self.getpos()
+            # HTML attribute names are normalized; class tokens remain case-sensitive.
+            self.classes = next((value or "" for name, value in attrs if name == "class"), "").split()
+
+
+class CustomCSSParser(HTMLParser):
+    """Find authored CSS in HTML without depending on tag/attribute casing or quoting."""
+
+    def __init__(self, text):
+        super().__init__(convert_charrefs=True)
+        self.text = text
+        self.matches = []
+
+    def handle_starttag(self, tag, attrs):
+        start = self.getpos()
+        offset = sum(len(line) for line in self.text.splitlines(keepends=True)[:start[0] - 1]) + start[1]
+        markup = self.get_starttag_text()
+        names = {name for name, _ in attrs}
+        values = {name: value or "" for name, value in attrs}
+        if "style" in names or tag == "style":
+            self.matches.append((offset, markup))
+        if tag == "link" and "stylesheet" in values.get("rel", "").lower().split():
+            self.matches.append((offset, markup))
+
+
+def jsx_style_candidates(text):
+    """Bounded opening-tag scan, not a JSX/JS parser. Coverage always incomplete.
+
+    Skip balanced {...} attribute expressions so an arrow's > cannot end a tag.
+    Backticks, comments, regex literals and spreads may hide syntax; abstain on
+    those constructs. No negative result from JavaScript earns a policy pass.
+    """
+    matches = []
+    style_attribute = re.compile(r'\s+style\s*=')
+    for start in re.finditer(r'<[A-Za-z][\w.:-]*\b', text):
+        position = start.end()
+        depth, quote, escaped = 0, None, False
+        while position < len(text):
+            char = text[position]
+            if quote:
+                if escaped:
+                    escaped = False
+                elif char == '\\':
+                    escaped = True
+                elif char == quote:
+                    quote = None
+            elif char in ('"', "'"):
+                quote = char
+            elif char == '`' or text[position:position + 2] in ('//', '/*'):
+                break
+            elif char == '{':
+                depth += 1
+            elif char == '}':
+                depth -= 1
+                if depth < 0:
+                    break
+            elif char == '>' and depth == 0:
+                break
+            elif depth == 0 and char.isspace():
+                attribute = style_attribute.match(text, position)
+                if attribute:
+                    matches.append((position + len(attribute.group()) - len(attribute.group().lstrip()), attribute.group().strip()))
+            position += 1
+    return list(dict.fromkeys(matches))
+
+
+def evaluate(documents, files, changed_lines=None, incomplete=None):
     findings = []
     evaluated = []
+    incomplete = {} if incomplete is None else incomplete
     for document in documents:
         check = document.get("check")
         # Unsupported checks remain unevaluated; prose never authorizes execution.
-        if check not in {"patternfly-component-usage", "no-custom-css", "css-token-usage", "required-html-class"} or not files:
+        # Historical baselines are retained as provenance, never active policy.
+        if document.get("kind") == "baseline" or check not in {"no-custom-css", "required-html-class"} or not files:
             continue
-        # A stylesheet cannot supply component evidence or a root HTML element.
-        suffixes = {"required-html-class": {".html", ".htm"},
-                    "patternfly-component-usage": {".html", ".htm", ".jsx", ".tsx", ".js", ".ts"}}.get(check)
+        # A stylesheet cannot supply a root HTML element.
+        suffixes = {"required-html-class": {".html", ".htm"}}.get(check)
         targets = {file: text for file, text in files.items()
                    if suffixes is None or Path(file).suffix.lower() in suffixes}
         if not targets:
             continue
-        # Mark as evaluated before the file loop: zero matches is still a pass, not a skip.
-        evaluated.append(document["id"])
+        # Only complete syntax coverage can turn zero matches into a pass.
+        finding_start = len(findings)
+        incomplete_files = []
         for file, text in targets.items():
             text = mask_comments(text)
             suffix = Path(file).suffix.lower()
             matches = []
-            if check == "patternfly-component-usage":
-                matches = [(match.start(), match.group()) for match in
-                           re.finditer(r"<(?:button|input|select|textarea)\b[^>]*>", text)
-                           if not re.search(r"pf-v\d+-", match.group())]
-            elif check == "no-custom-css":
+            if check == "no-custom-css":
                 if suffix in {".css", ".scss"}:
                     matches.append((0, "Authored stylesheet: " + file))
+                elif suffix in {'.jsx', '.tsx', '.js', '.ts'}:
+                    incomplete_files.append(file)
+                    matches = jsx_style_candidates(text)
                 else:
-                    # Legacy PatternFly asset exemptions are not generic policy.
-                    matches = [(match.start(), match.group()) for match in re.finditer(
-                        r"\bstyle\s*=|<style\b|<link\b[^>]*rel\s*=\s*[\"']stylesheet[\"'][^>]*>", text)
-                        if document.get("design_system") != "patternfly" or
-                        ("patternfly" not in match.group() and "uxd-prototype-bar" not in match.group())]
-            elif check == "css-token-usage":
-                matches = [(match.start(), match.group()) for match in re.finditer(
-                    r"\b(?:color|background(?:-color|Color)?|border(?:-color|Color)?|fill|stroke)\s*:\s*['\"]?(?:#[0-9a-fA-F]{3,8}\b|(?:rgb|hsl)a?\([^)]*\))", text)]
+                    parser = CustomCSSParser(text)
+                    parser.feed(text)
+                    parser.close()
+                    matches = parser.matches
             elif check == "required-html-class" and suffix in {".html", ".htm"}:
                 required = document.get("parameters", {}).get("required_class")
                 if not isinstance(required, str) or not re.fullmatch(r"[A-Za-z0-9_-]+", required):
                     raise ValueError("required-html-class needs a required_class scalar")
-                root = re.search(r"<html\b[^>]*>", text, re.IGNORECASE)
-                classes = re.search(r"\bclass\s*=\s*['\"]([^'\"]*)['\"]", root.group()) if root else None
-                if not classes or required not in classes.group(1).split():
-                    matches = [(root.start() if root else 0, "Missing required root HTML class: " + required)]
-            # Regex matches can't confirm PatternFly compliance or token origin, only flag for human review.
-            candidate = check in {"patternfly-component-usage", "css-token-usage"}
+                root = RootHTMLParser()
+                root.feed(text)
+                if required not in root.classes:
+                    offset = (sum(len(line) for line in text.splitlines(keepends=True)[:root.position[0] - 1])
+                              + root.position[1]) if root.position else 0
+                    matches = [(offset, "Missing required root HTML class: " + required)]
+
             for offset, value in matches:
                 line = text.count("\n", 0, offset) + 1
                 end_line = line + value.count("\n")
@@ -73,17 +146,24 @@ def evaluate(documents, files, changed_lines=None):
                 whole_file = check == "no-custom-css" and suffix in {".css", ".scss"}
                 if changed_lines is not None and not (bool(changed_lines.get(file)) if whole_file else any(number in changed_lines.get(file, set()) for number in range(line, end_line + 1))):
                     continue
-                severity = "warning" if candidate else document["severity"]
+                candidate = check == 'no-custom-css' and suffix in {'.jsx', '.tsx', '.js', '.ts'}
+                severity = 'warning' if candidate else document["severity"]
                 findings.append({"guideline_id": document["id"], "guideline_title": document["title"],
                                  "category": document["category"], "severity": severity,
                                  "verdict": "VIOLATION" if severity == "error" else "FLAGGED",
-                                 "confidence": "low" if candidate else "high", "review_candidate": candidate,
+                                 "confidence": 'low' if candidate else "high", "review_candidate": candidate,
                                  "file": file, "line": None if whole_file else line,
                                  "property": document["id"], "value": value,
-                                 "description": "Source pattern requires review against the selected guideline." if candidate else "Source does not satisfy the selected guideline's explicit policy.",
-                                 "suggestion": document["text"].split("## Rule", 1)[-1].strip(),
-                                 "check_method": "automated_candidate" if candidate else "automated",
+                                 "description": ('Bounded JSX styling candidate requires review; syntax coverage is incomplete.' if candidate
+                                     else "Source does not satisfy the selected guideline's explicit policy."),
+                                 "suggestion": document.get('review_text', document["text"].split("## Rule", 1)[-1]).strip(),
+                                 "check_method": 'automated_candidate' if candidate else "automated",
                                  "pf_doc_url": document.get("source_url")})
+        if incomplete_files:
+            incomplete[document['id']] = {'status': 'incomplete', 'files': sorted(incomplete_files),
+                'reason': 'Bounded JSX candidate scan; JavaScript/JSX absence is not a deterministic pass.'}
+        if not incomplete_files or len(findings) > finding_start:
+            evaluated.append(document['id'])
     return findings, evaluated
 
 
@@ -95,13 +175,15 @@ def guideline_coverage(documents, evaluated, sources):
         return {"status": "evaluated" if checked and len(checked) == len(selected) else "partially_evaluated" if checked else "not_evaluated",
                 "selected_rules": selected, "evaluated_rules": checked}
     return {"status": "evaluated" if evaluated and len(evaluated) == len(documents) else "partially_evaluated" if evaluated else "not_evaluated",
-            "baseline": group({"baseline"}), "workspace": group({"workspace", "explicit"})}
+            # Legacy baseline provenance remains in the snapshot, never coverage.
+            "baseline": {"status": "not_evaluated", "selected_rules": [], "evaluated_rules": []},
+            "workspace": group({"workspace", "explicit"})}
 
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__, allow_abbrev=False)
     parser.add_argument("--workspace", "--src", "--source-dir", dest="workspace", required=True)
-    parser.add_argument("--design-system", help="Optional system label; patternfly opts into its bundled baseline")
+    parser.add_argument("--design-system", help="Applicability label only; never loads policy")
     parser.add_argument("--design-system-version", default="unspecified")
     parser.add_argument("--json-output", action="store_true", help="Print JSON (also the default)")
     parser.add_argument("--json-file", help="Explicit workspace .artifacts JSON destination")
@@ -115,12 +197,26 @@ def main():
     parser.add_argument("--base-ref", default="main")
     parser.add_argument("--tracked-only", action="store_true")
     parser.add_argument("--merge-base", action="store_true")
+    parser.add_argument('--review-selection', help='approved structured model selection; limits scope collection independently of Git delta')
     args = parser.parse_args()
     workspace = Path(args.workspace).expanduser().resolve()
     if not workspace.is_dir():
         parser.error("workspace must be an existing directory")
     if args.guideline_manifest and args.guidelines:
         parser.error("a frozen manifest cannot be combined with new guidelines")
+    approved_scope = None
+    proposal = None
+    if args.review_selection:
+        from guideline_io import read_confined
+        from guideline_selection import validate_selection
+        selection = json.loads(read_confined(workspace, local_path(args.review_selection, workspace)).decode('utf-8'))
+        proposal = validate_selection(workspace, selection)
+        if proposal['schema_version'] != '1.1.0' or proposal['method'] != 'model':
+            raise ValueError('structured model selection required for review scope collection')
+        approved_scope = proposal['review_scope']
+        if args.design_system is not None and args.design_system != proposal['design_system']:
+            raise ValueError('design system differs from approved applicability label')
+        args.design_system = proposal['design_system']
     context = load_manifest(args.guideline_manifest, workspace, args.design_system) if args.guideline_manifest else load_guidelines(workspace, args.guidelines, args.design_system)
     args.design_system = context["design_system"]
     documents = context["documents"]
@@ -133,12 +229,25 @@ def main():
                 parser.error(f"unknown {key}: {selected}")
     if (args.tracked_only or args.merge_base) and not args.changed:
         parser.error("--tracked-only and --merge-base require --changed")
-    files, changed_lines, inputs = read_sources(workspace, args.changed, args.base_ref, args.tracked_only, args.merge_base)
+    if proposal is not None:
+        from review_scope import normalized_text
+        documents = [dict(doc) for doc in documents]
+        for doc in documents:
+            selected = [s for s in proposal['sources'] if s['locator']['kind'] == 'local'
+                and str(Path(proposal['index']).parent / s['locator']['path']) in doc['sources']
+                and s['material_sha256'] == doc['sha256']]
+            if len(selected) != 1:
+                raise ValueError('deterministic guideline is outside approved source selection')
+            bounds = selected[0]['section_bounds']
+            doc['review_text'] = normalized_text(doc['text'])[bounds['start']:bounds['end']]
+    files, changed_lines, inputs = read_sources(workspace, args.changed, args.base_ref, args.tracked_only, args.merge_base,
+                                                approved_scope=approved_scope)
     # In changed mode, skip files that had no lines in the diff (changed_lines maps to empty set for unchanged files).
     targets = files if changed_lines is None else {file: text for file, text in files.items() if changed_lines.get(file)}
     # "any" is the wildcard design_system sentinel; guidelines with it apply to every design system.
     applicable_documents = [doc for doc in documents if doc.get("design_system") in {args.design_system, "any"}]
-    findings, evaluated = evaluate(applicable_documents, targets, changed_lines)
+    incomplete = {}
+    findings, evaluated = evaluate(applicable_documents, targets, changed_lines, incomplete)
     error_ids = {finding["guideline_id"] for finding in findings if finding["severity"] == "error"}
     warning_ids = {finding["guideline_id"] for finding in findings} - error_ids
     run_id = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%S") + "-" + uuid.uuid4().hex[:12]
@@ -148,6 +257,8 @@ def main():
     protected = [source for doc in context["documents"] for source in doc["sources"]]
     if args.guideline_manifest:
         protected.append(str(local_path(args.guideline_manifest, workspace)))
+    if args.review_selection:
+        protected.append(str(local_path(args.review_selection, workspace)))
     protect_inputs(destination, protected)
     artifact = destination.relative_to(workspace)
     snapshot_path = destination.parent / ("guidelines-" + run_id + ".json")
@@ -161,15 +272,21 @@ def main():
         "guideline_manifest": snapshot_path.relative_to(workspace).as_posix(),
         "guideline_context": {"sources": context["sources"], "documents": [{key: value for key, value in doc.items() if key != "text"} for doc in context["documents"]]},
         "guideline_consistency": guideline_coverage(documents, evaluated, context["sources"]),
-        "internal_consistency": compare_internal(files, changed_lines, inputs["file_aliases"]),
+        "internal_consistency": {"status": "not_evaluated",
+                                 "reason": "Peer audits are outside selected product-guideline scope.",
+                                 "comparisons": [], "findings": [], "uncompared_targets": []},
         "inputs": inputs,
         "coverage": {"evaluated_rules": evaluated,
-                     "unevaluated_rules": [doc["id"] for doc in documents if doc["id"] not in evaluated]},
+                      "unevaluated_rules": [doc["id"] for doc in documents if doc["id"] not in evaluated]},
         "source_mode": {"ran": True, "violations": findings},
         "visual_mode": {"ran": False, "screenshots_checked": 0, "findings": []},
         "summary": {"total_guidelines_checked": len(evaluated), "violations": len(error_ids),
                     "warnings": len(warning_ids), "passes": len(evaluated) - len(error_ids | warning_ids)},
     }
+    if incomplete:
+        report['coverage']['incomplete_rules'] = incomplete
+        report['guideline_consistency']['status'] = 'partially_evaluated'
+        report['guideline_consistency']['workspace']['status'] = 'partially_evaluated'
     validate_report(report)
     write_json(snapshot_path, context)
     write_json(destination, report)

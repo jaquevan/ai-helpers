@@ -13,6 +13,7 @@ sys.path.insert(0, str(SKILL / "scripts"))
 from guideline_sources import load_guidelines, load_manifest, validate_manifest, manifest_version
 from schema_assertions import assert_schema
 from validate_ai_review import validate_review
+from artifact_io import local_path, output_path, protect_inputs
 
 
 class GeneralizationTests(unittest.TestCase):
@@ -41,22 +42,37 @@ class GeneralizationTests(unittest.TestCase):
         self.assertEqual(json.loads((self.root / report["artifact"]).read_text()), report)
         return report
 
-    def test_namespaced_product_and_optional_baseline_preserve_colliding_rules(self):
-        product = self.rule(id="patternfly-component-usage", check="product-context-review",
-                            design_system="patternfly", source_url="https://example.test/pinned/rule.md",
-                            version="3.6", retrieved_at="2026-10-20T17:36:20Z")
-        report = self.analyze("--design-system", "patternfly", "--guidelines", f"rhoai={product}")
+    def test_root_class_uses_actual_html_attributes(self):
+        policy = self.rule()
+        cases = [
+            ('<html data-class="team-theme">', 1),
+            ('<html title="class=\'team-theme\'">', 1),
+            ('<HTML CLASS="team-theme">', 0),
+            ('<html title=">" class="team-theme">', 0),
+            ('<html class=team-theme>', 0),
+            ('<html class="TEAM-THEME">', 1),
+        ]
+        for markup, expected in cases:
+            with self.subTest(markup=markup):
+                (self.root / "index.html").write_text(markup + "</html>\n")
+                report = self.analyze("--guidelines", f"product={policy}", expected=expected)
+                self.assertEqual(report["summary"]["passes"], 1 - expected)
+                self.assertEqual(report["summary"]["violations"], expected)
+
+    def test_namespaced_product_sources_preserve_colliding_rules_without_baseline(self):
+        first = self.rule("alpha/policy.md", id="theme", source_url="https://example.test/pinned/rule.md",
+                          version="3.6", retrieved_at="2026-10-20T17:36:20Z")
+        second = self.rule("beta/policy.md", id="theme", check="product-context-review")
+        report = self.analyze("--design-system", "patternfly", "--guidelines", f"alpha={first}",
+                              "--guidelines", f"beta={second}", expected=1)
         documents = {d["id"]: d for d in report["guideline_context"]["documents"]}
-        self.assertEqual(set(documents), {"patternfly:css-token-usage",
-                         "patternfly:patternfly-component-usage", "rhoai:patternfly-component-usage"})
-        self.assertEqual(report["coverage"]["unevaluated_rules"], ["rhoai:patternfly-component-usage"])
-        self.assertEqual(report["coverage"]["evaluated_rules"],
-                         ["patternfly:css-token-usage", "patternfly:patternfly-component-usage"])
-        self.assertEqual(documents["rhoai:patternfly-component-usage"]["original_id"], "patternfly-component-usage")
-        self.assertEqual(documents["rhoai:patternfly-component-usage"]["namespace"], "rhoai")
-        self.assertEqual(documents["rhoai:patternfly-component-usage"]["version"], "3.6")
+        self.assertEqual(set(documents), {"alpha:theme", "beta:theme"})
+        self.assertEqual(report["coverage"], {"evaluated_rules": ["alpha:theme"],
+                                            "unevaluated_rules": ["beta:theme"]})
+        self.assertEqual(documents["alpha:theme"]["original_id"], "theme")
+        self.assertEqual(documents["alpha:theme"]["version"], "3.6")
         snapshot = json.loads((self.root / report["guideline_manifest"]).read_text())
-        self.assertEqual(next(d for d in snapshot["documents"] if d["namespace"] == "rhoai")["text"], product.read_text())
+        self.assertEqual(next(d for d in snapshot["documents"] if d["namespace"] == "alpha")["text"], first.read_text())
 
     def test_frozen_replay_uses_selected_identity_without_original_sources(self):
         policy = self.rule(design_system="mui")
@@ -294,26 +310,58 @@ class GeneralizationTests(unittest.TestCase):
                 load_guidelines(self.root, [policy])
 
     def test_custom_css_policy_has_no_implicit_patternfly_asset_exemption(self):
-        policy = self.rule(check="no-custom-css")
-        (self.root / "index.html").write_text('<html><link rel="stylesheet" href="patternfly-custom.css"></html>\n')
-        report = self.analyze("--guidelines", policy, expected=1)
-        self.assertEqual(len(report["source_mode"]["violations"]), 1)
-        self.assertEqual(report["source_mode"]["violations"][0]["guideline_id"], "local:team-policy")
+        for label in ("custom", "patternfly"):
+            policy = self.rule(check="no-custom-css", design_system=label)
+            (self.root / "index.html").write_text('<html><link rel="stylesheet" href="patternfly-custom.css">\n<link rel="stylesheet" href="uxd-prototype-bar.css"></html>\n')
+            report = self.analyze("--design-system", label, "--guidelines", policy, expected=1)
+            self.assertEqual(len(report["source_mode"]["violations"]), 2)
+            self.assertEqual({item["guideline_id"] for item in report["source_mode"]["violations"]}, {"local:team-policy"})
 
-    def test_component_coverage_requires_markup_targets_not_stylesheets(self):
+    def test_no_custom_css_detects_case_insensitive_html_and_unquoted_rel(self):
+        policy = self.rule(check="no-custom-css")
+        cases = [
+            ('<html STYLE="color: red">\n', 1),
+            ('<STYLE>body { color: red }</STYLE>\n', 1),
+            ('<link rel=stylesheet href="custom.css">\n', 1),
+        ]
+        for markup, expected_line in cases:
+            with self.subTest(markup=markup):
+                (self.root / "index.html").write_text(markup)
+                report = self.analyze("--guidelines", f"product={policy}", expected=1)
+                finding, = report["source_mode"]["violations"]
+                self.assertEqual(finding["file"], "index.html")
+                self.assertEqual(finding["line"], expected_line)
+
+    def test_removed_checks_are_unevaluated_on_import_and_both_replay_versions(self):
+        (self.root / "index.html").write_text('<html><button style="color: #fff">Save</button></html>\n')
+        for check in ("patternfly-component-usage", "css-token-usage"):
+            with self.subTest(check=check):
+                policy = self.rule(check=check, id=check, design_system="patternfly")
+                report = self.analyze("--design-system", "patternfly", "--guidelines", policy)
+                self.assertEqual(report["coverage"], {"evaluated_rules": [], "unevaluated_rules": ["local:" + check]})
+                self.assertEqual(report["source_mode"]["violations"], [])
+                manifest = json.loads((self.root / report["guideline_manifest"]).read_text())
+                policy.unlink()
+                self.assertEqual(self.analyze("--guideline-manifest", self.root / report["guideline_manifest"])["coverage"], report["coverage"])
+                manifest["schema_version"] = "1.0.0"
+                doc = manifest["documents"][0]
+                doc["id"] = doc.pop("original_id")
+                doc.pop("namespace")
+                manifest["sources"][0].pop("namespace")
+                manifest["sources"][0]["document_ids"] = [check]
+                manifest["version"] = "sha256:" + hashlib.sha256(json.dumps([(check, doc["sha256"])]).encode()).hexdigest()
+                legacy_path = self.root / "legacy.json"
+                legacy_path.write_text(json.dumps(manifest))
+                replay = self.analyze("--guideline-manifest", legacy_path)
+                self.assertEqual(replay["coverage"], {"evaluated_rules": [], "unevaluated_rules": [check]})
+                self.assertEqual(replay["summary"]["passes"], 0)
+
+    def test_root_class_coverage_requires_html_targets_not_stylesheets(self):
         (self.root / "index.html").unlink()
-        stylesheet = self.root / "styles.css"
-        stylesheet.write_text('.example { margin: 0; }\n')
-        report = self.analyze("--design-system", "patternfly")
-        self.assertEqual(report["coverage"]["evaluated_rules"], ["patternfly:css-token-usage"])
-        self.assertEqual(report["coverage"]["unevaluated_rules"], ["patternfly:patternfly-component-usage"])
-        self.assertEqual(report["summary"]["passes"], 1)
-        self.assertEqual(report["guideline_consistency"]["baseline"]["status"], "partially_evaluated")
-        # CSS strings are not markup evidence even when a real markup target exists.
-        stylesheet.write_text('.example::before { content: "<button>"; }\n')
-        (self.root / "index.html").write_text('<html><body>Content</body></html>\n')
-        report = self.analyze("--design-system", "patternfly")
-        self.assertEqual(report["source_mode"]["violations"], [])
+        (self.root / "styles.css").write_text('.example { margin: 0; }\n')
+        report = self.analyze("--guidelines", self.rule())
+        self.assertEqual(report["coverage"], {"evaluated_rules": [], "unevaluated_rules": ["local:team-policy"]})
+        self.assertEqual(report["summary"]["passes"], 0)
 
     def test_target_extension_case_does_not_turn_a_policy_failure_into_a_pass(self):
         policy = self.rule()
@@ -325,6 +373,84 @@ class GeneralizationTests(unittest.TestCase):
         policy = self.rule(check="no-custom-css")
         report = self.analyze("--guidelines", policy, expected=1)
         self.assertIsNone(report["source_mode"]["violations"][0]["line"])
+
+    def test_no_policy_does_not_audit_peers_even_with_patternfly_label(self):
+        (self.root / "index.html").write_text('<html><button class="primary">Save</button>\n<button class="secondary">Save</button></html>\n')
+        report = self.analyze("--design-system", "patternfly")
+        self.assertEqual(report["internal_consistency"], {
+            "status": "not_evaluated", "reason": "Peer audits are outside selected product-guideline scope.",
+            "comparisons": [], "findings": [], "uncompared_targets": []})
+        self.assertEqual(report["coverage"], {"evaluated_rules": [], "unevaluated_rules": []})
+        self.assertEqual(report["summary"]["passes"], 0)
+
+    def test_imported_baseline_kind_cannot_run_neutral_policy(self):
+        manifest = load_guidelines(self.root, [self.rule()])
+        manifest["documents"][0]["kind"] = "baseline"
+        manifest["sources"][0]["kind"] = "baseline"
+        manifest["version"] = manifest_version(manifest)
+        path = self.root / "baseline.json"
+        path.write_text(json.dumps(manifest))
+        report = self.analyze("--guideline-manifest", path)
+        self.assertEqual(report["coverage"], {"evaluated_rules": [], "unevaluated_rules": ["local:team-policy"]})
+        self.assertEqual(report["guideline_consistency"]["baseline"], {
+            "status": "not_evaluated", "selected_rules": [], "evaluated_rules": []})
+
+    def test_unscoped_internal_supplement_is_rejected(self):
+        raw = {"status": "completed", "mode": "internal", "model": "fixture-model",
+               "non_deterministic": True, "findings": []}
+        with self.assertRaisesRegex(ValueError, "mode"):
+            validate_review(raw, mode="internal", source_root=self.root)
+
+    def test_source_and_artifact_paths_fail_closed(self):
+        policy = self.rule()
+        link = self.root / "linked.md"
+        link.symlink_to(policy)
+        for value in (link, "rules/../rules/policy.md"):
+            with self.subTest(value=str(value)), self.assertRaisesRegex(ValueError, "traversal|symlink"):
+                local_path(value, self.root)
+        with self.assertRaisesRegex(ValueError, "artifacts"):
+            output_path("report.json", self.root)
+        with self.assertRaisesRegex(ValueError, "replace"):
+            protect_inputs(policy, [str(policy)])
+
+    def test_changed_scope_keeps_only_changed_product_policy_evidence(self):
+        def git(*args):
+            result = subprocess.run(["git", "-C", str(self.root), *args], capture_output=True, text=True)
+            self.assertEqual(result.returncode, 0, result.stderr)
+        git("init", "-q")
+        git("add", "index.html")
+        git("-c", "user.name=Offline Test", "-c", "user.email=test@example.invalid", "commit", "-qm", "Fixture")
+        (self.root / "index.html").write_text('<html><button>Save</button></html>\n<div style="color: red">Changed</div>\n')
+        policy = self.rule(check="no-custom-css")
+        report = self.analyze("--guidelines", policy, "--changed", "--base-ref", "HEAD", expected=1)
+        self.assertEqual([item["line"] for item in report["source_mode"]["violations"]], [2])
+        self.assertEqual(report["inputs"]["scope"], "changed")
+        committed = self.analyze("--guidelines", policy, "--changed", "--merge-base", "--base-ref", "HEAD")
+        self.assertEqual(committed["coverage"]["evaluated_rules"], [])
+        self.assertEqual(committed["summary"]["passes"], 0)
+
+    def test_product_prose_can_mention_patternfly_without_gaining_a_check(self):
+        policy = self.rule(check="product-context-review", id="patternfly-component-usage")
+        text = policy.read_text() + "Compose using PatternFly when the product owner selects it.\n"
+        policy.write_text(text)
+        report = self.analyze("--guidelines", f"product={policy}")
+        snapshot = json.loads((self.root / report["guideline_manifest"]).read_text())
+        self.assertEqual(snapshot["documents"][0]["text"], text)
+        self.assertEqual(report["coverage"], {"evaluated_rules": [], "unevaluated_rules": ["product:patternfly-component-usage"]})
+
+    def test_schema_rejects_active_compatibility_groups(self):
+        report = self.analyze()
+        schema = json.loads((SKILL / "schemas/v1/consistency-report.schema.json").read_text())
+        for mutate in (
+            lambda r: r["guideline_consistency"]["baseline"].update(status="evaluated"),
+            lambda r: r["guideline_consistency"]["baseline"].update(selected_rules=["old:rule"]),
+            lambda r: r["internal_consistency"].update(status="evaluated"),
+            lambda r: r["internal_consistency"].update(findings=[{"description": "out of scope"}]),
+        ):
+            changed = copy.deepcopy(report)
+            mutate(changed)
+            with self.assertRaises(AssertionError):
+                assert_schema(self, changed, schema)
 
     def test_no_implicit_baseline_or_workspace_discovery(self):
         self.rule(".design/product-design/guidelines/policy.md")

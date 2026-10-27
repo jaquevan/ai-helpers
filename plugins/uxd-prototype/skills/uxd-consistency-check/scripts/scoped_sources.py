@@ -28,21 +28,28 @@ def git(workspace, *args):
     return result.stdout.decode("utf-8", errors="replace")
 
 
-def read_sources(workspace, changed=False, base_ref="main", tracked_only=False, merge_base=False):
+def read_sources(workspace, changed=False, base_ref="main", tracked_only=False, merge_base=False, *, approved_scope=None):
     workspace = Path(workspace).resolve()
     files = {}
     identities = {}
     aliases = {}
+    raw_hashes = {}
+    if approved_scope is not None:
+        from review_scope import code_scope, in_code_scope
+        approved_scope = code_scope(approved_scope, workspace)
     # Committed scope must not touch dirty/untracked source bytes at all.
     for directory, folders, names in (() if merge_base else os.walk(workspace, followlinks=False)):
         folders[:] = sorted(name for name in folders if name not in EXCLUDED and not name.startswith(".") and not (Path(directory) / name).is_symlink())
         for name in sorted(names):
             path = Path(directory) / name
             relative = path.relative_to(workspace).as_posix()
-            if source_name(relative) and not path.is_symlink():
+            if source_name(relative) and not path.is_symlink() and (approved_scope is None or in_code_scope(relative, approved_scope)):
                 if not path.is_file():
                     raise ValueError(f"source is not a regular file: {relative}")
-                files[relative] = path.read_text(encoding="utf-8", errors="replace")
+                from guideline_io import read_confined
+                data = read_confined(workspace, path)
+                raw_hashes[relative] = hashlib.sha256(data).hexdigest()
+                files[relative] = data.decode('utf-8')
                 stat = path.stat()
                 identity = (stat.st_dev, stat.st_ino)
                 aliases[relative] = identities.setdefault(identity, relative)
@@ -73,8 +80,10 @@ def read_sources(workspace, changed=False, base_ref="main", tracked_only=False, 
                 if not Path(path).is_relative_to(prefix) or info.split()[0] not in {"100644", "100755"}:
                     continue
                 relative = Path(path).relative_to(prefix).as_posix()
-                if source_name(relative):
-                    files[relative] = git(root, "show", head + ":" + path)
+                if source_name(relative) and (approved_scope is None or in_code_scope(relative, approved_scope)):
+                    data = subprocess.check_output(['git', '-C', str(root), 'show', head + ':' + path])
+                    files[relative] = data.decode('utf-8')
+                    raw_hashes[relative] = hashlib.sha256(data).hexdigest()
                     aliases[relative] = relative
         elif tracked_only:
             tracked = set(git(root, "ls-files", "-z").split("\0"))
@@ -100,10 +109,14 @@ def read_sources(workspace, changed=False, base_ref="main", tracked_only=False, 
                     relative = Path(path).relative_to(prefix).as_posix()
                     if relative in files:
                         lines[relative] = set(range(1, len(files[relative].splitlines()) + 1))
-    fingerprints = {name: hashlib.sha256(text.encode()).hexdigest() for name, text in sorted(files.items())}
+    fingerprints = {name: raw_hashes[name] for name in sorted(files)}
     identity = hashlib.sha256(json.dumps(fingerprints, sort_keys=True).encode()).hexdigest()
     inputs = {"scope": "committed" if merge_base else "changed" if changed else "workspace",
               "head": head, "base": base, "source_sha256": identity,
               "files": fingerprints, "file_aliases": {name: aliases[name] for name in files},
-              "target_files": sorted(lines) if lines is not None else sorted(files)}
+              "target_files": sorted(lines) if lines is not None else sorted(files),
+              "tracked_only": bool(tracked_only), "merge_base": bool(merge_base),
+              "hash_basis": "original_bytes", "approved_scope": approved_scope,
+              "changed_lines": ({name: sorted(numbers) for name, numbers in sorted(lines.items())}
+                                if lines is not None else None)}
     return files, lines, inputs

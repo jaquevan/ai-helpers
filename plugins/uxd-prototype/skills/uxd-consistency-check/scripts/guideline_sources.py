@@ -12,7 +12,6 @@ from urllib.parse import urlsplit, urlunsplit
 from artifact_io import local_path, output_path, protect_inputs, write_json
 
 GUIDELINE_PATH = Path(".design/product-design/guidelines")
-SKILL = Path(__file__).resolve().parents[1]
 
 
 def digest(text):
@@ -56,13 +55,13 @@ def metadata(text):
     return result
 
 
-def load_guidelines(workspace, provided=(), design_system=None):
+def load_guidelines(workspace, provided=(), design_system=None, *, read_bytes=None):
     design_system = "custom" if design_system is None else design_system
     workspace = Path(workspace).expanduser().resolve()
     if not workspace.is_dir():
         raise ValueError("workspace must be an existing directory")
     # Sources are opt-in. Merely running in a product checkout selects no policy.
-    requested = [(str(SKILL / "guidelines"), "baseline", "patternfly")] if design_system == "patternfly" else []
+    requested = []
     for value in provided:
         value = str(value)
         if re.match(r"^[A-Za-z][A-Za-z0-9+.-]*://", value):
@@ -87,7 +86,7 @@ def load_guidelines(workspace, provided=(), design_system=None):
             document_path = local_path(document_path, workspace)
             if not document_path.is_file():
                 raise ValueError("guideline source must be a regular file")
-            text = document_path.read_bytes().decode("utf-8")
+            text = (document_path.read_bytes() if read_bytes is None else read_bytes(document_path)).decode("utf-8")
             info = metadata(text)
             if not text.strip() or (document_path.name.lower() == "readme.md" and not info.get("id")):
                 continue
@@ -218,8 +217,8 @@ def validate_manifest(manifest, design_system=None):
                 path = Path(value)
                 if not path.is_absolute() or ".." in path.parts:
                     raise ValueError("guideline document location must be an absolute provenance path")
-                # Use frozen lexical locations, not this installation's baseline
-                # path or live filesystem: original sources may have moved.
+                # Use frozen lexical locations, not the live filesystem:
+                # original sources may have moved or been removed.
                 if (not namespaced or document["namespace"] == source.get("namespace")) and (path == location or (path.suffix == ".md" and path.is_relative_to(location))):
                     members.add(document["id"])
                     attributed[document["id"]].add(value)
@@ -238,7 +237,7 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--workspace", required=True)
     parser.add_argument("--guidelines", action="append", default=[], help="Repeat local [NAMESPACE=]PATH (default namespace: local)")
-    parser.add_argument("--design-system", help="Optional system label; patternfly opts into its bundled baseline")
+    parser.add_argument("--design-system", help="Applicability label only; never loads policy")
     parser.add_argument("--manifest", help="Reuse a frozen local manifest, without rereading sources")
     parser.add_argument("--output", help="Write snapshot inside workspace .artifacts")
     args = parser.parse_args()

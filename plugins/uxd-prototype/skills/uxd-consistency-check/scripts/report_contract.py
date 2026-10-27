@@ -23,5 +23,13 @@ def validate_report(report):
             raise ValueError("review candidates cannot be promoted to errors")
     errors = {finding["guideline_id"] for finding in report["source_mode"]["violations"] if finding["severity"] == "error"}
     warnings = {finding["guideline_id"] for finding in report["source_mode"]["violations"]} - errors
+    incomplete = report['coverage'].get('incomplete_rules', {})
+    if not isinstance(incomplete, dict):
+        raise ValueError('incomplete coverage must be a rule mapping')
+    for identity, state in incomplete.items():
+        if state.get('status') != 'incomplete' or not state.get('files'):
+            raise ValueError('incomplete coverage requires file scope and a reason')
+        if identity in evaluated and identity not in errors | warnings:
+            raise ValueError('incomplete rule cannot contribute a deterministic pass')
     if (len(errors), len(warnings)) != (summary["violations"], summary["warnings"]):
         raise ValueError("source finding groups do not match summary")

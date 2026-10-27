@@ -23,11 +23,12 @@ npm install
 npx playwright install chromium
 ```
 
-Context repos (`.context/consistency-checker/` and `.context/usability-testing/`) bootstrap on first pipeline run when a git URL is set:
+Consistency uses the installed sibling `uxd-consistency-check` offline, with explicitly selected product guidance and no bundled design-system audit. If unavailable, install or restore it beside this evaluator with `SKILL.md` and `scripts/analyze.py`, then rerun evaluation. The bootstrap compatibility script only checks availability; it never clones a checker or substitutes another audit.
+
+Usability context (`.context/usability-testing/`) still bootstraps on first pipeline run when a git URL is set:
 
 ```bash
 export USABILITY_TESTING_REPO="git@example.com:org/usability-testing.git"
-export CONSISTENCY_CHECKER_REPO="git@example.com:org/consistency-checker.git"
 ```
 
 Product-specific remotes, MLflow, and Pages URLs come from the `uxd-eval-config` plugin (internal marketplace). Personas: `plugins/uxd-prototype/knowledge/personas/`. Overlay details: `references/skill-overlays.md`.
@@ -50,6 +51,46 @@ Set `tracking.sheet_id` in `config/product-overlay.yaml` (or `EVAL_SHEET_ID`). L
 | `scripts/validate-phase-b-output.js` | Phase B persona output schemas and score contracts |
 | `scripts/validate-artifact-schemas.js` | Schema validation for pipeline artifacts |
 | `scripts/validate-report-rendering.js` | Report rendering quality checks |
+
+Run the offline validator and consistency-integration regressions:
+
+```bash
+bash tests/run-script-tests.sh
+```
+
+The integration tests execute sibling discovery, missing-checker diagnostics,
+index → confirmed selection/staging receipt → scoped analyzer → validator → HTML,
+prose-only zero-pass coverage, unknown currentness/unavailable evidence, frozen
+replay after original/staged cleanup with surviving evidence links, and retained
+usability bootstrap selection. Browser/provider calls are not required. Approval
+and capability events are synthetic fixtures, not proof of live consent or
+provider access. Git transport in the usability test is recorded locally, not
+sent to a remote.
+
+### Consume confirmed product guidance
+
+Follow [the consistency phase](references/phases/eval-consistency.md) and the
+sibling checker's selection flow first; discovery or `approved` policy status
+never supplies user consent. This entrypoint consumes a confirmed staging
+receipt, not an index or an unconfirmed proposal:
+
+```bash
+python3 -S "$EVALUATOR_SKILL_DIR/scripts/run-consistency-selection.py" \
+  --workspace "$WORKSPACE" --staging-receipt "$STAGING_RECEIPT" \
+  --artifacts-dir "$ARTIFACTS_DIR"
+node "$EVALUATOR_SKILL_DIR/scripts/validate-consistency.js" "$ARTIFACTS_DIR" --json
+node "$EVALUATOR_SKILL_DIR/scripts/render-report.js" "$ARTIFACTS_DIR"
+```
+
+Handle exit `1` as findings, `2` as a blocking error (do not reuse an older
+report as a current success). The selected narrow analysis root is preserved;
+only product guidelines run. `consistency-selection.json` keeps manual evidence
+and unknown currentness separate from deterministic coverage. The HTML links
+to consumer-local frozen artifacts; preserve that artifact tree when browsing.
+These relative links are not a standalone HTML publication bundle. Remote
+acquisition/model review still require their own permissions and available
+tools. Existing explicit local input and frozen-manifest replay paths remain
+supported; see the phase guide for cleanup/replay limits.
 
 ## Claude Code permissions
 

@@ -18,4 +18,4 @@ a full CSS or JavaScript parser.
 
 This is a product-specific example overlay — opt-in and not a general
 requirement. PatternFly alone does not prohibit custom CSS; never apply this
-product policy merely because PatternFly is the selected baseline.
+product policy merely because PatternFly is the applicability label.
