@@ -17,8 +17,9 @@ review every linked source. Never follow external links automatically. The
 [index template](../templates/guideline-index/README.md) defines the optional
 sidecar/locator shapes; nested index data never enters the flat rule parser.
 
-Resolve the installed checker as `SKILL_DIR` and the consumer root as `WORKSPACE`.
-Import from `SKILL_DIR/scripts`, never from a stale separately installed checker.
+Resolve the installed checker as `CLAUDE_SKILL_DIR` and the consumer root as `WORKSPACE`.
+Use the host-reported skill location if that variable is not populated.
+Import from `CLAUDE_SKILL_DIR/scripts`, never from a stale separately installed checker.
 Python 3.10+ suffices for these APIs on supported local hosts; no provider SDK or
 network client is imported. Selected original/export material reads are bounded
 to 16 MiB; index Markdown/JSON and operation-request limits are smaller as noted
@@ -42,6 +43,11 @@ malformed, missing, traversal or symlink links explicitly. External links are
 metadata only. Empty topics means no sources. No index gives `absent` and no
 policy evaluation, not a pass or proof no policy exists. Existing explicit
 `--guidelines` and frozen-manifest replay do not require an index.
+
+Evaluator consumers use the public `guideline_resolver` helpers
+`resolve_workspace`, `confined_path`, and `unique_object_hook` for validated paths
+and duplicate-key rejection. `guideline_io.parent_directory_fd` supports confined
+atomic artifact writes. These expose the same safety checks used internally.
 
 ## B. Selection and genuine approval
 
@@ -110,7 +116,7 @@ See [the versioned semantic review contract](llm-review-contract.md).
 All operations use this entry point; run through the host's terminal facility:
 
 ```bash
-python3 -S "${SKILL_DIR}/scripts/guideline_selection.py" \
+python3 -S "${CLAUDE_SKILL_DIR}/scripts/guideline_selection.py" \
   --workspace "${WORKSPACE}" --request "${WORKSPACE}/selection-request.json"
 ```
 

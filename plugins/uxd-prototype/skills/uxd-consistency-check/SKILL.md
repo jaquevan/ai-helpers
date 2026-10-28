@@ -1,7 +1,7 @@
 ---
 name: uxd-consistency-check
 version: 0.1.0
-description: Review UI source semantically against explicitly selected product guidelines with cited LLM evidence, while keeping optional deterministic checks and coverage separate.
+description: Review UI source against selected product guidelines with cited evidence and separate deterministic coverage. Use when checking MR deltas, reviewing prototype consistency, or preparing a product-guideline handoff.
 audience: UI designers and developers
 inputs: Workspace path, selected local product guideline documents, and optional source scope
 outputs: Workspace-owned LLM review report and non-applied fix handoff with frozen guideline provenance and explicit coverage limits
@@ -19,7 +19,7 @@ Use the LLM as primary semantic reviewer for explicitly selected product guidanc
 # Direct --guidelines and frozen-manifest replay remain supported for compatibility.
 ```
 
-Ask for a missing workspace and confirm it exists. Use the requester-selected checkout. Resolve installed `SKILL_DIR` separately from consumer `WORKSPACE`. Write reports only in consumer `.artifacts`. The analyzer is offline.
+Ask for a missing workspace and confirm it exists. Use the requester-selected checkout. Use `CLAUDE_SKILL_DIR` for the installed skill directory, separately from consumer `WORKSPACE`. If the host does not populate it, set it from the host-reported location of this skill before running examples. Write reports only in consumer `.artifacts`. The analyzer is offline.
 
 ## Requirements
 
@@ -39,15 +39,15 @@ Python 3.10+ for bundled standard-library tools ([requirements.txt](requirements
     The analyzer supports only explicit `no-custom-css` and `required-html-class` (`required_class`) checks. Unsupported prose, including removed PatternFly/component and CSS-token checks, remains unevaluated.
 
    ```bash
-   python3 "${SKILL_DIR}/scripts/analyze.py" --workspace "${WORKSPACE}" \
+   python3 "${CLAUDE_SKILL_DIR}/scripts/analyze.py" --workspace "${WORKSPACE}" \
      --guidelines "team=${WORKSPACE}/product-guidelines" --json-output
 
    # An applicability label never loads rules or establishes compliance.
-   python3 "${SKILL_DIR}/scripts/analyze.py" --workspace "${WORKSPACE}" \
+   python3 "${CLAUDE_SKILL_DIR}/scripts/analyze.py" --workspace "${WORKSPACE}" \
      --design-system product-a --guidelines "product-a=${WORKSPACE}/product-guidelines"
 
    # Replay the frozen guidance without rereading the original documents.
-   python3 "${SKILL_DIR}/scripts/analyze.py" --workspace "${WORKSPACE}" \
+   python3 "${CLAUDE_SKILL_DIR}/scripts/analyze.py" --workspace "${WORKSPACE}" \
      --guideline-manifest "${WORKSPACE}/.artifacts/consistency/<run>/<snapshot>.json"
    ```
 
@@ -77,7 +77,7 @@ For agents, validate the published schema before processing. `guideline_consiste
 Package existing workspace screenshots offline; this does not launch a browser or assess compliance:
 
 ```bash
-python3 "${SKILL_DIR}/scripts/visual_analyze.py" --workspace "${WORKSPACE}" --screenshot .artifacts/screenshots/page.png
+python3 "${CLAUDE_SKILL_DIR}/scripts/visual_analyze.py" --workspace "${WORKSPACE}" --screenshot .artifacts/screenshots/page.png
 ```
 
 Repeat `--screenshot` or select `--output`. Only explicitly requested `--url` opts into live Playwright capture and optional dependencies; no URL is guessed. The helper does not run models.
@@ -85,7 +85,7 @@ Repeat `--screenshot` or select `--output`. Only explicitly requested `--url` op
 The checker does not call a provider itself. The authorized LLM reviewer writes structured JSON; validate it without another model call:
 
 ```bash
-python3 -S "${SKILL_DIR}/scripts/validate_llm_review.py" \
+python3 -S "${CLAUDE_SKILL_DIR}/scripts/validate_llm_review.py" \
   --workspace "${WORKSPACE}" --input "${WORKSPACE}/.artifacts/raw-llm-review.json" \
   --scope-report "${WORKSPACE}/.artifacts/scope-report.json" \
   --guideline-manifest "${WORKSPACE}/.artifacts/consistency/guideline-snapshot.json" \

@@ -7,11 +7,21 @@ from pathlib import Path
 import re
 import sys
 
-CHECKER = Path(__file__).resolve().parents[2] / "uxd-consistency-check"
+CHECKER = Path(os.environ.get("UXD_CONSISTENCY_CHECKER_DIR")
+               or Path(__file__).resolve().parents[2] / "uxd-consistency-check")
+if not CHECKER.is_absolute():
+    raise SystemExit("UXD_CONSISTENCY_CHECKER_DIR must be an absolute skill-directory path")
+if not all((CHECKER / name).is_file() for name in ("SKILL.md", "scripts/analyze.py")):
+    raise SystemExit("Install or restore uxd-consistency-check beside this evaluator or set "
+                     "UXD_CONSISTENCY_CHECKER_DIR to its absolute skill-directory path")
 sys.path.insert(0, str(CHECKER / "scripts"))
-from guideline_resolver import _confined, _workspace
-from guideline_io import _parent_fd, read_confined
-from review_scope import in_code_scope
+try:
+    from guideline_resolver import confined_path, resolve_workspace
+    from guideline_io import parent_directory_fd, read_confined
+    from review_scope import in_code_scope
+except ImportError as error:
+    raise SystemExit("Selected uxd-consistency-check runtime is incomplete; install or restore "
+                     "its selection and review modules") from error
 
 
 def _local_href(value):
@@ -84,10 +94,10 @@ def _validate_handoff(value, report):
 
 
 def append_handoffs(workspace, handoff_path, report_path, suggestions_path):
-    root = _workspace(workspace)
-    handoff_file = _confined(handoff_path, root)
-    report_file = _confined(report_path, root)
-    destination = _confined(suggestions_path, root)
+    root = resolve_workspace(workspace)
+    handoff_file = confined_path(handoff_path, root)
+    report_file = confined_path(report_path, root)
+    destination = confined_path(suggestions_path, root)
     if not destination.is_relative_to(root / ".artifacts") or destination.suffix != ".json":
         raise ValueError("suggestions output must be a JSON file inside workspace .artifacts")
     if (handoff_file == destination or report_file == destination
@@ -133,7 +143,7 @@ def append_handoffs(workspace, handoff_path, report_path, suggestions_path):
         appended += 1
     data = (json.dumps(current, indent=2, ensure_ascii=False) + "\n").encode("utf-8")
     temporary = ".fix-proposals-" + os.urandom(12).hex() + ".json"
-    with _parent_fd(destination, create=True) as directory:
+    with parent_directory_fd(destination, create=True) as directory:
         try:
             fd = os.open(temporary, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW,
                          0o600, dir_fd=directory)

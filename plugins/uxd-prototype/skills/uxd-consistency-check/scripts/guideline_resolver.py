@@ -83,6 +83,12 @@ def _unique_object(pairs):
     return result
 
 
+# Supported helpers for consumers outside this skill; preserve the internal names.
+resolve_workspace = _workspace
+confined_path = _confined
+unique_object_hook = _unique_object
+
+
 def _relative_path(value):
     _text(value)
     if (Path(value).is_absolute() or ".." in Path(value).parts or

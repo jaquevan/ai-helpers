@@ -14,9 +14,9 @@ Repeat `--guidelines [NAMESPACE=]PATH` for local Markdown files/directories; dir
 - Filters and supplemental `guideline_id` require exact qualified identities. Legacy replay retains raw IDs.
 
 ```bash
-python3 "${SKILL_DIR}/scripts/analyze.py" --workspace "${WORKSPACE}" \
+python3 "${CLAUDE_SKILL_DIR}/scripts/analyze.py" --workspace "${WORKSPACE}" \
   --guidelines "team=${WORKSPACE}/product-guidelines"
-python3 "${SKILL_DIR}/scripts/analyze.py" --workspace "${WORKSPACE}" \
+python3 "${CLAUDE_SKILL_DIR}/scripts/analyze.py" --workspace "${WORKSPACE}" \
   --design-system product-a --guidelines "product-a=${WORKSPACE}/selected-product-policy"
 ```
 

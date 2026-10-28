@@ -2192,7 +2192,7 @@ function buildSmartComplianceTab(reason) {
   html += `<div class="card card-flat" style="margin:0 0 1.5rem">`;
   html += `<p style="font-weight:700;margin:0 0 0.25rem;color:var(--status-warning)">Automated Compliance Check Not Available</p>`;
   html += `<p class="small" style="margin:0">${escapeHtml(reason || 'Product-guideline checks were not evaluated')}</p>`;
-  html += `<p class="small muted" style="margin:0.5rem 0 0">Install or restore the sibling <code>uxd-consistency-check</code> beside this evaluator with <code>SKILL.md</code> and <code>scripts/analyze.py</code>, select product guidance, then rerun evaluation. No substitute audit is run.</p>`;
+  html += `<p class="small muted" style="margin:0.5rem 0 0">Install or restore <code>uxd-consistency-check</code> beside this evaluator with <code>SKILL.md</code> and <code>scripts/analyze.py</code>, or set <code>UXD_CONSISTENCY_CHECKER_DIR</code> to its absolute skill-directory path. Select product guidance, then rerun evaluation. No substitute audit is run.</p>`;
   html += `</div>`;
 
   html += `<p class="small muted">Only explicitly selected product guidelines with supported checks are evaluated. Unsupported or prose-only rules remain unevaluated. Visual review requires separate authorization and evidence.</p>`;

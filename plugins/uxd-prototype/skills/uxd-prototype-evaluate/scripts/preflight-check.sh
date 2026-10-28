@@ -68,7 +68,7 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 CHECKER_STATUS="$(bash "${SCRIPT_DIR}/bootstrap-consistency-checker.sh")"
 case "$CHECKER_STATUS" in
   *"CONSISTENCY_AVAILABLE=true"*) check_pass "Local consistency checker available" ;;
-  *) check_warn "Local consistency checker unavailable. Install or restore sibling uxd-consistency-check with SKILL.md and scripts/analyze.py, then rerun evaluation; no substitute audit is run" ;;
+  *) check_warn "Local consistency checker unavailable. Install or restore uxd-consistency-check with SKILL.md and scripts/analyze.py beside this evaluator, or set UXD_CONSISTENCY_CHECKER_DIR to its absolute skill-directory path; no substitute audit is run" ;;
 esac
 
 # ── Playwright ────────────────────────────────────────────────────────

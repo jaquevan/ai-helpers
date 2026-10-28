@@ -35,6 +35,10 @@ def _parent_fd(path, *, create=False):
             os.close(fd)
 
 
+# Public context manager for consumer-local atomic artifact writers.
+parent_directory_fd = _parent_fd
+
+
 def _read_fd(fd, limit):
     if not stat.S_ISREG(os.fstat(fd).st_mode):
         raise ValueError('selected evidence must be an existing regular file')

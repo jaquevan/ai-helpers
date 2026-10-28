@@ -240,7 +240,7 @@ if (consistencyReport) {
   } else {
     check('consistency was skipped', false,
       `Consistency checks were skipped: ${consistencyReport.reason || 'unknown reason'}. ` +
-      'Install or restore the sibling uxd-consistency-check beside this evaluator with SKILL.md and scripts/analyze.py, select product guidance, then rerun evaluation.');
+      'Install or restore uxd-consistency-check beside this evaluator with SKILL.md and scripts/analyze.py, or set UXD_CONSISTENCY_CHECKER_DIR to its absolute skill-directory path; select product guidance, then rerun evaluation.');
   }
 }
 

@@ -1,14 +1,14 @@
 # eval-consistency
 
-Use the installed sibling `uxd-consistency-check` as an LLM-first semantic review of explicitly selected product guidelines against the MR delta. Keep supported deterministic checks optional and separately reported; no bundled design-system baseline or unscoped peer audit runs. Model review requires explicit selection and model-review authorization. Do not apply fixes automatically.
+Use the selected local `uxd-consistency-check` installation as an LLM-first semantic review of explicitly selected product guidelines against the MR delta. Keep supported deterministic checks optional and separately reported; no bundled design-system baseline or unscoped peer audit runs. Model review requires explicit selection and model-review authorization. Do not apply fixes automatically.
 
 ## Availability and degraded mode
 
-Let `EVALUATOR_SKILL_DIR` be the resolved directory of this evaluator skill (independent of the agent tool). The sibling is `$EVALUATOR_SKILL_DIR/../uxd-consistency-check`.
+Let `EVALUATOR_SKILL_DIR` be the resolved directory of this evaluator skill (independent of the agent tool). Set `UXD_CONSISTENCY_CHECKER_DIR` to an absolute checker skill-directory path when it is installed separately. If unset, the default is `$EVALUATOR_SKILL_DIR/../uxd-consistency-check`. Availability checks, the selection consumer, and the fix appender use the same override. An invalid explicit path is an error; never fall back to another installation.
 
 1. Run `bash "$EVALUATOR_SKILL_DIR/scripts/bootstrap-consistency-checker.sh"` to check local availability. This compatibility entry point only checks for `SKILL.md` and `scripts/analyze.py`; it does not install or clone anything.
 2. Both files present means the checker is available. Do not require a bundled guideline count: no baseline is bundled. Follow the sibling skill's product-guideline selection and provenance rules.
-3. If either file is absent, write a skipped report with the actual reason to the normal `consistency-report.json` path. Install or restore the sibling `uxd-consistency-check` beside this evaluator with `SKILL.md` and `scripts/analyze.py`, then rerun evaluation. Do not substitute a PatternFly audit or invent a passing result.
+3. If either file is absent, write a skipped report with the actual reason to the normal `consistency-report.json` path. Install or restore `uxd-consistency-check` with `SKILL.md` and `scripts/analyze.py` beside this evaluator, or point `UXD_CONSISTENCY_CHECKER_DIR` to its absolute skill-directory path. Do not substitute a PatternFly audit or invent a passing result.
 
 A checker execution/configuration error is not absence: surface the error instead of silently substituting a passing or fallback report.
 
@@ -22,7 +22,7 @@ These are evaluator phase modes, not options to `analyze.py`:
 
 | Input | Description | Required |
 |-------|-------------|----------|
-| Installed sibling skill | `SKILL.md` and `scripts/analyze.py` | Unless recorded unavailable |
+| Selected local checker | `SKILL.md` and `scripts/analyze.py`; optional `UXD_CONSISTENCY_CHECKER_DIR` override | Unless recorded unavailable |
 | `--workspace` | Prototype source workspace | For source mode |
 | Base ref | Explicit MR target/base revision | For changed-file source scope |
 | `.artifacts/<KEY>/eval/mr-delta.json` | New + modified files for cross-checking MR scope and suggestions | For source mode |
@@ -31,7 +31,7 @@ These are evaluator phase modes, not options to `analyze.py`:
 
 ## Step 1: Source checks
 
-Run for source/both modes only. Resolve `WORKSPACE`, `KEY`, and `BASE_REF` from the evaluation inputs; do not guess a base or silently expand to all files. Resolve `CHECKER_DIR` to the installed sibling directory.
+Run for source/both modes only. Resolve `WORKSPACE`, `KEY`, and `BASE_REF` from the evaluation inputs; do not guess a base or silently expand to all files. Resolve `CHECKER_DIR` to `UXD_CONSISTENCY_CHECKER_DIR` when set, otherwise the installed sibling directory.
 
 Select **product design guidelines only**. A PatternFly dependency, framework label, index `approved` status, or discovered source never grants permission to adopt policy; do not run a combined PF/product audit or fall back to PF. For RHOAI, resolve `.design/product/design-guidelines/README.md`; its local relative Markdown links need no `sources.json`. Keep the sidecar optional for external locators and richer metadata. Present the product/release, authority (if known), selected IDs/exact locators, scope and method, then confirm with genuine scoped user-instruction evidence. README parsing offers candidates, not consent to review all linked files. Never follow external links automatically. Reuse unchanged confirmed receipts without asking again. Missing indexes mean absent guidance; malformed links or ambiguous candidates are not a pass or permission to pick a source.
 

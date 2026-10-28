@@ -16,12 +16,12 @@ import uuid
 
 def write_consumer_json(workspace, path, value):
     """Atomically replace consumer JSON without reopening mutable ancestor paths."""
-    from guideline_resolver import _confined, _workspace
-    from guideline_io import _parent_fd
-    path = _confined(path, _workspace(workspace))
+    from guideline_resolver import confined_path, resolve_workspace
+    from guideline_io import parent_directory_fd
+    path = confined_path(path, resolve_workspace(workspace))
     data = (json.dumps(value, indent=2, ensure_ascii=False) + '\n').encode('utf-8')
     temporary = '.consistency-' + uuid.uuid4().hex + '.json'
-    with _parent_fd(path, create=True) as directory:
+    with parent_directory_fd(path, create=True) as directory:
         try:
             fd = os.open(temporary, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW,
                          0o600, dir_fd=directory)
@@ -64,37 +64,41 @@ def main():
         scope_args.append('--merge-base')
     if args.tracked_only:
         scope_args.append('--tracked-only')
-    checker = Path(__file__).resolve().parents[2] / 'uxd-consistency-check'
+    checker = Path(os.environ.get('UXD_CONSISTENCY_CHECKER_DIR')
+                   or Path(__file__).resolve().parents[2] / 'uxd-consistency-check')
+    if not checker.is_absolute():
+        raise ValueError('UXD_CONSISTENCY_CHECKER_DIR must be an absolute skill-directory path')
     if not all((checker / name).is_file() for name in ('SKILL.md', 'scripts/analyze.py')):
-        raise ValueError('Install or restore the sibling uxd-consistency-check beside this evaluator '
-                         'with SKILL.md and scripts/analyze.py, then rerun evaluation. No substitute audit is run.')
+        raise ValueError('Install or restore uxd-consistency-check with SKILL.md and scripts/analyze.py '
+                         'beside this evaluator or set UXD_CONSISTENCY_CHECKER_DIR to its absolute '
+                         'skill-directory path. No substitute audit is run.')
     sys.path.insert(0, str(checker / 'scripts'))
     try:
-        from guideline_resolver import _confined, _workspace, _unique_object
+        from guideline_resolver import confined_path, resolve_workspace, unique_object_hook
         from guideline_io import read_confined, REQUEST_LIMIT
         from guideline_staging import reuse_staging
         from artifact_io import output_path
     except ImportError as error:
-        raise ValueError('Install or restore the sibling uxd-consistency-check selection runtime '
+        raise ValueError('Install or restore the selected uxd-consistency-check selection runtime '
                          '(scripts/guideline_staging.py and dependencies), then rerun evaluation. '
                          'No substitute audit is run.') from error
 
-    root = _workspace(args.workspace)
-    receipt_path = _confined(args.staging_receipt, root)
+    root = resolve_workspace(args.workspace)
+    receipt_path = confined_path(args.staging_receipt, root)
     try:
         data = read_confined(root, receipt_path, REQUEST_LIMIT)
     except ValueError as error:
         if str(error) == 'selected evidence exceeds byte limit':
             raise ValueError('staging receipt exceeds 4MiB') from error
         raise
-    receipt = json.loads(data.decode('utf-8'), object_pairs_hook=_unique_object)
+    receipt = json.loads(data.decode('utf-8'), object_pairs_hook=unique_object_hook)
     state = reuse_staging(root, receipt)
     if state['status'] != 'frozen_ready':
         raise ValueError('Renewed selection confirmation required: ' + state.get('reason', state['status']))
     if not state['analysis_workspace']:
         raise ValueError('Manual/model selection has no deterministic invocation; keep evidence separate. '
                          'Selection consent does not authorize model dispatch.')
-    artifacts = _confined(args.artifacts_dir, root)
+    artifacts = confined_path(args.artifacts_dir, root)
     destination = output_path(str(artifacts / 'consistency-report.json'), root)
     sidecar_path = output_path(str(artifacts / 'consistency-selection.json'), root)
     analysis_root = Path(state['analysis_workspace'])
@@ -106,12 +110,12 @@ def main():
     if result.returncode not in (0, 1):
         raise ValueError(result.stderr.strip() or 'checker execution failed')
     report = json.loads(analysis_report.read_text(encoding='utf-8'))
-    manifest = _confined(analysis_root / report['guideline_manifest'], root)
+    manifest = confined_path(analysis_root / report['guideline_manifest'], root)
     links = []
     for title, path in [('Confirmed staging receipt', receipt_path), ('Frozen guideline manifest', manifest),
                         *[(f"Original evidence: {item['source_id']}", Path(item['path']))
                           for item in receipt['proposal']['originals']]]:
-        path = _confined(path, root)
+        path = confined_path(path, root)
         links.append({'title': title, 'href': quote(os.path.relpath(path, artifacts), safe='/')})
     # Copy the deterministic report unchanged; its workspace remains the approved scope.
     write_consumer_json(root, destination, report)
