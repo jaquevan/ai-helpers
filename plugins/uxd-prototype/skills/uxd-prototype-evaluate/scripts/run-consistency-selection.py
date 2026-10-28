@@ -69,9 +69,10 @@ def main():
     if not checker.is_absolute():
         raise ValueError('UXD_CONSISTENCY_CHECKER_DIR must be an absolute skill-directory path')
     if not all((checker / name).is_file() for name in ('SKILL.md', 'scripts/analyze.py')):
-        raise ValueError('Install or restore uxd-consistency-check with SKILL.md and scripts/analyze.py '
-                         'beside this evaluator or set UXD_CONSISTENCY_CHECKER_DIR to its absolute '
-                         'skill-directory path. No substitute audit is run.')
+        raise ValueError('The bundled sibling uxd-consistency-check skill is missing or incomplete; '
+                         'restore or update the combined plugin, or set UXD_CONSISTENCY_CHECKER_DIR '
+                         'to an absolute path for a deliberately separate installation. '
+                         'No substitute audit is run.')
     sys.path.insert(0, str(checker / 'scripts'))
     try:
         from guideline_resolver import confined_path, resolve_workspace, unique_object_hook
@@ -79,9 +80,10 @@ def main():
         from guideline_staging import reuse_staging
         from artifact_io import output_path
     except ImportError as error:
-        raise ValueError('Install or restore the selected uxd-consistency-check selection runtime '
-                         '(scripts/guideline_staging.py and dependencies), then rerun evaluation. '
-                         'No substitute audit is run.') from error
+        raise ValueError('The bundled sibling uxd-consistency-check selection runtime is incomplete '
+                         '(scripts/guideline_staging.py or a dependency is missing); restore or update '
+                         'the combined plugin, or set UXD_CONSISTENCY_CHECKER_DIR for a deliberately '
+                         'separate installation. No substitute audit is run.') from error
 
     root = resolve_workspace(args.workspace)
     receipt_path = confined_path(args.staging_receipt, root)

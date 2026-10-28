@@ -66,7 +66,7 @@ Python 3.10+ for bundled standard-library tools ([requirements.txt](requirements
 
 ## Consuming the report
 
-There is no separate human output mode. For humans, give a concise view of JSON, for example:
+There is no separate report-generation CLI. After validation, present a concise designer-facing summary in chat or through the evaluator's existing HTML report. Use the [designer report template](references/designer-report-template.md); do not create a competing HTML/Markdown report or rewrite validated findings. For example:
 
 > Coverage: 1 selected product rule evaluated; `team:context` unevaluated (no supported check). One explicit root-class policy error at `index.html:1`. Replay artifacts: `.artifacts/consistency/<run>/`. No baseline or peer audit ran.
 

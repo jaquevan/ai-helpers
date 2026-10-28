@@ -4,11 +4,11 @@ Use the selected local `uxd-consistency-check` installation as an LLM-first sema
 
 ## Availability and degraded mode
 
-Let `EVALUATOR_SKILL_DIR` be the resolved directory of this evaluator skill (independent of the agent tool). Set `UXD_CONSISTENCY_CHECKER_DIR` to an absolute checker skill-directory path when it is installed separately. If unset, the default is `$EVALUATOR_SKILL_DIR/../uxd-consistency-check`. Availability checks, the selection consumer, and the fix appender use the same override. An invalid explicit path is an error; never fall back to another installation.
+Let `EVALUATOR_SKILL_DIR` be the resolved directory of this evaluator skill (independent of the agent tool). This repository ships `uxd-consistency-check` beside the evaluator at `$EVALUATOR_SKILL_DIR/../uxd-consistency-check`; no separate repository clone or bootstrap is needed. Set `UXD_CONSISTENCY_CHECKER_DIR` only for a deliberately separate installation, using an absolute skill-directory path. Availability checks, the selection consumer, and the fix appender use the same override. An invalid explicit path is an error; never fall back to another installation.
 
-1. Run `bash "$EVALUATOR_SKILL_DIR/scripts/bootstrap-consistency-checker.sh"` to check local availability. This compatibility entry point only checks for `SKILL.md` and `scripts/analyze.py`; it does not install or clone anything.
+1. Preflight runs `bash "$EVALUATOR_SKILL_DIR/scripts/bootstrap-consistency-checker.sh"` to check sibling availability. This compatibility entry point only checks for `SKILL.md` and `scripts/analyze.py`; it does not install or clone anything.
 2. Both files present means the checker is available. Do not require a bundled guideline count: no baseline is bundled. Follow the sibling skill's product-guideline selection and provenance rules.
-3. If either file is absent, write a skipped report with the actual reason to the normal `consistency-report.json` path. Install or restore `uxd-consistency-check` with `SKILL.md` and `scripts/analyze.py` beside this evaluator, or point `UXD_CONSISTENCY_CHECKER_DIR` to its absolute skill-directory path. Do not substitute a PatternFly audit or invent a passing result.
+3. If either bundled file is absent, write a skipped report with the actual reason to the normal `consistency-report.json` path and restore or update the combined plugin. For a deliberately separate installation, use the absolute-path override. Do not substitute a PatternFly audit or invent a passing result.
 
 A checker execution/configuration error is not absence: surface the error instead of silently substituting a passing or fallback report.
 
@@ -22,7 +22,7 @@ These are evaluator phase modes, not options to `analyze.py`:
 
 | Input | Description | Required |
 |-------|-------------|----------|
-| Selected local checker | `SKILL.md` and `scripts/analyze.py`; optional `UXD_CONSISTENCY_CHECKER_DIR` override | Unless recorded unavailable |
+| Bundled sibling checker | `SKILL.md` and `scripts/analyze.py`; optional absolute override only for a separate installation | Unless recorded unavailable |
 | `--workspace` | Prototype source workspace | For source mode |
 | Base ref | Explicit MR target/base revision | For changed-file source scope |
 | `.artifacts/<KEY>/eval/mr-delta.json` | New + modified files for cross-checking MR scope and suggestions | For source mode |
@@ -31,7 +31,7 @@ These are evaluator phase modes, not options to `analyze.py`:
 
 ## Step 1: Source checks
 
-Run for source/both modes only. Resolve `WORKSPACE`, `KEY`, and `BASE_REF` from the evaluation inputs; do not guess a base or silently expand to all files. Resolve `CHECKER_DIR` to `UXD_CONSISTENCY_CHECKER_DIR` when set, otherwise the installed sibling directory.
+Run for source/both modes only. Resolve `WORKSPACE`, `KEY`, and `BASE_REF` from the evaluation inputs; do not guess a base or silently expand to all files. Resolve `CHECKER_DIR` to `UXD_CONSISTENCY_CHECKER_DIR` only when explicitly set; otherwise use the sibling shipped in this plugin distribution.
 
 Select **product design guidelines only**. A PatternFly dependency, framework label, index `approved` status, or discovered source never grants permission to adopt policy; do not run a combined PF/product audit or fall back to PF. For RHOAI, resolve `.design/product/design-guidelines/README.md`; its local relative Markdown links need no `sources.json`. Keep the sidecar optional for external locators and richer metadata. Present the product/release, authority (if known), selected IDs/exact locators, scope and method, then confirm with genuine scoped user-instruction evidence. README parsing offers candidates, not consent to review all linked files. Never follow external links automatically. Reuse unchanged confirmed receipts without asking again. Missing indexes mean absent guidance; malformed links or ambiguous candidates are not a pass or permission to pick a source.
 
@@ -49,7 +49,7 @@ python3 -S "$EVALUATOR_SKILL_DIR/scripts/run-consistency-selection.py" \
 
 For MR source scope, pass `--changed` with the explicit evaluation base; the consumer never guesses a base. Add `--merge-base` for committed branch-delta checks or `--tracked-only` to exclude untracked files. Each requires `--changed`; a base without `--changed` is rejected. These allowlisted options narrow the confirmed analysis root, never replace or widen it. Omit all delta options only for an explicitly intended full approved-scope review, not as a fallback for unresolved MR inputs.
 
-The deterministic consumer calls public `reuse_staging`, requires `frozen_ready`, and passes exact `analyzer_args` without shell evaluation. **The approved `analysis_workspace` may be narrower than `$WORKSPACE`; never replace it with the consumer root.** The analyzer report and frozen deterministic manifest remain separate. `consistency-selection.json` records currentness, manual/unavailable evidence, and links to selected evidence and receipts. The aggregate HTML renders the validated LLM semantic report and fix handoff separately from deterministic coverage. Keep linked artifacts for local report browsing; copying only the HTML does not publish them.
+The deterministic consumer calls public `reuse_staging`, requires `frozen_ready`, and passes exact `analyzer_args` without shell evaluation. **The approved `analysis_workspace` may be narrower than `$WORKSPACE`; never replace it with the consumer root.** The analyzer report and frozen deterministic manifest remain separate. `consistency-selection.json` records currentness, manual/unavailable evidence, and links to selected evidence and receipts. The aggregate HTML renders the validated LLM semantic report and fix handoff separately from deterministic coverage. Use the sibling checker's [designer report template](../../../uxd-consistency-check/references/designer-report-template.md) when presenting findings in chat or reviewing the aggregate HTML. Keep linked artifacts for local report browsing; copying only the HTML does not publish them.
 
 The deterministic selection consumer still reports exit `0` for execution without error findings, `1` for deterministic violations, and `2` for blocking selection/configuration/execution errors. Stop on `2`; an older report left on disk is not evidence of a successful current run. A model-method receipt uses the separately approved LLM workflow; it does not become deterministic coverage. Incompatible evidence remains manual and does not inflate checks or passes. `currentness=unknown` stays visible: frozen-ready only permits using pinned bytes, never claims remote freshness. Changed material requires renewed confirmation, not silent restaging.
 

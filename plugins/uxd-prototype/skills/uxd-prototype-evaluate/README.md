@@ -23,7 +23,7 @@ npm install
 npx playwright install chromium
 ```
 
-Consistency uses a local `uxd-consistency-check` installation offline, with explicitly selected product guidance and no bundled design-system audit. Set `UXD_CONSISTENCY_CHECKER_DIR` to its absolute skill-directory path when installed separately; otherwise the sibling beside this evaluator is used. The selected installation needs `SKILL.md`, `scripts/analyze.py`, and the selection runtime. An invalid override never falls back to a different checker. The bootstrap compatibility script only checks availability; it never clones a checker or substitutes another audit.
+Consistency uses the `uxd-consistency-check` sibling shipped in this same `uxd-prototype` plugin distribution. No separate checker repository or clone/bootstrap is needed. The analyzer stays offline and runs only explicitly selected product guidance; no bundled design-system audit is used. `bootstrap-consistency-checker.sh` checks that the bundled sibling is present; it does not install or clone anything. Set `UXD_CONSISTENCY_CHECKER_DIR` only for a deliberately separate checker installation; it must be an absolute skill-directory path and never falls back to another checker. For designer-facing summaries, follow the checker's [report template](../uxd-consistency-check/references/designer-report-template.md).
 
 Usability context (`.context/usability-testing/`) still bootstraps on first pipeline run when a git URL is set:
 

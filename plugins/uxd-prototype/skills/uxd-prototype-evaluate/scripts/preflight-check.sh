@@ -65,11 +65,14 @@ fi
 
 # ── Installed consistency checker (offline, optional) ─────────────────
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-CHECKER_STATUS="$(bash "${SCRIPT_DIR}/bootstrap-consistency-checker.sh")"
-case "$CHECKER_STATUS" in
-  *"CONSISTENCY_AVAILABLE=true"*) check_pass "Local consistency checker available" ;;
-  *) check_warn "Local consistency checker unavailable. Install or restore uxd-consistency-check with SKILL.md and scripts/analyze.py beside this evaluator, or set UXD_CONSISTENCY_CHECKER_DIR to its absolute skill-directory path; no substitute audit is run" ;;
-esac
+if CHECKER_STATUS="$(bash "${SCRIPT_DIR}/bootstrap-consistency-checker.sh" 2>&1)"; then
+  case "$CHECKER_STATUS" in
+    *"CONSISTENCY_AVAILABLE=true"*) check_pass "Bundled sibling consistency checker available" ;;
+    *) check_warn "Bundled sibling consistency checker unavailable: ${CHECKER_STATUS}. No substitute audit is run" ;;
+  esac
+else
+  check_warn "Consistency checker availability check failed: ${CHECKER_STATUS}. No substitute audit is run"
+fi
 
 # ── Playwright ────────────────────────────────────────────────────────
 if npx playwright --version > /dev/null 2>&1; then

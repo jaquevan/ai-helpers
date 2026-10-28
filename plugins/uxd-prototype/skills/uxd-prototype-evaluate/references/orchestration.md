@@ -165,9 +165,10 @@ python3 ${CLAUDE_SKILL_DIR}/scripts/eval_state.py set ${ARTIFACTS_DIR}/eval-stat
   extract_core_end=$(python3 ${CLAUDE_SKILL_DIR}/scripts/eval_state.py timestamp) \
   consistency_source_start=$(python3 ${CLAUDE_SKILL_DIR}/scripts/eval_state.py timestamp)
 
-# ── Pre-flight: resolve installed sibling checker (no network) ──────
+# ── Pre-flight: check bundled sibling checker (no network) ─────────
 bash "${CLAUDE_SKILL_DIR}/scripts/bootstrap-consistency-checker.sh"
-# Absence records an unavailable check; install/restore the sibling, then rerun.
+# The combined plugin ships both skills; absence records unavailable and indicates a broken/incomplete installation.
+# A deliberately separate installation may use UXD_CONSISTENCY_CHECKER_DIR; no remote clone is performed.
 # Only explicitly selected product guidelines run; no default audit or PF fallback.
 
 Read ${CLAUDE_SKILL_DIR}/references/phases/eval-consistency.md and execute it with --mode=source

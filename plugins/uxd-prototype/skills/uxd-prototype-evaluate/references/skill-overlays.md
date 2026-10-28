@@ -47,7 +47,7 @@ Environment variables still override individual keys when the scripts read them 
 - `EVAL_PAGES_REPO` / `EVAL_PAGES_URL`
 - `JIRA_BASE_URL`
 
-Scripts read overlay YAML via `scripts/overlay-get.js`. Consistency does not read clone URLs or analyzer paths from overlays: it discovers the installed sibling `uxd-consistency-check` with `SKILL.md` and `scripts/analyze.py`. Install or restore that sibling if missing, then rerun evaluation. Select product guideline paths explicitly in the consistency phase; a design-system label is applicability metadata, not policy selection.
+Scripts read overlay YAML via `scripts/overlay-get.js`. Consistency does not read clone URLs or analyzer paths from overlays: it discovers the `uxd-consistency-check` sibling shipped in this plugin distribution, using `SKILL.md` and `scripts/analyze.py`. If that sibling is missing, restore or update the combined plugin; no separate checker clone is needed. A deliberately separate installation may use `UXD_CONSISTENCY_CHECKER_DIR`. Select product guideline paths explicitly in the consistency phase; a design-system label is applicability metadata, not policy selection.
 
 ## Forced path (if discovery misses)
 

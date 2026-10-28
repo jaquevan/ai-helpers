@@ -16,5 +16,5 @@ if [ -f "$CHECKER_DIR/SKILL.md" ] && [ -f "$CHECKER_DIR/scripts/analyze.py" ]; t
 else
   echo "CONSISTENCY_AVAILABLE=false"
   echo "Consistency checker unavailable: $CHECKER_DIR (requires SKILL.md and scripts/analyze.py)"
-  echo "Install or restore uxd-consistency-check with SKILL.md and scripts/analyze.py beside this evaluator, or set UXD_CONSISTENCY_CHECKER_DIR to its absolute skill-directory path. Record checks as unavailable until restored; do not run a substitute audit."
+  echo "This evaluator distribution includes the sibling uxd-consistency-check skill. Restore or update the combined plugin if it is missing; for a deliberately separate installation, set UXD_CONSISTENCY_CHECKER_DIR to its absolute skill-directory path. Record checks as unavailable; do not run a substitute audit."
 fi

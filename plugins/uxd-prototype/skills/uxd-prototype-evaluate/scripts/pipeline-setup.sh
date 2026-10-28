@@ -167,11 +167,14 @@ echo "SOURCE_DIR=${SOURCE_DIR}"
 
 # ── Local checker availability; usability context remains separate ───
 CONSISTENCY_AVAILABLE="false"
-CHECKER_STATUS="$(bash "${EVAL_ROOT}/scripts/bootstrap-consistency-checker.sh")"
-printf '%s\n' "$CHECKER_STATUS"
-case "$CHECKER_STATUS" in
-  *"CONSISTENCY_AVAILABLE=true"*) CONSISTENCY_AVAILABLE="true" ;;
-esac
+if CHECKER_STATUS="$(bash "${EVAL_ROOT}/scripts/bootstrap-consistency-checker.sh" 2>&1)"; then
+  printf '%s\n' "$CHECKER_STATUS"
+  case "$CHECKER_STATUS" in
+    *"CONSISTENCY_AVAILABLE=true"*) CONSISTENCY_AVAILABLE="true" ;;
+  esac
+else
+  printf 'Consistency checker availability check failed: %s\n' "$CHECKER_STATUS" >&2
+fi
 
 python3 "${EVAL_ROOT}/scripts/eval_state.py" set "${ARTIFACTS}/eval-state.yaml" \
   consistency_available="${CONSISTENCY_AVAILABLE}"

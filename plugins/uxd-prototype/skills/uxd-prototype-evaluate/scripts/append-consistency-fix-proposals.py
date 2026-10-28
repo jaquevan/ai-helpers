@@ -12,16 +12,17 @@ CHECKER = Path(os.environ.get("UXD_CONSISTENCY_CHECKER_DIR")
 if not CHECKER.is_absolute():
     raise SystemExit("UXD_CONSISTENCY_CHECKER_DIR must be an absolute skill-directory path")
 if not all((CHECKER / name).is_file() for name in ("SKILL.md", "scripts/analyze.py")):
-    raise SystemExit("Install or restore uxd-consistency-check beside this evaluator or set "
-                     "UXD_CONSISTENCY_CHECKER_DIR to its absolute skill-directory path")
+    raise SystemExit("The bundled sibling uxd-consistency-check skill is missing or incomplete; "
+                     "restore or update the combined plugin, or set UXD_CONSISTENCY_CHECKER_DIR "
+                     "to an absolute path for a deliberately separate installation")
 sys.path.insert(0, str(CHECKER / "scripts"))
 try:
     from guideline_resolver import confined_path, resolve_workspace
     from guideline_io import parent_directory_fd, read_confined
     from review_scope import in_code_scope
 except ImportError as error:
-    raise SystemExit("Selected uxd-consistency-check runtime is incomplete; install or restore "
-                     "its selection and review modules") from error
+    raise SystemExit("Selected uxd-consistency-check runtime is incomplete; restore or update the "
+                     "combined plugin or the deliberately separate checker installation") from error
 
 
 def _local_href(value):
